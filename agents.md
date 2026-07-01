@@ -65,7 +65,7 @@ dotnet test  Horus.sln -c Debug      # 运行端到端测试
 **M2 分析增强 · 视觉 LLM 引擎（骨架已实现 · 57 项测试全绿）**：
 - ✅ **L2 视觉 LLM 识图取代 OCR + L3 Logo（owner 拍板·合并单一视觉级）**：一次「看懂画面」同时做文字提取 + AI 对话界面/搜索页/IDE 幽灵补全/远控工具识别 + 分类,结构化直出 `{suspicious,category,confidence,evidence}`。**provider-agnostic**:`IVisionAnalyzer` 接口 + `MockVisionAnalyzer`(确定性·测试联调·不出网)+ `OpenAiCompatibleVisionAnalyzer`(DeepSeek-V4 / 小米 MiMo-V2.5 / Qwen-VL / GLM-4V 皆 OpenAI 兼容 → 换 `visionBaseUrl`+`visionModel`+`visionApiKey` 即换供应商)。
 - ✅ **异步后台分析**(`VisionAnalysisService` + `Channel`,**不占 ingest 热路径**):图入库 → 入队 → 判定 → 落 `ocr_results` + 标证据 + 引用事件抬 `server_risk` + 入可疑队列(note=`vision:证据`)。视觉关时整链 no-op。
-- ✅ **供应商已定 = 小米 MiMo-V2.5 托管 API(境内云·OpenAI 兼容)**:`visionProvider=openai` · `visionBaseUrl=https://token-plan-cn.xiaomimimo.com/v1` · `visionModel=MiMo-V2.5`。**API key 不存明文**:`SecretProtect`(Windows DPAPI 机器范围)—— 部署机上跑 `Horus.Server protect-secret <key>` 得密文,粘进 `visionApiKeyEnc`,启动时解密进内存(联调可用 `HORUS_VISION_KEY` 明文注入,优先级最高)。
+- ✅ **供应商已定 = 小米 MiMo-V2.5 托管 API(境内云·OpenAI 兼容)**:`visionProvider=openai` · `visionBaseUrl=https://token-plan-cn.xiaomimimo.com/v1` · `visionModel=MiMo-V2.5`。**API key 不存明文·自动加密**:`SecretProtect`(Windows DPAPI 机器范围)。**UX = 运维直接把明文填进 config 的 `visionApiKey`,启动即自动加密为 `visionApiKeyEnc` 并清空明文(密文回写文件·行内替换保留注释)**;亦可 `Horus.Server protect-secret <key>` 预生成密文,或联调用 `HORUS_VISION_KEY` env 明文注入(优先级最高·不落盘)。启动时 `SecretProtect.Resolve` 解密进内存。真机 E2E 验证过(启动日志「已加密回写·明文已清除」+ 文件密文替换 + 注释保留)。
 - ⏳ **待收尾**:① §5 真裁剪浏览器区 / 打码身份(现 `VisionAnalysisService.AnalyzeOneAsync` 直传 stub·需服务器端图像库 decode/redact/re-encode);② 拿真 key 对 `token-plan-cn.xiaomimimo.com/v1` 真机 smoke 一张图验证判定;③ 基线抽样策略。再往后 M3（完整 canonical 复算 + 哈希链复验 / 归档清理任务 / CLIP 按图搜图）。里程碑见 architecture §15。
 
 ## 提交约定
