@@ -1,6 +1,7 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Honus.Agent.Model;
+namespace Honus.Contracts;
 
 /// 信号类型。序列化为 snake_case(见 Json.Wire),与 api-contract / schema 对齐。
 public enum SignalType
@@ -17,6 +18,8 @@ public enum SignalType
 }
 
 /// 上报事件(封装后含哈希链字段)。字段顺序与 api-contract §0.1 canonical 一致。
+/// Agent 用它构建+封装;测试用它构造合法签名事件。服务器落库走 JsonDocument 直取原始 payload,
+/// 不经此类型反序列化(避免 object?→JsonElement 再序列化的保真问题)。
 public sealed record AgentEvent
 {
     [JsonIgnore] public int V { get; init; } = 1;       // 协议版本走信封,不进 event 体
@@ -35,10 +38,14 @@ public sealed record AgentEvent
     public string? HashSelf { get; init; }
 }
 
-/// 信号源产出的原始信号(未盖时间戳/序号/哈希)。
-public sealed record RawSignal(
-    SignalType Type,
-    Dictionary<string, object?> Payload,
-    int Risk = 0,
-    bool TriggerCapture = false,
-    string? CaptureReason = null);
+/// 全局 JSON 约定:camelCase 字段名、snake_case 枚举值、省略 null。
+/// 序列化与反序列化两端必须一致(服务器需用同样约定复算 canonical 哈希)。
+public static class Json
+{
+    public static readonly JsonSerializerOptions Wire = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
+    };
+}

@@ -1,5 +1,6 @@
 using System.Management;
 using Honus.Agent.Model;
+using Honus.Contracts;
 
 namespace Honus.Agent.Signals;
 

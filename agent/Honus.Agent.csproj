@@ -14,24 +14,32 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
 
-    <!-- 单文件自包含发布:
-         dotnet publish -c Release -r win-x64 --self-contained true \
-           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -->
+    <!-- 单文件自包含发布(命令见 README，注释内避免出现连字号对以符合 XML)：
+         publish -c Release -r win-x64 self-contained + PublishSingleFile + IncludeNativeLibrariesForSelfExtract -->
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 截图编码为 WebP -->
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.5" />
+    <!-- UseWPF/UseWindowsForms 用裁剪版隐式 using 替换默认集(加入 Drawing/Forms、去掉 IO/Net.Http)，
+         这里把被去掉的两个补回为全局 using，避免逐文件重复引入。 -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 共享线协议 / canonical / HMAC(与 Server 共用,保证哈希签名两端一致) -->
+    <ProjectReference Include="..\contracts\Honus.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 截图编码为 WebP(3.1.12 修复 3.1.5 的已知高/中危漏洞 GHSA-2cmq-823j-5qj8 等) -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     <!-- 进程/USB 事件: WMI -->
     <PackageReference Include="System.Management" Version="8.0.0" />
     <!-- 屏幕抓取(Windows-only) -->
     <PackageReference Include="System.Drawing.Common" Version="8.0.7" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- UIAutomation 客户端(WindowsDesktop 框架程序集)。若 UseWPF 已带入可删。 -->
-    <Reference Include="UIAutomationClient" />
-    <Reference Include="UIAutomationTypes" />
-  </ItemGroup>
+  <!-- UIAutomationClient / UIAutomationTypes 由 UseWPF 的 WindowsDesktop 引用包自动带入,
+       显式 <Reference> 会与之冲突(MSB3243),故移除;System.Windows.Automation 仍可解析。 -->
 
 </Project>

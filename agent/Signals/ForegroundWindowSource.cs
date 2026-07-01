@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Honus.Agent.Model;
+using Honus.Contracts;
 
 namespace Honus.Agent.Signals;
 
@@ -13,13 +14,13 @@ public sealed class ForegroundWindowSource : ISignalSource
     public event Action<RawSignal>? Signal;
 
     private readonly TimeSpan _interval;
-    private readonly Timer _timer;
+    private readonly System.Threading.Timer _timer;   // 显式限定:UseWindowsForms 注入了 Forms.Timer 造成歧义
     private (IntPtr Hwnd, string Title) _last;
 
     public ForegroundWindowSource(TimeSpan? interval = null)
     {
         _interval = interval ?? TimeSpan.FromSeconds(1);
-        _timer = new Timer(_ => Poll(), null, Timeout.Infinite, Timeout.Infinite);
+        _timer = new System.Threading.Timer(_ => Poll(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
     public void Start() => _timer.Change(TimeSpan.Zero, _interval);

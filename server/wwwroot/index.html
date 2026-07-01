@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Honus 监考台</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- 全局错误横幅（fetch 失败时显示，非静默失败） -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
+
+  <!-- ========== 顶部栏 ========== -->
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="brand__logo" aria-hidden="true">◈</span>
+      <span class="brand__title">Honus 监考台</span>
+    </div>
+
+    <div class="topbar__exam">
+      <label for="examSelect" class="topbar__label">考试</label>
+      <select id="examSelect" class="exam-select" aria-label="选择考试">
+        <!-- 由 app.js 填充 -->
+      </select>
+    </div>
+
+    <!-- 概览计数 -->
+    <div class="topbar__overview" id="overview">
+      <div class="stat">
+        <span class="stat__value" id="statSeats">--</span>
+        <span class="stat__label">座位</span>
+      </div>
+      <div class="stat">
+        <span class="stat__value stat__value--online" id="statOnline">--</span>
+        <span class="stat__label">在线</span>
+      </div>
+      <div class="stat">
+        <span class="stat__value stat__value--alert" id="statPending">--</span>
+        <span class="stat__label">待复核</span>
+      </div>
+    </div>
+
+    <div class="topbar__controls">
+      <label class="toggle" title="每 5 秒轮询当前考试的座位与可疑队列">
+        <input type="checkbox" id="autoRefresh" checked />
+        <span class="toggle__track"><span class="toggle__thumb"></span></span>
+        <span class="toggle__text">自动刷新</span>
+      </label>
+      <button id="manualRefresh" class="btn btn--ghost" title="立即刷新">刷新</button>
+      <span class="topbar__clock" id="clock" title="最后刷新时间">--:--:--</span>
+    </div>
+  </header>
+
+  <!-- ========== 主区：左右分栏 ========== -->
+  <main class="layout">
+    <!-- 左：座位热力网格 -->
+    <section class="panel panel--seats">
+      <div class="panel__head">
+        <h2 class="panel__title">座位热力</h2>
+        <div class="legend" aria-label="配色图例">
+          <span class="legend__item"><i class="dot dot--normal"></i>正常</span>
+          <span class="legend__item"><i class="dot dot--warn"></i>可疑</span>
+          <span class="legend__item"><i class="dot dot--danger"></i>高危</span>
+          <span class="legend__item"><i class="dot dot--offline"></i>离线</span>
+        </div>
+      </div>
+      <div class="seat-grid" id="seatGrid">
+        <!-- 座位方块由 app.js 填充 -->
+      </div>
+      <div class="empty" id="seatEmpty" hidden>暂无座位，等待 Agent 上报</div>
+    </section>
+
+    <!-- 右：可疑复核队列 -->
+    <section class="panel panel--queue">
+      <div class="panel__head">
+        <h2 class="panel__title">可疑复核队列</h2>
+        <div class="queue-filter" id="queueFilter" role="tablist" aria-label="状态过滤">
+          <button class="chip is-active" data-status="pending" role="tab">待复核</button>
+          <button class="chip" data-status="reviewing" role="tab">复核中</button>
+          <button class="chip" data-status="confirmed" role="tab">已确认</button>
+          <button class="chip" data-status="dismissed" role="tab">已驳回</button>
+          <button class="chip" data-status="all" role="tab">全部</button>
+        </div>
+      </div>
+      <div class="queue-wrap">
+        <table class="queue-table">
+          <thead>
+            <tr>
+              <th>座位</th>
+              <th>类型</th>
+              <th class="num">分数</th>
+              <th>时间</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="queueBody">
+            <!-- 由 app.js 填充 -->
+          </tbody>
+        </table>
+        <div class="empty" id="queueEmpty" hidden>暂无可疑记录</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========== 右侧抽屉（座位详情 / 可疑详情共用容器） ========== -->
+  <div class="drawer-scrim" id="drawerScrim" hidden></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="详情抽屉">
+    <div class="drawer__head">
+      <span class="drawer__kicker" id="drawerKicker">详情</span>
+      <button class="drawer__close" id="drawerClose" aria-label="关闭">✕</button>
+    </div>
+    <div class="drawer__body" id="drawerBody">
+      <!-- 由 app.js 填充（座位详情 或 可疑详情） -->
+    </div>
+  </aside>
+
+  <!-- ========== 图片放大灯箱 ========== -->
+  <div class="lightbox" id="lightbox" hidden>
+    <button class="lightbox__close" id="lightboxClose" aria-label="关闭">✕</button>
+    <img class="lightbox__img" id="lightboxImg" alt="证据图放大" />
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

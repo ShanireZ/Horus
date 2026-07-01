@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Agent 与 Server 共用的线协议 / canonical / HMAC。刻意为平台无关 net8.0(非 -windows),
+       以便 Server(net8.0) 与 Agent(net8.0-windows) 都能引用,保证哈希与签名两端逐字节一致。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Honus.Contracts</AssemblyName>
+    <RootNamespace>Honus.Contracts</RootNamespace>
+  </PropertyGroup>
+
+</Project>

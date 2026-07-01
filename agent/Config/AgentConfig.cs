@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Honus.Agent.Model;
+using Honus.Contracts;   // Json.Wire(线协议共享)
 
 namespace Honus.Agent.Config;
 

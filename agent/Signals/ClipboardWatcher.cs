@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Honus.Agent.Model;
+using Honus.Contracts;
 
 namespace Honus.Agent.Signals;
 

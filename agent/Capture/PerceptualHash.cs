@@ -7,7 +7,7 @@ namespace Honus.Agent.Capture;
 /// dHash:缩放到 9×8 灰度,逐行比较相邻像素 → 64 位指纹。汉明距离衡量相似度。
 public static class PerceptualHash
 {
-    public static ulong DHash(Image source)
+    public static ulong DHash(SixLabors.ImageSharp.Image source)   // 显式限定:UseWindowsForms 注入的 System.Drawing.Image 造成歧义
     {
         using Image<L8> img = source.CloneAs<L8>();
         img.Mutate(x => x.Resize(9, 8));

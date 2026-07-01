@@ -5,6 +5,7 @@ using Honus.Agent.Integrity;
 using Honus.Agent.Model;
 using Honus.Agent.Signals;
 using Honus.Agent.Transport;
+using Honus.Contracts;   // AgentEvent / SignalType / Envelope(线协议共享)
 
 namespace Honus.Agent;
 

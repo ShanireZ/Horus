@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- 监考服务器:接收(WS 事件 + HTTP 图片/击键) + 落库(SQLite + 文件) + 简易看板。
+       net8.0(非 -windows):笔记本上 Windows 可跑,也便于测试。对外联网仅 M2 云 OCR。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Honus.Server</AssemblyName>
+    <RootNamespace>Honus.Server</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.28" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 共享线协议 / canonical / HMAC(与 Agent 共用,验签同源) -->
+    <ProjectReference Include="..\contracts\Honus.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 权威 DDL 内嵌进程序集(路径无关,测试也能读到)。启动时执行,M1 剥离 vec0 虚表。 -->
+    <EmbeddedResource Include="..\schema\schema.sql" Link="schema.sql" />
+  </ItemGroup>
+
+</Project>
