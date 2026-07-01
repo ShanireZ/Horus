@@ -488,6 +488,108 @@ public class CryptoCompareTests
         => Assert.Equal(expected, Horus.Contracts.Crypto.FixedTimeEquals(a, b));
 }
 
+/// DB 读写分离(文件库):写连接落库,独立只读连接读回;只读连接物理拒写;并发读写不死锁。
+/// 既有测试全走 :memory:(回退单连接路径),此类专测**文件库的双连接路径**。
+public class DbReadWriteTests
+{
+    private static string TempDbDir()
+        => Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "horus-db-" + Guid.NewGuid().ToString("N")[..10])).FullName;
+
+    [Fact]
+    public void 文件库_写连接落库_只读连接读回同一份数据()
+    {
+        string dir = TempDbDir();
+        try
+        {
+            using var db = new Horus.Server.Data.Db(Path.Combine(dir, "t.db"));
+            db.Write(conn =>
+            {
+                using var c = conn.CreateCommand();
+                c.CommandText = "INSERT INTO exams (exam_id,name,status,created_at) VALUES ('E1','考试','active',1)";
+                c.ExecuteNonQuery();
+            });
+            long n = db.Read(conn =>
+            {
+                using var c = conn.CreateCommand();
+                c.CommandText = "SELECT COUNT(*) FROM exams WHERE exam_id='E1'";
+                return Convert.ToInt64(c.ExecuteScalar());
+            });
+            Assert.Equal(1, n);   // 独立只读连接看到写连接刚提交的数据
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void 文件库_只读连接物理拒写()
+    {
+        string dir = TempDbDir();
+        try
+        {
+            using var db = new Horus.Server.Data.Db(Path.Combine(dir, "t.db"));
+            Assert.ThrowsAny<Exception>(() => db.Read(conn =>
+            {
+                using var c = conn.CreateCommand();
+                c.CommandText = "INSERT INTO exams (exam_id,name,status,created_at) VALUES ('X','x','active',1)";
+                return c.ExecuteNonQuery();   // Mode=ReadOnly → 抛,杜绝经读连接误写
+            }));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public async Task 文件库_并发读写_不死锁不报错_计数一致()
+    {
+        string dir = TempDbDir();
+        try
+        {
+            using var db = new Horus.Server.Data.Db(Path.Combine(dir, "t.db"));
+            db.Write(conn =>
+            {
+                using var c = conn.CreateCommand();
+                c.CommandText = "INSERT INTO exams (exam_id,name,status,created_at) VALUES ('E1','考试','active',1)";
+                c.ExecuteNonQuery();
+            });
+
+            const int N = 200;
+            Task writer = Task.Run(() =>
+            {
+                for (int i = 1; i <= N; i++)
+                {
+                    long seq = i;
+                    db.Write(conn =>
+                    {
+                        using var c = conn.CreateCommand();
+                        c.CommandText =
+                            @"INSERT INTO events (exam_id,seat_id,agent_id,seq,ts,recv_ts,type,payload,risk)
+                              VALUES ('E1','A07','ag',$seq,1,1,'heartbeat','{}',0)";
+                        c.Parameters.AddWithValue("$seq", seq);
+                        c.ExecuteNonQuery();
+                    });
+                }
+            });
+
+            // 写进行中并发读:WAL 下读不阻塞写、不死锁、不抛
+            for (int r = 0; r < N; r++)
+                db.Read(conn =>
+                {
+                    using var c = conn.CreateCommand();
+                    c.CommandText = "SELECT COUNT(*) FROM events";
+                    return Convert.ToInt64(c.ExecuteScalar());
+                });
+
+            await writer;
+            long total = db.Read(conn =>
+            {
+                using var c = conn.CreateCommand();
+                c.CommandText = "SELECT COUNT(*) FROM events";
+                return Convert.ToInt64(c.ExecuteScalar());
+            });
+            Assert.Equal(N, total);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+}
+
 /// 可切换失败的 HTTP 处理器:Fail=true 时抛异常(模拟图片通道离线),否则转发到内层(TestServer)。
 public sealed class ToggleFailHandler : DelegatingHandler
 {

@@ -8,14 +8,9 @@ namespace Horus.Server.Analysis;
 /// 服务器 risk ≥ 阈值即入 suspicious_queue;M2/M3 再叠加 OCR/Logo/击键。
 public static class Suspicion
 {
-    // 网页 AI 站(命中即 web_ai)。非白名单浏览已由 Agent 判为高风险,这里只细分标签。
-    private static readonly string[] AiHosts =
-        { "openai", "chatgpt", "doubao", "deepseek", "gemini", "bard", "claude", "anthropic",
-          "kimi", "moonshot", "tongyi", "qwen", "wenxin", "yiyan", "perplexity", "copilot", "poe", "you.com" };
-
-    // 搜索引擎(命中即 search)。
-    private static readonly string[] SearchHosts =
-        { "google", "baidu", "bing", "sogou", "so.com", "360.cn", "duckduckgo", "yandex" };
+    // 命中黑名单即细分标签。黑名单与 RiskModel 共用同一份,避免风险判据与标签判据漂移。
+    private static string[] AiHosts => RiskModel.AiHosts;
+    private static string[] SearchHosts => RiskModel.SearchHosts;
 
     /// 返回 kind;返回 null 表示该事件不单独入队(例如低于阈值的软信号)。
     public static string KindFor(SignalType type, JsonElement payload)

@@ -9,7 +9,13 @@
   // 生成示例(PowerShell): [Convert]::ToBase64String((1..32|%{Get-Random -Max 256}))
   "pskBase64": "",
 
-  // 管理/看板令牌:所有 /api/* 需带 X-Horus-Admin 头(图片字节端点可用 ?t= 查询)。
+  // 击键旁路密钥(base64):判题后端持它对 /ingest/keystroke 提交体签名(X-Horus-KSig)。
+  // 留空 = 关闭击键鉴权(仅联调)。生产接了判题埋点应配置,否则同网学员机可伪造/栽赃他人击键样本。与 psk 相互独立。
+  "keystrokeSecretBase64": "",
+
+  // 管理/看板令牌:所有 /api/*(除 /api/login、/api/logout)需带凭证。
+  //   浏览器:POST /api/login {token} 校验后种 HttpOnly cookie(JS 读不到、不进 URL)——首选;
+  //   脚本客户端:X-Horus-Admin 头;图片字节端点兼容 ?t= 查询。
   // 留空 = 关闭管理鉴权(仅联调)。生产务必配置,否则同网学员机可下发配置关掉全场检测/拉证据图/抹裁决。
   "adminToken": "",
 

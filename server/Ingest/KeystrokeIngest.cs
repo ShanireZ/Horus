@@ -1,20 +1,43 @@
 using System.Text.Json;
+using Horus.Contracts;
 using Horus.Server.Config;
 using Horus.Server.Data;
 using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Ingest;
 
-/// 击键节奏旁路(HTTP POST /ingest/keystroke),来自判题网页前端,不经 Agent。见 api-contract §2.2。
+/// 击键节奏旁路(HTTP POST /ingest/keystroke),来自判题网页(经判题后端),不经 Agent。见 api-contract §2.2。
 /// M1:落库 + 基础 risk 初判(整段粘贴 / 超人爆发 / 空窗后突现整段 → 可疑)。
+/// M2:**会话鉴权**——判题后端持 KSK 对整条提交体签名(X-Horus-KSig),挡同网学员机伪造/栽赃他人击键。
 public sealed class KeystrokeIngest(Db db, ServerConfig cfg)
 {
     public async Task HandleAsync(HttpContext ctx)
     {
+        // 先缓冲整条 body 字节(既用于验签,也用于解析),避免流被读一次即耗尽。
+        byte[] body;
+        using (var ms = new MemoryStream())
+        {
+            await ctx.Request.Body.CopyToAsync(ms);
+            body = ms.ToArray();
+        }
+
+        // 击键鉴权:X-Horus-KSig = HMAC(KSK, "keystroke\n"+sha256(body))。任何篡改(含改 seatId 栽赃)都会破坏签名。
+        if (cfg.KeystrokeAuthEnabled)
+        {
+            string ksig = ctx.Request.Headers["X-Horus-KSig"].ToString();
+            string want = Auth.KeystrokeSig(cfg.Ksk!, body);
+            if (string.IsNullOrEmpty(ksig) || !Crypto.FixedTimeEquals(ksig, want))
+            {
+                ctx.Response.StatusCode = 401;
+                await ctx.Response.WriteAsJsonAsync(new { error = "bad_ksig" });
+                return;
+            }
+        }
+
         JsonElement root;
         try
         {
-            using JsonDocument doc = await JsonDocument.ParseAsync(ctx.Request.Body);
+            using JsonDocument doc = JsonDocument.Parse(body);
             root = doc.RootElement.Clone();
         }
         catch { ctx.Response.StatusCode = 400; await ctx.Response.WriteAsJsonAsync(new { error = "bad_json" }); return; }
@@ -32,15 +55,26 @@ public sealed class KeystrokeIngest(Db db, ServerConfig cfg)
 
         long id = db.Locked(conn =>
         {
+            // 幂等落库:同 (exam,seat,ts,submissionId) 已存在则不重插——防同网攻击者嗅到 HTTP 明文后
+            // **原样重放**合法签名体(签名验得过但无去重键)灌可疑队列/DoS。签名防伪造/栽赃,幂等防重放。
             using SqliteCommand ins = conn.Cmd(
                 @"INSERT INTO keystroke_samples (exam_id,seat_id,submission_id,ts,timeline,features,risk)
-                  VALUES (@e,@s,@sub,@ts,@tl,@ft,@risk)",
+                  SELECT @e,@s,@sub,@ts,@tl,@ft,@risk
+                  WHERE NOT EXISTS (SELECT 1 FROM keystroke_samples
+                                    WHERE exam_id=@e AND seat_id=@s AND ts=@ts
+                                      AND COALESCE(submission_id,'')=COALESCE(@sub,''))",
                 ("@e", examId), ("@s", seatId), ("@sub", submissionId), ("@ts", ts),
                 ("@tl", timeline), ("@ft", featuresJson), ("@risk", risk));
-            ins.ExecuteNonQuery();
+            if (ins.ExecuteNonQuery() == 0) return -1L;   // 重放/重复:不另存、不重复入队
             using SqliteCommand idc = conn.Cmd("SELECT last_insert_rowid()");
             return Convert.ToInt64(idc.ExecuteScalar());
         });
+
+        if (id < 0)   // 重放:幂等返回,不入队
+        {
+            await ctx.Response.WriteAsJsonAsync(new { stored = false, duplicate = true, risk });
+            return;
+        }
 
         // 达阈值 → 入可疑队列(kind 依特征细分)
         if (risk >= cfg.RiskThreshold)

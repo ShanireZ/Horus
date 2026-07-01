@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS events (
   recv_ts           REAL NOT NULL,                    -- 服务器接收时钟
   type              TEXT NOT NULL,                    -- window_focus|browser_url|process_start|...
   payload           TEXT NOT NULL,                    -- JSON
-  risk              INTEGER NOT NULL DEFAULT 0,
+  risk              INTEGER NOT NULL DEFAULT 0,        -- **Agent 自报**初判(原样留证,不改)
+  server_risk       INTEGER,                          -- **服务器独立复判**(不信任 Agent risk);入队/看板用 max(risk,server_risk)
   evidence_image_id TEXT,                             -- → images.image_id
   hash_prev         TEXT,
   hash_self         TEXT,

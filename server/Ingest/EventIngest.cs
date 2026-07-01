@@ -129,15 +129,23 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
 
         double recvTs = Now();
 
+        // 服务器侧风险复判(**不信任 Agent 自报 risk**):凭独立黑名单 + 该考试已下发白名单重算。
+        // 有效风险 = max(agentRisk, serverRisk);持 PSK 学员机把「访问 AI 站」签成 risk=0 也压不住入队。
+        SignalType sigType = ParseType(typeStr);
+        JsonElement payloadEl = e.TryGetProperty("payload", out JsonElement pEl) ? pEl : default;
+        var (wlHosts, wlProcs, pasteThreshold) = RiskModel.PolicyFrom(hub.GetConfig(examId));
+        int serverRisk = RiskModel.Derive(sigType, payloadEl, wlHosts, wlProcs, pasteThreshold);
+        int effRisk = Math.Max(risk, serverRisk);
+
         long? newId = db.Locked(conn =>
         {
             using SqliteCommand ins = conn.Cmd(
-                @"INSERT INTO events (exam_id,seat_id,agent_id,seq,ts,recv_ts,type,payload,risk,evidence_image_id,hash_prev,hash_self,sig)
-                  VALUES (@exam,@seat,@agent,@seq,@ts,@recv,@type,@payload,@risk,@ev,@hp,@hs,@sig)
+                @"INSERT INTO events (exam_id,seat_id,agent_id,seq,ts,recv_ts,type,payload,risk,server_risk,evidence_image_id,hash_prev,hash_self,sig)
+                  VALUES (@exam,@seat,@agent,@seq,@ts,@recv,@type,@payload,@risk,@srisk,@ev,@hp,@hs,@sig)
                   ON CONFLICT(agent_id,seq) DO NOTHING",
                 ("@exam", examId), ("@seat", seatId), ("@agent", agentId), ("@seq", seq),
                 ("@ts", ts), ("@recv", recvTs), ("@type", typeStr), ("@payload", payloadRaw),
-                ("@risk", risk), ("@ev", evidenceImageId), ("@hp", hashPrev), ("@hs", hashSelf), ("@sig", sig));
+                ("@risk", risk), ("@srisk", serverRisk), ("@ev", evidenceImageId), ("@hp", hashPrev), ("@hs", hashSelf), ("@sig", sig));
             int changed = ins.ExecuteNonQuery();
 
             long? id = null;
@@ -167,10 +175,15 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
             return id;
         });
 
-        // 只对新落库事件入可疑队列(避免重传重复入队);browser_unreadable 无视阈值(强制人工看截图的兜底)
+        // 只对新落库事件入可疑队列(避免重传重复入队);用**有效风险**判阈值,browser_unreadable 无视阈值。
+        // agentRisk 低于阈值但 serverRisk 顶上去 → 记 agent_risk_understated,是篡改逃逸的取证信号。
         if (newId is not null && typeStr != "heartbeat" &&
-            (risk >= cfg.RiskThreshold || IsForcedReview(typeStr, payloadRaw)))
-            EnqueueSuspicious(examId, seatId, ts, typeStr, risk, newId.Value, evidenceImageId, payloadRaw);
+            (effRisk >= cfg.RiskThreshold || IsForcedReview(typeStr, payloadRaw)))
+        {
+            string? tamperNote = serverRisk >= cfg.RiskThreshold && risk < cfg.RiskThreshold
+                ? $"agent_risk_understated agent={risk} server={serverRisk}" : null;
+            EnqueueSuspicious(examId, seatId, ts, typeStr, effRisk, newId.Value, evidenceImageId, payloadRaw, tamperNote);
+        }
 
         // 逐条 ack 本条 seq(不用范围 upto):即使 seq 空间有空洞,也不会误删从未送达的低 seq 事件
         await link.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "ack", seq }), ct);
@@ -181,7 +194,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
         => typeStr == "browser_url" && TryGetPayloadStr(payloadRaw, "note") == "url_unreadable";
 
     private void EnqueueSuspicious(string examId, string seatId, double ts, string typeStr,
-        int risk, long eventId, string? evidenceImageId, string payloadRaw)
+        int score, long eventId, string? evidenceImageId, string payloadRaw, string? note)
     {
         SignalType type = ParseType(typeStr);
         JsonElement payload;
@@ -196,9 +209,10 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
         db.Locked(conn =>
         {
             using SqliteCommand c = conn.Cmd(
-                @"INSERT INTO suspicious_queue (exam_id,seat_id,ts,kind,score,status,refs)
-                  VALUES (@e,@s,@ts,@k,@sc,'pending',@refs)",
-                ("@e", examId), ("@s", seatId), ("@ts", ts), ("@k", kind), ("@sc", risk), ("@refs", refsJson));
+                @"INSERT INTO suspicious_queue (exam_id,seat_id,ts,kind,score,status,refs,note)
+                  VALUES (@e,@s,@ts,@k,@sc,'pending',@refs,@note)",
+                ("@e", examId), ("@s", seatId), ("@ts", ts), ("@k", kind), ("@sc", score),
+                ("@refs", refsJson), ("@note", note));
             c.ExecuteNonQuery();
         });
     }

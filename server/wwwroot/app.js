@@ -86,37 +86,39 @@
   }
 
   /* ============================================================
-     管理令牌鉴权
+     管理鉴权（M2：HttpOnly cookie）
      ------------------------------------------------------------
      冻结契约：
-       · 所有 /api/* 请求带 HTTP 头 X-Horus-Admin: <token>（GET/POST 皆然）。
-       · 图片字节端点 /api/images/{id} 无法设请求头，额外接受 ?t=<token>；
-         /api/images/{id}/meta（JSON）仍走 api() + 头。
-       · 令牌错误/缺失 → /api/* 返回 401。
-       · 服务器未配置令牌（本地联调）时 /api/* 正常放行、不返回 401——
-         所以逻辑是「遇到 401 才要令牌」，而非「无令牌就不发请求」。
-     令牌存 localStorage（key = horus_admin_token）。
+       · 登录：POST /api/login {token} → 校验通过则种 HttpOnly cookie `horus_admin`。
+         cookie 由浏览器自动附带（fetch credentials:same-origin + <img> 同源），
+         **JS 读不到**（防 XSS 窃取），**不进 URL**（防 ?t= 令牌经 Referer/日志外泄）。
+       · 其余 /api/* 无需再手动带令牌头；cookie 自动携带。
+       · 令牌错误/缺失 → /api/* 返回 401 → 弹登录门。
+       · 服务器未配置令牌（本地联调）时 /api/* 正常放行、/api/login 返回 authRequired:false。
+       · 登出：POST /api/logout → 清 cookie。
+     前端不再持令牌明文，localStorage 不再用于令牌。
      ============================================================ */
-  var TOKEN_KEY = "horus_admin_token";
 
-  function getToken() {
-    try { return window.localStorage.getItem(TOKEN_KEY) || ""; }
-    catch (e) { return ""; }   // 隐私模式等禁用 localStorage 时降级为空
+  // 登录：校验令牌并种 cookie。返回 { ok, body }。
+  function login(tok) {
+    return fetch("/api/login", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ token: tok })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, body: j }; });
+    });
   }
-  function setToken(tok) {
-    try { window.localStorage.setItem(TOKEN_KEY, tok); } catch (e) {}
-  }
-  function clearToken() {
-    try { window.localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+  // 登出：清 cookie（失败静默——UI 层照常弹门即可）。
+  function logout() {
+    return fetch("/api/logout", { method: "POST", credentials: "same-origin" }).catch(function () {});
   }
 
-  // 给图片字节 URL 附带令牌查询参数（<img> 无法设请求头，只能走 ?t=）。
-  // 供 /api/images/{id} 缩略图/灯箱大图使用；/meta 不走这里（走 api()+头）。
+  // 图片字节 URL：cookie 同源自动携带，无需再把令牌拼进 ?t=（避免令牌进 URL / 日志 / Referer）。
+  // 供 /api/images/{id} 缩略图/灯箱大图使用；/meta 走 api()。
   function imageUrl(imageId) {
-    var base = "/api/images/" + encodeURIComponent(imageId);
-    if (USE_MOCK) return base;             // mock 不经真实 /api，无需带令牌
-    var tok = getToken();
-    return tok ? base + "?t=" + encodeURIComponent(tok) : base;
+    return "/api/images/" + encodeURIComponent(imageId);
   }
 
   /* ---------- 统一 fetch 封装：自动加令牌头 + 401 → 登录门 ---------- */
@@ -141,13 +143,11 @@
     if (opts.headers) {
       Object.keys(opts.headers).forEach(function (k) { headers[k] = opts.headers[k]; });
     }
-    // 附带令牌头（有则带；无令牌时也照发——联调模式下服务器会放行，
-    // 只有真配置了令牌的服务器才会因缺头/错头返回 401）。
-    var tok = getToken();
-    if (tok) headers["X-Horus-Admin"] = tok;
-
+    // 管理鉴权走 HttpOnly cookie：credentials:same-origin 让浏览器自动携带，无需手动带令牌头。
+    // 联调模式（服务器未配令牌）下 /api/* 照常放行；配了令牌但未登录/cookie 失效则 401 → 弹门。
     return fetch(path, {
       method: opts.method || "GET",
+      credentials: "same-origin",
       headers: headers,
       body: opts.body
     }).then(function (r) {
@@ -220,9 +220,9 @@
       state.autoRefresh = e.target.checked;
       restartPolling();
     });
-    // 更换/退出令牌：清 localStorage → 停轮询 → 清屏 → 弹登录门
+    // 更换/退出令牌：清 cookie → 停轮询 → 清屏 → 弹登录门
     $("#logoutBtn").addEventListener("click", function () {
-      clearToken();
+      logout();
       stopPolling();
       clearCurrentData();
       showLoginGate("请输入监考管理令牌");
@@ -259,9 +259,27 @@
         hint.classList.add("is-error");
         return;
       }
-      setToken(tok);          // 存 localStorage
-      hideLoginGate();
-      loadExams();            // 带令牌头重新拉取；若仍 401 会再次弹门
+      var btn = $("#tokenSubmit");
+      if (btn) btn.disabled = true;
+      // POST /api/login 校验并种 HttpOnly cookie；成功后 cookie 自动携带，直接拉数据。
+      login(tok).then(function (res) {
+        if (btn) btn.disabled = false;
+        if (res.ok && (!res.body || res.body.ok !== false)) {
+          hideLoginGate();
+          loadExams();        // cookie 已种；若仍 401 会再次弹门
+        } else {
+          var hint = $("#loginHint");
+          hint.textContent = "令牌无效，请重试";
+          hint.classList.add("is-error");
+          var input = $("#tokenInput"); input.value = "";
+          setTimeout(function () { try { input.focus(); } catch (e2) {} }, 0);
+        }
+      }).catch(function () {
+        if (btn) btn.disabled = false;
+        var hint = $("#loginHint");
+        hint.textContent = "登录请求失败，请检查网络";
+        hint.classList.add("is-error");
+      });
     });
   }
 
@@ -800,12 +818,19 @@
           'onerror="this.style.display=\'none\'"/>';
       }
 
+      // 有效风险 = max(Agent 自报, 服务器复判);着色用有效风险,避免"谎报 risk=0"在明细里显示成低危。
+      var evAgent = (typeof ev.risk === "number") ? ev.risk : 0;
+      var evServer = (typeof ev.serverRisk === "number") ? ev.serverRisk : 0;
+      var evEff = Math.max(evAgent, evServer);
+      // 服务器复判高于 Agent 自报 → 显式标注 "自报→服务器"(篡改逃逸取证提示)
+      var riskText = evServer > evAgent ? ("risk " + evAgent + "→" + evServer) : ("risk " + dash(ev.risk));
+
       item.innerHTML =
         '<div class="tl-time">' + fmtTime(ev.ts) + "</div>" +
         '<div class="tl-main">' +
           '<div class="tl-head">' +
-            '<span class="tl-type ' + riskClass(ev.risk) + '">' + esc(typeLabel(ev.type)) + "</span>" +
-            '<span class="tl-risk">risk ' + dash(ev.risk) + " · seq " + dash(ev.seq) + "</span>" +
+            '<span class="tl-type ' + riskClass(evEff) + '">' + esc(typeLabel(ev.type)) + "</span>" +
+            '<span class="tl-risk">' + riskText + " · seq " + dash(ev.seq) + "</span>" +
           "</div>" +
           '<div class="tl-payload">' + payloadSummary(ev) + "</div>" +
           thumb +

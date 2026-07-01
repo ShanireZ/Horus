@@ -217,6 +217,41 @@ public class IngestTests
     }
 
     [Fact]
+    public async Task 击键鉴权_无签名或篡改401_有效签名放行()
+    {
+        using var app = new TestApp(keystrokeAuth: true);
+        HttpClient http = app.CreateClient();
+        await CreateExamAsync(http);
+
+        const string bodyJson = "{\"examId\":\"E1\",\"seatId\":\"A07\",\"submissionId\":\"sub1\",\"ts\":1750000000.0," +
+                                "\"timeline\":[1,2,3],\"features\":{\"idleThenBlock\":true}}";
+        byte[] bodyBytes = Encoding.UTF8.GetBytes(bodyJson);
+        string goodSig = Auth.KeystrokeSig(TestApp.Ksk, bodyBytes);
+
+        static HttpRequestMessage Req(byte[] b, string? sig)
+        {
+            var m = new HttpRequestMessage(HttpMethod.Post, "/ingest/keystroke") { Content = new ByteArrayContent(b) };
+            m.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            if (sig is not null) m.Headers.Add("X-Horus-KSig", sig);
+            return m;
+        }
+
+        // 无签名 → 401
+        Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(Req(bodyBytes, null))).StatusCode);
+        // 错签名 → 401
+        Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(Req(bodyBytes, "deadbeef"))).StatusCode);
+        // 栽赃:改 seatId 为 B99 但拿原 body 的签名 → 401(内容绑定被破坏)
+        byte[] tampered = Encoding.UTF8.GetBytes(bodyJson.Replace("A07", "B99"));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(Req(tampered, goodSig))).StatusCode);
+
+        // 有效签名 → 200 + 落库(risk=70)
+        HttpResponseMessage ok = await http.SendAsync(Req(bodyBytes, goodSig));
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        JsonElement b = await ok.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(70, b.GetProperty("risk").GetInt32());
+    }
+
+    [Fact]
     public async Task 人工裁决_确认后移出待复核()
     {
         using var app = new TestApp();
@@ -301,6 +336,45 @@ public class IngestTests
     }
 
     [Fact]
+    public async Task 管理端点_cookie登录放行_登出后401()
+    {
+        using var app = new TestApp(adminAuth: true);
+        HttpClient http = app.CreateClient();   // WebApplicationFactory 默认 HandleCookies=true,跨请求保持 cookie
+
+        // 未登录 → 401
+        Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync("/api/exams")).StatusCode);
+
+        // 错令牌登录 → 401,不种 cookie
+        HttpResponseMessage badLogin = await http.PostAsJsonAsync("/api/login", new { token = "wrong" });
+        Assert.Equal(HttpStatusCode.Unauthorized, badLogin.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync("/api/exams")).StatusCode);
+
+        // 正确令牌登录 → 200 + Set-Cookie(HttpOnly)
+        HttpResponseMessage login = await http.PostAsJsonAsync("/api/login", new { token = TestApp.AdminToken });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        Assert.Contains(login.Headers, h => h.Key == "Set-Cookie" &&
+            h.Value.Any(v => v.Contains("horus_admin") && v.Contains("httponly", StringComparison.OrdinalIgnoreCase)));
+
+        // 带 cookie → 放行(不再需要 X-Horus-Admin 头)
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/api/exams")).StatusCode);
+
+        // 登出 → 清 cookie → 再访问 401
+        Assert.Equal(HttpStatusCode.OK, (await http.PostAsync("/api/logout", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync("/api/exams")).StatusCode);
+    }
+
+    [Fact]
+    public async Task 安全响应头_CSP与nosniff存在()
+    {
+        using var app = new TestApp();
+        HttpClient http = app.CreateClient();
+        HttpResponseMessage r = await http.GetAsync("/api/exams");
+        Assert.True(r.Headers.Contains("Content-Security-Policy"), "缺 CSP 头");
+        Assert.True(r.Headers.Contains("X-Content-Type-Options"), "缺 nosniff 头");
+        Assert.True(r.Headers.Contains("X-Frame-Options"), "缺 X-Frame-Options 头");
+    }
+
+    [Fact]
     public async Task 图片_客户端预生成id_幂等沿用()
     {
         using var app = new TestApp();
@@ -321,6 +395,131 @@ public class IngestTests
 
         HttpResponseMessage img = await http.GetAsync($"/api/images/{cid}");
         Assert.Equal(HttpStatusCode.OK, img.StatusCode);
+    }
+
+    [Fact]
+    public async Task 服务器侧risk重算_agent谎报risk0仍入队并记篡改()
+    {
+        using var app = new TestApp();
+        HttpClient http = app.CreateClient();
+        await CreateExamAsync(http);
+
+        using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
+        await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
+        await Ws.ReceiveAsync(ws);
+
+        // 学员机持 PSK,把"访问 AI 站"事件合法签成 risk=0 + whitelisted=true 试图逃逸可疑队列
+        await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.BrowserUrl,
+            new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = true }, 0, seq: 1));
+        JsonElement ack = await Ws.ReceiveAsync(ws);
+        Assert.Equal("ack", ack.GetProperty("type").GetString());     // 签名合法,照收(不误伤)
+
+        // 事件落库:Agent 自报 risk=0 原样留证,但服务器独立复判 serverRisk=80
+        JsonElement events = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/events?seatId=A07");
+        Assert.Equal(1, events.GetArrayLength());
+        Assert.Equal(0, events[0].GetProperty("risk").GetInt32());
+        Assert.Equal(80, events[0].GetProperty("serverRisk").GetInt32());
+
+        // 仍入可疑队列:score=有效风险 80,kind=web_ai,note 记 agent_risk_understated(篡改取证)
+        JsonElement susp = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
+        Assert.Equal(1, susp.GetArrayLength());
+        Assert.Equal("web_ai", susp[0].GetProperty("kind").GetString());
+        Assert.Equal(80, susp[0].GetProperty("score").GetInt32());
+        Assert.Contains("agent_risk_understated", susp[0].GetProperty("note").GetString());
+    }
+
+    [Fact]
+    public async Task 服务器侧risk重算_远控工具进程独立判高危()
+    {
+        using var app = new TestApp();
+        HttpClient http = app.CreateClient();
+        await CreateExamAsync(http);
+
+        using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
+        await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
+        await Ws.ReceiveAsync(ws);
+
+        // agent 谎报 TeamViewer 为白名单 risk=0,但命中服务器远控黑名单 → 独立判 70 入队
+        await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.ProcessStart,
+            new() { ["name"] = "TeamViewer.exe", ["pid"] = 999, ["whitelisted"] = true }, 0, seq: 1));
+        await Ws.ReceiveAsync(ws);
+
+        JsonElement susp = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
+        Assert.Equal(1, susp.GetArrayLength());
+        Assert.Equal("non_whitelist_proc", susp[0].GetProperty("kind").GetString());
+        Assert.Equal(70, susp[0].GetProperty("score").GetInt32());
+    }
+
+    [Fact]
+    public async Task 服务器侧risk重算_良性事件不入队_serverRisk为0()
+    {
+        using var app = new TestApp();
+        HttpClient http = app.CreateClient();
+        await CreateExamAsync(http);
+
+        using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
+        await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
+        await Ws.ReceiveAsync(ws);
+
+        await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.WindowFocus,
+            new() { ["title"] = "题目.pdf", ["process"] = "acrobat" }, 0, seq: 1));
+        await Ws.ReceiveAsync(ws);
+
+        JsonElement events = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/events?seatId=A07");
+        Assert.Equal(0, events[0].GetProperty("serverRisk").GetInt32());
+        JsonElement susp = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
+        Assert.Equal(0, susp.GetArrayLength());   // 良性事件不入队,不制造假阳性
+    }
+
+    [Fact]
+    public async Task 服务器侧risk重算_谎报large为false的大段粘贴仍判高危()
+    {
+        using var app = new TestApp();
+        HttpClient http = app.CreateClient();
+        await CreateExamAsync(http);
+
+        using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
+        await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
+        await Ws.ReceiveAsync(ws);
+
+        // agent 把 5000 字符大段粘贴签成 large=false, risk=0;服务器从 len/lines 独立复判 → 60 入队 + 篡改标记
+        await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.Clipboard,
+            new() { ["len"] = 5000, ["lines"] = 80, ["large"] = false }, 0, seq: 1));
+        await Ws.ReceiveAsync(ws);
+
+        JsonElement susp = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
+        Assert.Equal(1, susp.GetArrayLength());
+        Assert.Equal("large_paste", susp[0].GetProperty("kind").GetString());
+        Assert.Equal(60, susp[0].GetProperty("score").GetInt32());
+        Assert.Contains("agent_risk_understated", susp[0].GetProperty("note").GetString());
+    }
+
+    [Fact]
+    public async Task 击键_原样重放_幂等不重复入队()
+    {
+        using var app = new TestApp();
+        HttpClient http = app.CreateClient();
+        await CreateExamAsync(http);
+
+        var body = new
+        {
+            examId = "E1", seatId = "A07", submissionId = "sub1", ts = 1750000000.0,
+            timeline = new[] { 1, 2, 3 }, features = new { idleThenBlock = true },
+        };
+
+        HttpResponseMessage r1 = await http.PostAsJsonAsync("/ingest/keystroke", body);
+        r1.EnsureSuccessStatusCode();
+        Assert.True((await r1.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("stored").GetBoolean());
+
+        // 原样重放 → 幂等:不另存、不重复入队
+        HttpResponseMessage r2 = await http.PostAsJsonAsync("/ingest/keystroke", body);
+        r2.EnsureSuccessStatusCode();
+        JsonElement b2 = await r2.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(b2.GetProperty("stored").GetBoolean());
+        Assert.True(b2.GetProperty("duplicate").GetBoolean());
+
+        JsonElement susp = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
+        Assert.Equal(1, susp.GetArrayLength());   // 只入队一次
     }
 
     // ---- 图片上传小工具 ----

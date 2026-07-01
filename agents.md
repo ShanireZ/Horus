@@ -56,7 +56,13 @@ dotnet test  Horus.sln -c Debug      # 运行端到端测试
 - ✅ **三路独立审计（安全 / 并发与数据完整性 / 正确性与契约）+ 修复**：修掉两条会丢证据的 Critical（`ack` 改**逐条确认**杜绝空洞误删、**序号高水位持久化**杜绝重启复用）、`trigger` 映射为契约值、`is_evidence` 乱序回填、`url_unreadable` 强制入队、缓冲原子压实 + 崩溃恢复、Schema DDL 切分健壮化；安全加固：**管理令牌 `X-Horus-Admin`（/api 全鉴权）**、图片体/WS 帧大小上限、`X-Horus-Image-Id` 纳入签名、`LiveConfig` 上下限钳制、路径穿越边界、旧连接 Abort、Dispose 竞态。
 - ✅ **第二轮复审（性能/负载/可靠性 · 安全 · 逻辑/回归 三路并行）+ 修复**：修上一轮引入的两条回归——`url_unreadable` 每 2s 刷爆队列（改为只在进入不可读态发一次）、逐条 ack 的 O(N²) 全文件重写（改**攒批压实**）；+ 性能（看板/回填索引、图片体 8→2MB、重连 jitter）+ 安全（**fail-closed** 非 loopback 缺凭证拒启动、`FixedTimeEquals` 不泄漏长度、图片 `?t=` 加 no-referrer/no-store、clientId 验签前校验）+ 逻辑（`LiveConfig` 只下发一端不篡改另一端）。
 - ✅ **41 项测试全绿**（含两轮审计的回归：逐条/攒批 ack · 重启不复用 seq · trigger 映射 · is_evidence 回填 · Schema 分号健壮 · 管理鉴权 401·200·?t= · fail-closed · FixedTimeEquals · LiveConfig 单端下发）+ 真机 curl 验证。
-- ⏳ 待办（记入 architecture §10.1/§10.2）：M2 结构性（DB 读写分离 / 信号入队单写线程 / 归档清理任务 / 完整 canonical 复算 + 哈希链复验 / 签名防重放 / keystroke 会话鉴权 / token 上 HttpOnly cookie+CSP）+ 云 OCR + L3 Logo；M3 CLIP / 归档作业。里程碑见 architecture §15。
+
+**M2 信任模型加固（已实现 · 50 项测试全绿 · 三路独立审计放行）**：
+- ✅ **服务器侧 risk 重算**（闭合 §10.1 头号残留）：不采信 Agent 自报 `risk`，凭独立黑名单（AI 站 / 搜索引擎 / 远控工具）+ 该考试**已下发**白名单重算 `server_risk`，以**有效风险 = max(agentRisk, serverRisk)** 决定入队；`serverRisk≥阈值` 而 `agentRisk<阈值` 记 `agent_risk_understated` 篡改标记。学员把「访问 AI 站」签成 `risk=0` 也压不住入队（`events` 加 `server_risk` 列 + 幂等迁移）。
+- ✅ **keystroke 会话鉴权**（闭合 §10.1 栽赃）：判题后端持 **KSK** 对整条 body 签名 `X-Horus-KSig=HMAC(KSK,"keystroke\n"+sha256(body))`；改 seatId 栽赃即破签 → 401。域分隔前缀防跨通道重用。
+- ✅ **admin 令牌改 HttpOnly cookie + SameSite=Strict + CSP**：`POST /api/login` 校验后种 cookie（JS 读不到、`<img>` 自动携带、不进 URL）；gate 接受 cookie/头/`?t=`（后二者兼容）；`/api/login /api/logout` 免鉴权；全响应附 CSP/nosniff/X-Frame-Options/Referrer-Policy。
+- ✅ **DB 读写分离**（§10.2 吞吐天花板）：单写连接（写锁串行）+ 独立只读连接（WAL 并发读）；看板 6 个 GET 走只读连接与写路径互不阻塞；`:memory:` 回退单连接（测试无感）；`Pooling=false`。单写者仍用写锁（Channel 因 ack 契约无收益,作规模余量留后续）。
+- ⏳ 待办（记入 architecture §10.1/§10.2/§15）：**分析增强 M2**（L2 云 OCR + L3 Logo + 风险评分聚合，L2 待供应商）；M3（完整 canonical 复算 + 哈希链复验 / 归档清理任务 / CLIP 按图搜图）。里程碑见 architecture §15。
 
 ## 提交约定
 默认不提交，除非用户明确要求。commit 信息用中文，简洁。

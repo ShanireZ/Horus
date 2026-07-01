@@ -13,6 +13,7 @@ cfg = cfg with
     DataDir = Environment.GetEnvironmentVariable("HORUS_DATADIR") ?? cfg.DataDir,
     DbPath = Environment.GetEnvironmentVariable("HORUS_DBPATH") ?? cfg.DbPath,
     PskBase64 = Environment.GetEnvironmentVariable("HORUS_PSK_B64") ?? cfg.PskBase64,
+    KeystrokeSecretBase64 = Environment.GetEnvironmentVariable("HORUS_KSK_B64") ?? cfg.KeystrokeSecretBase64,
     AdminToken = Environment.GetEnvironmentVariable("HORUS_ADMIN_TOKEN") ?? cfg.AdminToken,
     Urls = Environment.GetEnvironmentVariable("HORUS_URLS") ?? cfg.Urls,
 };
@@ -51,15 +52,34 @@ WebApplication app = builder.Build();
 
 app.UseWebSockets();
 
-// ---- 管理/看板鉴权:所有 /api/* 需带 X-Horus-Admin 头(图片字节端点可用 ?t= 查询,因 <img> 无法设头) ----
+// ---- 安全响应头(所有响应):CSP 收紧脚本/样式来源(防 XSS 注入外链外发数据),附 nosniff / DENY / no-referrer ----
+app.Use(async (ctx, next) =>
+{
+    IHeaderDictionary h = ctx.Response.Headers;
+    h["Content-Security-Policy"] =
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+        "script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+    h["X-Content-Type-Options"] = "nosniff";
+    h["X-Frame-Options"] = "DENY";
+    h["Referrer-Policy"] = "no-referrer";
+    await next();
+});
+
+// ---- 管理/看板鉴权:所有 /api/*(除 /api/login、/api/logout)需带凭证。三选一:----
+//   ① HttpOnly cookie `horus_admin`(浏览器;JS 读不到 → 防 XSS 窃取,<img> 同源自动携带 → 不落 URL)——首选
+//   ② X-Horus-Admin 头(curl / 脚本客户端)
+//   ③ ?t= 查询(向后兼容;UI 已不再使用,避免令牌进 URL / 日志 / Referer)
 // 关闭学员机"用 config 下发关掉全场检测 / 拉全班证据图 / 抹自己可疑裁决"等路径。未配令牌则放行(仅联调)。
 if (cfg.AdminAuthEnabled)
     app.Use(async (ctx, next) =>
     {
-        if (ctx.Request.Path.StartsWithSegments("/api"))
+        PathString p = ctx.Request.Path;
+        bool exempt = p.StartsWithSegments("/api/login") || p.StartsWithSegments("/api/logout");
+        if (p.StartsWithSegments("/api") && !exempt)
         {
-            string got = ctx.Request.Headers["X-Horus-Admin"].ToString();
-            if (string.IsNullOrEmpty(got)) got = ctx.Request.Query["t"].ToString();
+            string got = ctx.Request.Cookies["horus_admin"] ?? "";
+            if (got.Length == 0) got = ctx.Request.Headers["X-Horus-Admin"].ToString();
+            if (got.Length == 0) got = ctx.Request.Query["t"].ToString();
             if (!Crypto.FixedTimeEquals(got, cfg.AdminToken!))
             {
                 ctx.Response.StatusCode = 401;

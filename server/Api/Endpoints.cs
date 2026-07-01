@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Horus.Contracts;
 using Horus.Server.Config;
 using Horus.Server.Data;
 using Horus.Server.Ingest;
@@ -20,11 +21,38 @@ public static class Endpoints
         ServerConfig cfg = app.Services.GetRequiredService<ServerConfig>();
         AgentHub hub = app.Services.GetRequiredService<AgentHub>();
 
+        // ---- 登录:校验令牌 → 下发 HttpOnly cookie(免受 admin gate;否则拿不到 cookie 就进不来) ----
+        // cookie 值 = 管理令牌;JS 读不到(HttpOnly),SameSite=Strict 防 CSRF。gate 用 FixedTimeEquals 比对。
+        app.MapPost("/api/login", async (HttpContext ctx) =>
+        {
+            if (!cfg.AdminAuthEnabled) return Results.Json(new { ok = true, authRequired = false });
+            JsonNode? body = await JsonNode.ParseAsync(ctx.Request.Body);
+            string token = (string?)body?["token"] ?? "";
+            if (!Crypto.FixedTimeEquals(token, cfg.AdminToken!))
+                return Results.Json(new { ok = false, error = "invalid_token" }, statusCode: 401);
+            ctx.Response.Cookies.Append("horus_admin", token, new CookieOptions
+            {
+                HttpOnly = true,                 // JS 读不到 → 防 XSS 窃取
+                SameSite = SameSiteMode.Strict,  // 仅同源请求携带 → 防 CSRF
+                Path = "/",
+                IsEssential = true,
+                // 不设 Secure:LAN 走 HTTP,置 Secure 会导致 cookie 不被发送。HttpOnly+SameSite 仍防窃取与跨站。
+            });
+            return Results.Json(new { ok = true, authRequired = true });
+        });
+
+        // ---- 登出:清 cookie ----
+        app.MapPost("/api/logout", (HttpContext ctx) =>
+        {
+            ctx.Response.Cookies.Delete("horus_admin", new CookieOptions { Path = "/" });
+            return Results.Json(new { ok = true });
+        });
+
         // ---- 考试列表 ----
         app.MapGet("/api/exams", () =>
         {
             double cut = Now() - cfg.OnlineWindowSeconds;
-            return db.Locked(conn =>
+            return db.Read(conn =>
             {
                 var list = new List<object>();
                 using SqliteCommand c = conn.Cmd(
@@ -57,14 +85,14 @@ public static class Endpoints
         {
             double cut = Now() - cfg.OnlineWindowSeconds;
             double recentCut = Now() - cfg.RecentRiskWindowSeconds;
-            return db.Locked(conn =>
+            return db.Read(conn =>
             {
                 var list = new List<object>();
                 using SqliteCommand c = conn.Cmd(
                     @"SELECT s.seat_id, s.student_id, s.display_name, s.agent_id, s.machine_id,
                         (SELECT MAX(ts) FROM agent_heartbeats h WHERE h.exam_id=s.exam_id AND h.seat_id=s.seat_id),
                         (SELECT MAX(ts) FROM events e WHERE e.exam_id=s.exam_id AND e.seat_id=s.seat_id),
-                        (SELECT COALESCE(MAX(risk),0) FROM events e WHERE e.exam_id=s.exam_id AND e.seat_id=s.seat_id AND e.ts>=@rc),
+                        (SELECT COALESCE(MAX(MAX(e.risk, COALESCE(e.server_risk,0))),0) FROM events e WHERE e.exam_id=s.exam_id AND e.seat_id=s.seat_id AND e.ts>=@rc),
                         (SELECT COUNT(*) FROM events e WHERE e.exam_id=s.exam_id AND e.seat_id=s.seat_id),
                         (SELECT COUNT(*) FROM suspicious_queue q WHERE q.exam_id=s.exam_id AND q.seat_id=s.seat_id AND q.status='pending')
                       FROM seats s WHERE s.exam_id=@e ORDER BY s.seat_id",
@@ -98,7 +126,7 @@ public static class Endpoints
         app.MapGet("/api/exams/{examId}/suspicious", (string examId, string? status) =>
         {
             string filter = string.IsNullOrEmpty(status) ? "pending" : status;
-            return db.Locked(conn =>
+            return db.Read(conn =>
             {
                 var list = new List<object>();
                 string sql = @"SELECT id,seat_id,ts,kind,score,status,refs,reviewer,decided_at,note
@@ -134,10 +162,10 @@ public static class Endpoints
         app.MapGet("/api/exams/{examId}/events", (string examId, string? seatId, int? limit) =>
         {
             int lim = Math.Clamp(limit ?? 200, 1, 2000);
-            return db.Locked(conn =>
+            return db.Read(conn =>
             {
                 var list = new List<object>();
-                string sql = "SELECT id,seat_id,seq,ts,recv_ts,type,payload,risk,evidence_image_id FROM events WHERE exam_id=@e";
+                string sql = "SELECT id,seat_id,seq,ts,recv_ts,type,payload,risk,evidence_image_id,server_risk FROM events WHERE exam_id=@e";
                 if (!string.IsNullOrEmpty(seatId)) sql += " AND seat_id=@s";
                 sql += " ORDER BY id DESC LIMIT @lim";
 
@@ -158,6 +186,7 @@ public static class Endpoints
                         payload = ParseNode(NullStr(r, 6)),
                         risk = r.GetInt32(7),
                         evidenceImageId = NullStr(r, 8),
+                        serverRisk = NullInt(r, 9),
                     });
                 }
                 return Results.Json(list);
@@ -167,7 +196,7 @@ public static class Endpoints
         // ---- 证据图字节 ----
         app.MapGet("/api/images/{imageId}", async (string imageId, HttpContext ctx) =>
         {
-            string? rel = db.Locked(conn => Scalar<string?>(conn,
+            string? rel = db.Read(conn => Scalar<string?>(conn,
                 "SELECT file_path FROM images WHERE image_id=@id", ("@id", imageId)));
             if (rel is null) { ctx.Response.StatusCode = 404; return; }
             string? full = storage.Resolve(rel);
@@ -180,7 +209,7 @@ public static class Endpoints
 
         // ---- 证据图元数据 ----
         app.MapGet("/api/images/{imageId}/meta", (string imageId) =>
-            db.Locked(conn =>
+            db.Read(conn =>
             {
                 using SqliteCommand c = conn.Cmd(
                     @"SELECT image_id,seat_id,ts,trigger,phash,width,height,bytes,is_evidence,uploaded_to_ocr

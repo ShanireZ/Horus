@@ -63,6 +63,15 @@ public static class Auth
         return Crypto.HmacHex(psk, canonicalHeaders + "\n" + bodyHash);
     }
 
+    /// 击键旁路签名 X-Horus-KSig = HMAC(KSK, "keystroke\n" + sha256(body))。
+    /// 由**判题后端**(可安全持 KSK,浏览器不持)对整条提交体签名;绑定 seatId/内容,防同网学员机伪造/栽赃。
+    /// "keystroke\n" 域分隔前缀:防跨通道签名重用(图片/事件签名不能拿来当击键签名)。
+    public static string KeystrokeSig(byte[] ksk, byte[] body)
+    {
+        string bodyHash = Convert.ToHexString(SHA256.HashData(body)).ToLowerInvariant();
+        return Crypto.HmacHex(ksk, "keystroke\n" + bodyHash);
+    }
+
     /// 图片上传的规范化头串(两端必须一致)。顺序: exam, seat, agent, seq, trigger, phash, ts, imageId。
     /// imageId = 客户端预生成 id(无则传 "");纳入签名防止 X-Horus-Image-Id 被篡改污染证据关联。
     public static string ImageCanonicalHeaders(

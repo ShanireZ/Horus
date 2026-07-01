@@ -22,6 +22,10 @@ public sealed record ServerConfig
     /// 留空则关闭管理鉴权(仅本地联调)。防止学员机调 /api/exams/{id}/config 关掉全场检测。
     public string? AdminToken { get; init; }
 
+    /// 击键旁路密钥(base64)。判题后端持它对 /ingest/keystroke 提交体签名(X-Horus-KSig)。
+    /// 留空则**关闭击键鉴权**(仅本地联调)。防同网学员机伪造/栽赃他人击键样本。与采集 PSK / 管理令牌相互独立。
+    public string? KeystrokeSecretBase64 { get; init; }
+
     /// 允许在非 loopback 绑定下缺 PSK / 管理令牌启动(裸奔)。默认 false = fail-closed。仅联调开。
     public bool AllowInsecure { get; init; }
 
@@ -41,7 +45,13 @@ public sealed record ServerConfig
     public byte[]? Psk => string.IsNullOrWhiteSpace(PskBase64) ? null : Convert.FromBase64String(PskBase64);
 
     [JsonIgnore]
+    public byte[]? Ksk => string.IsNullOrWhiteSpace(KeystrokeSecretBase64) ? null : Convert.FromBase64String(KeystrokeSecretBase64);
+
+    [JsonIgnore]
     public bool AuthEnabled => Psk is not null;
+
+    [JsonIgnore]
+    public bool KeystrokeAuthEnabled => Ksk is not null;
 
     [JsonIgnore]
     public bool AdminAuthEnabled => !string.IsNullOrEmpty(AdminToken);

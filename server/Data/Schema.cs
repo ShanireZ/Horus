@@ -26,6 +26,30 @@ public static class Schema
         using SqliteCommand cmd = conn.CreateCommand();
         cmd.CommandText = string.Join(";\n", kept) + ";";
         cmd.ExecuteNonQuery();
+
+        Migrate(conn);
+    }
+
+    /// 幂等列迁移:CREATE TABLE IF NOT EXISTS 不会给**已存在**的表补列,故对既有 dev DB 显式 ADD COLUMN。
+    /// 新建 DB 已含新列(DDL 里有),此处对其为 no-op。
+    private static void Migrate(SqliteConnection conn)
+    {
+        AddColumnIfMissing(conn, "events", "server_risk", "INTEGER");   // M2:服务器侧风险复判
+    }
+
+    private static void AddColumnIfMissing(SqliteConnection conn, string table, string column, string decl)
+    {
+        bool exists;
+        using (SqliteCommand q = conn.CreateCommand())
+        {
+            q.CommandText = $"SELECT 1 FROM pragma_table_info('{table}') WHERE name=$c";
+            q.Parameters.AddWithValue("$c", column);
+            exists = q.ExecuteScalar() is not null;
+        }
+        if (exists) return;
+        using SqliteCommand alter = conn.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {decl}";
+        alter.ExecuteNonQuery();
     }
 
     /// 先剥离 '--' 行注释,再按 ';' 切分语句。

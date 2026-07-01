@@ -16,17 +16,20 @@ public sealed class TestApp : WebApplicationFactory<Program>
 {
     public static readonly byte[] Psk = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
     public static readonly string PskB64 = Convert.ToBase64String(Psk);
+    public static readonly byte[] Ksk = Enumerable.Range(100, 32).Select(i => (byte)i).ToArray();
+    public static readonly string KskB64 = Convert.ToBase64String(Ksk);
     public const string AdminToken = "test-admin-token-xyz";
 
     private readonly string _dataDir;
 
-    public TestApp(bool adminAuth = false)
+    public TestApp(bool adminAuth = false, bool keystrokeAuth = false)
     {
         _dataDir = Path.Combine(Path.GetTempPath(), "horus-test-" + Guid.NewGuid().ToString("N")[..12]);
         Directory.CreateDirectory(_dataDir);
         Environment.SetEnvironmentVariable("HORUS_DBPATH", ":memory:");
         Environment.SetEnvironmentVariable("HORUS_DATADIR", _dataDir);
         Environment.SetEnvironmentVariable("HORUS_PSK_B64", PskB64);
+        Environment.SetEnvironmentVariable("HORUS_KSK_B64", keystrokeAuth ? KskB64 : null);       // null 清除 → 默认击键鉴权关
         Environment.SetEnvironmentVariable("HORUS_ADMIN_TOKEN", adminAuth ? AdminToken : null);  // null 清除 → 默认管理鉴权关
         Environment.SetEnvironmentVariable("HORUS_URLS", "http://127.0.0.1:0");                   // loopback → 不触发 fail-closed
     }
