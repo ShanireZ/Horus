@@ -18,6 +18,30 @@ if (args.Length >= 1 && args[0] == "protect-secret")
 string cfgPath = Environment.GetEnvironmentVariable("HORUS_CONFIG")
                  ?? (args.Length > 0 ? args[0] : "server.config.json");
 ServerConfig cfg = ServerConfig.Load(cfgPath);
+
+// ---- 自动加密:配置文件里若填了明文 visionApiKey,启动时加密为 visionApiKeyEnc 并清除明文(密文回写) ----
+// UX = 运维直接在配置栏输入明文 key,启动一次即自动加密落盘、明文不再存在。DPAPI 机器绑定,仅 Windows。
+if (OperatingSystem.IsWindows() && File.Exists(cfgPath) && !string.IsNullOrEmpty(cfg.VisionApiKey))
+{
+    try
+    {
+        string? enc = SecretProtect.EncryptVisionKeyInFile(cfgPath, cfg.VisionApiKey!);
+        if (enc is not null)
+        {
+            cfg = cfg with { VisionApiKeyEnc = enc, VisionApiKey = null };
+            Console.WriteLine("[Horus] 已将配置里的明文 visionApiKey 加密为 visionApiKeyEnc 并回写(明文已清除)。");
+        }
+        else
+        {
+            Console.Error.WriteLine("[Horus] 明文 key 自动加密失败(配置非 JSON 对象);本次仍用内存中的明文,请检查配置。");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"[Horus] 明文 key 自动加密回写失败(如文件只读):{ex.Message}。本次仍用内存中的明文。");
+    }
+}
+
 cfg = cfg with
 {
     DataDir = Environment.GetEnvironmentVariable("HORUS_DATADIR") ?? cfg.DataDir,
