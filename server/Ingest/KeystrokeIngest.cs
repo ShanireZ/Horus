@@ -11,13 +11,31 @@ namespace Horus.Server.Ingest;
 /// M2:**会话鉴权**——判题后端持 KSK 对整条提交体签名(X-Horus-KSig),挡同网学员机伪造/栽赃他人击键。
 public sealed class KeystrokeIngest(Db db, ServerConfig cfg)
 {
+    // 击键体专用上限(远小于图片的全局 2MB):timeline 是 keydown 时间戳数组,合法体通常几十 KB。
+    // 超大体先拒,免为明显非法体缓冲 + 算 SHA256 验签(未鉴权者也能触发)。
+    private const int MaxBodyBytes = 512 * 1024;
+
     public async Task HandleAsync(HttpContext ctx)
     {
+        // 声明了超大 Content-Length 的先拒(不缓冲)。
+        if (ctx.Request.ContentLength is long declared && declared > MaxBodyBytes)
+        {
+            ctx.Response.StatusCode = 413;
+            await ctx.Response.WriteAsJsonAsync(new { error = "too_large" });
+            return;
+        }
+
         // 先缓冲整条 body 字节(既用于验签,也用于解析),避免流被读一次即耗尽。
         byte[] body;
         using (var ms = new MemoryStream())
         {
             await ctx.Request.Body.CopyToAsync(ms);
+            if (ms.Length > MaxBodyBytes)   // 无 Content-Length(分块)时的兜底(Kestrel 全局 2MB 之内更早收敛)
+            {
+                ctx.Response.StatusCode = 413;
+                await ctx.Response.WriteAsJsonAsync(new { error = "too_large" });
+                return;
+            }
             body = ms.ToArray();
         }
 
@@ -53,6 +71,8 @@ public sealed class KeystrokeIngest(Db db, ServerConfig cfg)
 
         int risk = RiskFrom(features);
 
+        // 落库 + 入可疑队列在**同一写锁事务**内:避免二者分处两个事务时,归档窗口卡在中间导致入队一条
+        // 指向已归档删除样本的孤儿 pending(与 EventIngest 同型修复)。sealed 检查已在事务开头。
         long id = db.Locked(conn =>
         {
             if (conn.IsExamSealed(examId)) return -1L;   // 归档中/已归档:短路不落库(避免归档窗口 late-ingest)
@@ -69,31 +89,29 @@ public sealed class KeystrokeIngest(Db db, ServerConfig cfg)
                 ("@tl", timeline), ("@ft", featuresJson), ("@risk", risk));
             if (ins.ExecuteNonQuery() == 0) return -1L;   // 重放/重复:不另存、不重复入队
             using SqliteCommand idc = conn.Cmd("SELECT last_insert_rowid()");
-            return Convert.ToInt64(idc.ExecuteScalar());
+            long newId = Convert.ToInt64(idc.ExecuteScalar());
+
+            // 达阈值 → 入可疑队列(kind 依特征细分),与落库同一事务
+            if (risk >= cfg.RiskThreshold)
+            {
+                string kind = features.ValueKind == JsonValueKind.Object &&
+                              features.TryGetProperty("idleThenBlock", out JsonElement itb) &&
+                              itb.ValueKind == JsonValueKind.True
+                    ? "ide_plugin_suspect" : "large_paste";
+                string refs = JsonSerializer.Serialize(new[] { $"keystroke:{newId}" });
+                using SqliteCommand c = conn.Cmd(
+                    @"INSERT INTO suspicious_queue (exam_id,seat_id,ts,kind,score,status,refs)
+                      VALUES (@e,@s,@ts,@k,@sc,'pending',@refs)",
+                    ("@e", examId), ("@s", seatId), ("@ts", ts), ("@k", kind), ("@sc", risk), ("@refs", refs));
+                c.ExecuteNonQuery();
+            }
+            return newId;
         });
 
         if (id < 0)   // 重放:幂等返回,不入队
         {
             await ctx.Response.WriteAsJsonAsync(new { stored = false, duplicate = true, risk });
             return;
-        }
-
-        // 达阈值 → 入可疑队列(kind 依特征细分)
-        if (risk >= cfg.RiskThreshold)
-        {
-            string kind = features.ValueKind == JsonValueKind.Object &&
-                          features.TryGetProperty("idleThenBlock", out JsonElement itb) &&
-                          itb.ValueKind == JsonValueKind.True
-                ? "ide_plugin_suspect" : "large_paste";
-            string refs = JsonSerializer.Serialize(new[] { $"keystroke:{id}" });
-            db.Locked(conn =>
-            {
-                using SqliteCommand c = conn.Cmd(
-                    @"INSERT INTO suspicious_queue (exam_id,seat_id,ts,kind,score,status,refs)
-                      VALUES (@e,@s,@ts,@k,@sc,'pending',@refs)",
-                    ("@e", examId), ("@s", seatId), ("@ts", ts), ("@k", kind), ("@sc", risk), ("@refs", refs));
-                c.ExecuteNonQuery();
-            });
         }
 
         await ctx.Response.WriteAsJsonAsync(new { stored = true, risk });

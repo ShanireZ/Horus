@@ -42,8 +42,11 @@ public static class Schema
             cmd.CommandText = string.Join(";\n", stmts) + ";";
             cmd.ExecuteNonQuery();
         }
-        // 既有 archive 库(CREATE IF NOT EXISTS 不补列)补 machine_id:归档事件锚点日后独立复算 hash_self 需 machineId。
+        // 既有 archive 库(CREATE IF NOT EXISTS 不补列)补列:
+        //   machine_id —— 归档事件锚点日后独立复算 hash_self 需 machineId;
+        //   server_risk —— 留存"为何被归档为关键"的取证依据(旁注,不入 canonical)。
         AddColumnIfMissing(conn, "archive_events", "machine_id", "TEXT");
+        AddColumnIfMissing(conn, "archive_events", "server_risk", "INTEGER");
     }
 
     /// 幂等列迁移:CREATE TABLE IF NOT EXISTS 不会给**已存在**的表补列,故对既有 dev DB 显式 ADD COLUMN。

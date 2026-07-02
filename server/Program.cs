@@ -119,6 +119,14 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ArchiveService>())
 
 WebApplication app = builder.Build();
 
+// 全局异常兜底:任何未被端点捕获的异常统一返回 JSON 500(生产环境默认不泄堆栈),避免空体 500 / 契约漂移。
+app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
+{
+    ctx.Response.StatusCode = 500;
+    ctx.Response.ContentType = "application/json; charset=utf-8";
+    await ctx.Response.WriteAsJsonAsync(new { error = "internal_error" });
+}));
+
 app.UseWebSockets();
 
 // ---- 安全响应头(所有响应):CSP 收紧脚本/样式来源(防 XSS 注入外链外发数据),附 nosniff / DENY / no-referrer ----

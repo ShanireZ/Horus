@@ -34,5 +34,10 @@ public interface IVisionAnalyzer
 {
     /// 落库 ocr_results.engine 的标识,如 "mock" / "openai:deepseek-v4-pro"。
     string Engine { get; }
+
+    /// 该分析器是否会把图**送出局域网**(云端点)。true = 送云:送前**必须**剥离元数据(§5「原图永不出网」),
+    /// 且派生失败时宁可跳过也不泄原图;false = 本地/mock(不出网),派生可直通原字节零开销。
+    bool SendsOffNetwork { get; }
+
     Task<VisionVerdict?> AnalyzeAsync(byte[] imageBytes, VisionContext ctx, CancellationToken ct);
 }

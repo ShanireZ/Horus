@@ -37,6 +37,8 @@ public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
 
     public string Engine => "openai:" + _model;
 
+    public bool SendsOffNetwork => true;   // 送云端点 → 送前必须剥元数据、派生失败宁跳过不泄原图(§5)
+
     public async Task<VisionVerdict?> AnalyzeAsync(byte[] imageBytes, VisionContext ctx, CancellationToken ct)
     {
         try

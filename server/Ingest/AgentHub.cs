@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Horus.Server.Analysis;
 using Horus.Server.Data;
 using Microsoft.Data.Sqlite;
 
@@ -16,17 +17,23 @@ public sealed class AgentHub
 {
     private readonly ConcurrentDictionary<string, Conn> _conns = new();      // agentId → 当前连接
     private readonly ConcurrentDictionary<string, string> _config = new();   // examId → 最新配置 JSON
+    private readonly ConcurrentDictionary<string, RiskModel.Policy> _policy = new();   // examId → **已解析**策略(热路径免每事件重解析)
     private readonly Db _db;
 
     public AgentHub(Db db)
     {
         _db = db;
-        // 启动回填:把已持久化的每考试配置载入内存缓存。
+        // 启动回填:把已持久化的每考试配置载入内存缓存(含解析后的策略)。
         _db.Read(conn =>
         {
             using SqliteCommand c = conn.Cmd("SELECT exam_id, config FROM exam_config");
             using SqliteDataReader r = c.ExecuteReader();
-            while (r.Read()) _config[r.GetString(0)] = r.GetString(1);
+            while (r.Read())
+            {
+                string examId = r.GetString(0), json = r.GetString(1);
+                _config[examId] = json;
+                _policy[examId] = RiskModel.PolicyFrom(json);
+            }
             return 0;
         });
     }
@@ -69,10 +76,15 @@ public sealed class AgentHub
 
     public string? GetConfig(string examId) => _config.TryGetValue(examId, out string? v) ? v : null;
 
+    /// 该考试**已解析**的风险策略(白名单/阈值)。热路径(每事件)取此缓存,免重复 JsonDocument.Parse + 建 HashSet。
+    /// 未下发过 → EmptyPolicy(不加码)。
+    public RiskModel.Policy GetPolicy(string examId) => _policy.TryGetValue(examId, out RiskModel.Policy? p) ? p : RiskModel.EmptyPolicy;
+
     /// 存最新配置并推送给该考试所有在线 Agent。返回成功推送到的连接数。
     public async Task<int> PushConfigAsync(string examId, string configJson, CancellationToken ct)
     {
         _config[examId] = configJson;
+        _policy[examId] = RiskModel.PolicyFrom(configJson);   // 下发即重解析缓存,热路径直接取
         // 持久化:重启后回填,白名单不丢。
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         _db.Write(conn =>

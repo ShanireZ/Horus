@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Threading.Channels;
 using Horus.Server.Config;
@@ -26,6 +27,9 @@ public sealed class VisionAnalysisService : BackgroundService
     private readonly IVisionAnalyzer? _analyzer;
     private readonly Channel<string> _queue =
         Channel.CreateBounded<string>(new BoundedChannelOptions(2000) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
+    // 在途去重:已入队尚未分析完的 imageId。防 ingest 首送与 backstop 反复把同一张仍在队列里的图重复入队(占满有界队列、
+    // 把新图挤掉)。原子占位(uploaded_to_ocr 0→1)保证不重复**分析**,此集合保证不重复**入队**。
+    private readonly ConcurrentDictionary<string, byte> _inflight = new();
     private long _rejected;   // 队列满时被拒的入队数(补偿重扫会拾回);周期性告警
 
     public VisionAnalysisService(Db db, Storage storage, ServerConfig cfg, IServiceProvider sp, ILogger<VisionAnalysisService> log)
@@ -41,7 +45,8 @@ public sealed class VisionAnalysisService : BackgroundService
     public void Enqueue(string imageId)
     {
         if (_analyzer is null || string.IsNullOrEmpty(imageId)) return;
-        if (!_queue.Writer.TryWrite(imageId)) Interlocked.Increment(ref _rejected);
+        if (!_inflight.TryAdd(imageId, 0)) return;   // 已在队列/分析中 → 不重复入队
+        if (!_queue.Writer.TryWrite(imageId)) { _inflight.TryRemove(imageId, out _); Interlocked.Increment(ref _rejected); }
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -56,6 +61,7 @@ public sealed class VisionAnalysisService : BackgroundService
                 try { await AnalyzeOneAsync(imageId, ct); }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) { _log.LogError(ex, "视觉分析异常 image={Image}", imageId); }
+                finally { _inflight.TryRemove(imageId, out _); }   // 出队处理完(成功/跳过/异常/取消)→ 释放在途标记(占位仍防重复分析)
             }
         }
         catch (OperationCanceledException) { /* 停机 */ }
@@ -75,13 +81,16 @@ public sealed class VisionAnalysisService : BackgroundService
                 long dropped = Interlocked.Exchange(ref _rejected, 0);
                 if (dropped > 0) _log.LogWarning("视觉队列曾满,{N} 张图被拒入队(将由补偿重扫拾回)", dropped);
 
+                // trigger 过滤须与 ImageIngest 的入队判据一致:开了基线分析则重扫也纳入基线图(否则被拒/丢队的基线图永不拾回,
+                // _rejected 告警对基线成虚假承诺);默认只重扫触发型证据图(§5 最小化)。
+                string triggerFilter = _cfg.VisionAnalyzeBaseline ? "" : " AND i.trigger LIKE 'event:%'";
                 var ids = _db.Read(conn =>
                 {
                     var list = new List<string>();
                     // 排除归档中/已归档考试的图(不给归档窗口塞新分析结果 → 避免孤儿 pending)。
                     using SqliteCommand c = conn.Cmd(
                         @"SELECT i.image_id FROM images i JOIN exams e ON i.exam_id=e.exam_id
-                          WHERE i.uploaded_to_ocr=0 AND i.trigger LIKE 'event:%'
+                          WHERE i.uploaded_to_ocr=0" + triggerFilter + @"
                             AND e.status NOT IN ('archiving','archived')
                           ORDER BY i.recv_ts LIMIT 500");
                     using SqliteDataReader r = c.ExecuteReader();
@@ -89,7 +98,12 @@ public sealed class VisionAnalysisService : BackgroundService
                     return list;
                 });
                 int requeued = 0;
-                foreach (string id in ids) if (_queue.Writer.TryWrite(id)) requeued++; else break;   // 满了下轮再拾
+                foreach (string id in ids)
+                {
+                    if (!_inflight.TryAdd(id, 0)) continue;                 // 仍在队列/分析中 → 不重复入队
+                    if (_queue.Writer.TryWrite(id)) requeued++;
+                    else { _inflight.TryRemove(id, out _); break; }         // 满了下轮再拾
+                }
                 if (requeued > 0) _log.LogInformation("视觉补偿重扫:拾回 {N} 张未分析触发型证据图", requeued);
             }
         }
@@ -119,7 +133,13 @@ public sealed class VisionAnalysisService : BackgroundService
         byte[] original = await File.ReadAllBytesAsync(full, ct);
 
         // §5 送云前降采样 + 剥离元数据,只送派生字节(原图字节只读、永不出网)。
-        byte[] derived = VisionImagePrep.Prepare(original, _cfg) ?? original;
+        // 联网分析器(SendsOffNetwork=true):无法安全派生(解码失败)→ Prepare 返 null → 跳过,绝不泄未剥元数据的原图。
+        byte[]? derived = VisionImagePrep.Prepare(original, _cfg, _analyzer!.SendsOffNetwork);
+        if (derived is null)
+        {
+            _log.LogWarning("送云图无法安全派生(解码失败),跳过分析以免泄原图 image={Image}", imageId);
+            return;
+        }
 
         VisionVerdict? v = await _analyzer!.AnalyzeAsync(
             derived, new VisionContext(meta.Exam, meta.Seat, imageId, meta.Trigger), ct);

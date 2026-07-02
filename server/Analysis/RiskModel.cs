@@ -66,11 +66,17 @@ public static class RiskModel
         }
     }
 
+    /// 从已下发配置**解析一次**得到的策略(白名单集合 + 大段粘贴阈值)。可被缓存以免每事件热路径重解析(见 AgentHub.GetPolicy)。
+    public sealed record Policy(IReadOnlySet<string>? Hosts, IReadOnlySet<string>? Procs, int PasteThreshold);
+
+    /// 无配置 / 无对应字段时的默认策略:白名单 null(不加码)、阈值默认 200。
+    public static readonly Policy EmptyPolicy = new(null, null, DefaultPasteCharThreshold);
+
     /// 从该考试**已下发**配置 JSON 提取策略:白名单集合(不区分大小写) + 大段粘贴字符阈值。
     /// 无配置 / 无对应字段 → 白名单 null(不加码)、阈值取默认 200。
-    public static (IReadOnlySet<string>? hosts, IReadOnlySet<string>? procs, int pasteThreshold) PolicyFrom(string? configJson)
+    public static Policy PolicyFrom(string? configJson)
     {
-        if (string.IsNullOrEmpty(configJson)) return (null, null, DefaultPasteCharThreshold);
+        if (string.IsNullOrEmpty(configJson)) return EmptyPolicy;
         try
         {
             using JsonDocument d = JsonDocument.Parse(configJson);
@@ -78,9 +84,9 @@ public static class RiskModel
                      d.RootElement.TryGetProperty("largePasteThreshold", out JsonElement lt) &&
                      lt.ValueKind == JsonValueKind.Number && lt.TryGetInt32(out int v) && v > 0
                 ? v : DefaultPasteCharThreshold;
-            return (Arr(d.RootElement, "whitelistHosts"), Arr(d.RootElement, "whitelistProcs", lower: true), th);
+            return new Policy(Arr(d.RootElement, "whitelistHosts"), Arr(d.RootElement, "whitelistProcs", lower: true), th);
         }
-        catch { return (null, null, DefaultPasteCharThreshold); }
+        catch { return EmptyPolicy; }
     }
 
     private static IReadOnlySet<string>? Arr(JsonElement o, string key, bool lower = false)

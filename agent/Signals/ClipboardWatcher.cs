@@ -41,7 +41,10 @@ public sealed class ClipboardWatcher : ISignalSource
             if (!Clipboard.ContainsText()) return;
             string text = Clipboard.GetText();
             int len = text.Length;
-            int lines = text.Count(c => c == '\n') + 1;
+            // 只需 len/lines 元数据(payload 不含明文)。超大文本(如整份日志/文档)不做全量逐字符行扫描,避免 CPU 尖峰:
+            // 长度一旦达阈值即判 large,行数只在前 ScanCap 字符内统计(足够触发 lines>=5 判定)。
+            const int ScanCap = 64 * 1024;
+            int lines = (len <= ScanCap ? text.AsSpan() : text.AsSpan(0, ScanCap)).Count('\n') + 1;
             bool large = len >= _live.LargePasteThreshold || lines >= 5;
 
             Signal?.Invoke(new RawSignal(SignalType.Clipboard,

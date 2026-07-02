@@ -10,13 +10,21 @@ namespace Horus.Server.Analysis.Vision;
 /// 再重编码 WebP。**原图字节只读,只送本方法产出的派生字节**。
 ///
 /// 注(owner 决策·2026-07-02):**不再做打码身份 / 裁剪**(按考场 UI 逐一配矩形的运维负担 > 收益,且供应商=小米 MiMo 境内云·PIPL 无跨境)。
-/// 只保留分辨率无关的降采样;`visionMaxEdge` 长边上限,`≤0` 则直通原字节(不解码,零开销,mock 测试走此路)。
+/// 只保留分辨率无关的降采样 + 元数据剥离。
+///
+/// `mustStrip`(送云分析器 = true)决定隐私铁律的强度:
+///   • mustStrip=true(联网):**始终**解码 + 剥元数据 + 重编码(即便 `visionMaxEdge≤0` 不缩放也剥),解码失败**返回 null**
+///     由调用方跳过 —— 绝不把带 EXIF/XMP/ICC 的原字节送出局域网(§5「原图永不出网」)。
+///   • mustStrip=false(本地/mock·不出网):`visionMaxEdge≤0` 直通原字节(零开销·mock 测试用假图字节保留标记),
+///     解码失败也直通原字节(不出网,无泄漏面)。
 public static class VisionImagePrep
 {
-    /// 返回派生字节;`visionMaxEdge≤0` 直通原字节;解码失败回退原字节(无隐私矩形可失守,直通即可)。
-    public static byte[]? Prepare(byte[] original, ServerConfig cfg)
+    /// 返回派生字节;见类注释关于 `mustStrip` 的两条路径。
+    public static byte[]? Prepare(byte[] original, ServerConfig cfg, bool mustStrip = false)
     {
-        if (cfg.VisionMaxEdge <= 0) return original;   // 不降采样 → 直通(不解码)
+        int maxEdge = cfg.VisionMaxEdge;
+        // 不出网(mock/联调)且不降采样 → 直通不解码(零开销)。联网分析器绝不走此直通,必落到下方解码+剥离。
+        if (!mustStrip && maxEdge <= 0) return original;
 
         try
         {
@@ -29,11 +37,11 @@ public static class VisionImagePrep
             image.Metadata.IptcProfile = null;
             image.Metadata.IccProfile = null;
 
-            if (Math.Max(image.Width, image.Height) > cfg.VisionMaxEdge)   // 长边超上限才降采样
+            if (maxEdge > 0 && Math.Max(image.Width, image.Height) > maxEdge)   // 配了上限且长边超限才降采样
                 image.Mutate(m => m.Resize(new ResizeOptions
                 {
                     Mode = ResizeMode.Max,
-                    Size = new Size(cfg.VisionMaxEdge, cfg.VisionMaxEdge),
+                    Size = new Size(maxEdge, maxEdge),
                 }));
 
             using var outMs = new MemoryStream();
@@ -42,7 +50,9 @@ public static class VisionImagePrep
         }
         catch
         {
-            return original;   // 解码失败 → 直通原字节(无打码矩形需守护)
+            // 联网分析器:无法安全派生 → 返回 null,调用方跳过该图(fail-safe,绝不泄未剥元数据的原图)。
+            // 本地/mock:直通原字节(不出网,无泄漏面,保持既有行为 + mock 假图字节可达分析器)。
+            return mustStrip ? null : original;
         }
     }
 }

@@ -145,16 +145,19 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
 
         // 服务器侧风险复判(**不信任 Agent 自报 risk**):凭独立黑名单 + 该考试已下发白名单重算。
         // 有效风险 = max(agentRisk, serverRisk);持 PSK 学员机把「访问 AI 站」签成 risk=0 也压不住入队。
+        // 策略取 AgentHub **已解析缓存**(下发时重建),免每事件热路径重复 JsonDocument.Parse + 建 HashSet。
         SignalType sigType = ParseType(typeStr);
         JsonElement payloadEl = e.TryGetProperty("payload", out JsonElement pEl) ? pEl : default;
-        var (wlHosts, wlProcs, pasteThreshold) = RiskModel.PolicyFrom(hub.GetConfig(examId));
-        int serverRisk = RiskModel.Derive(sigType, payloadEl, wlHosts, wlProcs, pasteThreshold);
+        RiskModel.Policy policy = hub.GetPolicy(examId);
+        int serverRisk = RiskModel.Derive(sigType, payloadEl, policy.Hosts, policy.Procs, policy.PasteThreshold);
         int effRisk = Math.Max(risk, serverRisk);
 
-        long? newId = db.Locked(conn =>
+        // 落库 + 入可疑队列在**同一写锁事务**内完成:避免二者分处两个事务时,崩溃/归档窗口卡在中间导致
+        // 高危事件已落库却漏入队(复传因 ON CONFLICT DO NOTHING 不再补入队),或入队一条指向已归档删除事件的孤儿 pending。
+        db.Locked(conn =>
         {
             // 归档中/已归档考试:短路不落库(避免"读快照→DELETE"窗口内的 late-ingest 被无锚点删)。仍会 ack 使 Agent 停发。
-            if (conn.IsExamSealed(examId)) return (long?)null;
+            if (conn.IsExamSealed(examId)) return;
 
             using SqliteCommand ins = conn.Cmd(
                 @"INSERT INTO events (exam_id,seat_id,agent_id,machine_id,seq,ts,recv_ts,type,payload,risk,server_risk,evidence_image_id,hash_prev,hash_self,sig)
@@ -179,28 +182,32 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
                 }
             }
 
-            // 心跳写在线表:不论新旧都刷新(重传旧心跳写旧 ts 无害,不拉低 MAX(ts) 的新鲜度)
+            // 心跳写在线表:不论新旧都刷新;写后**裁剪**只保留该 (exam,seat,agent) 最新 ts 的一行 ——
+            // 在线判定只需最新一条,故无须留历史;同时防持 PSK 者用不断变化的 ts 无界追加撑爆表(replay 的旧 ts 会被裁掉)。
             if (typeStr == "heartbeat")
             {
                 string status = TryGetPayloadStr(payloadRaw, "status") ?? "alive";
-                using SqliteCommand hb = conn.Cmd(
+                using (SqliteCommand hb = conn.Cmd(
                     "INSERT INTO agent_heartbeats (agent_id,exam_id,seat_id,ts,status) VALUES (@a,@e,@s,@ts,@st) ON CONFLICT(exam_id,seat_id,agent_id,ts) DO UPDATE SET status=@st",
-                    ("@a", agentId), ("@e", examId), ("@s", seatId), ("@ts", ts), ("@st", status));
-                hb.ExecuteNonQuery();
+                    ("@a", agentId), ("@e", examId), ("@s", seatId), ("@ts", ts), ("@st", status)))
+                    hb.ExecuteNonQuery();
+                using (SqliteCommand prune = conn.Cmd(
+                    @"DELETE FROM agent_heartbeats WHERE exam_id=@e AND seat_id=@s AND agent_id=@a
+                        AND ts < (SELECT MAX(ts) FROM agent_heartbeats WHERE exam_id=@e AND seat_id=@s AND agent_id=@a)",
+                    ("@e", examId), ("@s", seatId), ("@a", agentId)))
+                    prune.ExecuteNonQuery();
             }
 
-            return id;
+            // 只对**新落库**事件入可疑队列(避免重传重复入队);用有效风险判阈值,url_unreadable 无视阈值。
+            // agentRisk 低于阈值但 serverRisk 顶上去 → 记 agent_risk_understated,是篡改逃逸的取证信号。
+            if (id is not null && typeStr != "heartbeat" &&
+                (effRisk >= cfg.RiskThreshold || IsForcedReview(typeStr, payloadRaw)))
+            {
+                string? tamperNote = serverRisk >= cfg.RiskThreshold && risk < cfg.RiskThreshold
+                    ? $"agent_risk_understated agent={risk} server={serverRisk}" : null;
+                EnqueueSuspicious(conn, examId, seatId, ts, typeStr, effRisk, id.Value, evidenceImageId, payloadRaw, tamperNote);
+            }
         });
-
-        // 只对新落库事件入可疑队列(避免重传重复入队);用**有效风险**判阈值,browser_unreadable 无视阈值。
-        // agentRisk 低于阈值但 serverRisk 顶上去 → 记 agent_risk_understated,是篡改逃逸的取证信号。
-        if (newId is not null && typeStr != "heartbeat" &&
-            (effRisk >= cfg.RiskThreshold || IsForcedReview(typeStr, payloadRaw)))
-        {
-            string? tamperNote = serverRisk >= cfg.RiskThreshold && risk < cfg.RiskThreshold
-                ? $"agent_risk_understated agent={risk} server={serverRisk}" : null;
-            EnqueueSuspicious(examId, seatId, ts, typeStr, effRisk, newId.Value, evidenceImageId, payloadRaw, tamperNote);
-        }
 
         // 逐条 ack 本条 seq(不用范围 upto):即使 seq 空间有空洞,也不会误删从未送达的低 seq 事件
         await link.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "ack", seq }), ct);
@@ -210,7 +217,8 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
     private static bool IsForcedReview(string typeStr, string payloadRaw)
         => typeStr == "browser_url" && TryGetPayloadStr(payloadRaw, "note") == "url_unreadable";
 
-    private void EnqueueSuspicious(string examId, string seatId, double ts, string typeStr,
+    /// 入可疑队列。**在调用方的写锁事务内**执行(与事件落库同一事务),故传入 conn 而非另开 db.Locked。
+    private static void EnqueueSuspicious(SqliteConnection conn, string examId, string seatId, double ts, string typeStr,
         int score, long eventId, string? evidenceImageId, string payloadRaw, string? note)
     {
         SignalType type = ParseType(typeStr);
@@ -223,15 +231,12 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
         if (evidenceImageId is not null) refs.Add($"image:{evidenceImageId}");
         string refsJson = JsonSerializer.Serialize(refs);
 
-        db.Locked(conn =>
-        {
-            using SqliteCommand c = conn.Cmd(
-                @"INSERT INTO suspicious_queue (exam_id,seat_id,ts,kind,score,status,refs,note)
-                  VALUES (@e,@s,@ts,@k,@sc,'pending',@refs,@note)",
-                ("@e", examId), ("@s", seatId), ("@ts", ts), ("@k", kind), ("@sc", score),
-                ("@refs", refsJson), ("@note", note));
-            c.ExecuteNonQuery();
-        });
+        using SqliteCommand c = conn.Cmd(
+            @"INSERT INTO suspicious_queue (exam_id,seat_id,ts,kind,score,status,refs,note)
+              VALUES (@e,@s,@ts,@k,@sc,'pending',@refs,@note)",
+            ("@e", examId), ("@s", seatId), ("@ts", ts), ("@k", kind), ("@sc", score),
+            ("@refs", refsJson), ("@note", note));
+        c.ExecuteNonQuery();
     }
 
     // ---- 小工具 ----

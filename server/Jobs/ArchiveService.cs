@@ -303,13 +303,14 @@ public sealed class ArchiveService : BackgroundService
         // 关键事件(保留 hash_self/sig 锚点)
         foreach (EventRow ev in s.CriticalEvents)
             Exec(arc, tx,
-                @"INSERT INTO archive_events (id,exam_id,seat_id,agent_id,machine_id,seq,ts,type,payload,risk,evidence_image_id,hash_prev,hash_self,sig)
-                  VALUES (@id,@e,@seat,@agent,@machine,@seq,@ts,@type,@payload,@risk,@ev,@hp,@hs,@sig)
+                @"INSERT INTO archive_events (id,exam_id,seat_id,agent_id,machine_id,seq,ts,type,payload,risk,server_risk,evidence_image_id,hash_prev,hash_self,sig)
+                  VALUES (@id,@e,@seat,@agent,@machine,@seq,@ts,@type,@payload,@risk,@srisk,@ev,@hp,@hs,@sig)
                   ON CONFLICT(id) DO NOTHING",
                 // risk 存**原始 agent 自报值**(canonicalCore 签的正是它)——归档后凭 machine_id + 原始 risk + payload 可独立逐字节复算 hash_self。
-                // 有效风险 max(risk,server_risk) 只用于 LoadSnapshot 的关键性判定,不入锚点(否则 server_risk>risk 时锚点不可复验)。
+                // server_risk 另存旁注:有效风险 max(risk,server_risk) 用于 LoadSnapshot 关键性判定但**不入锚点**(否则 server_risk>risk 时锚点不可复验);
+                // 留 server_risk 列使归档库仍能查证"服务器为何判高危/多少分"(闭合 risk=0/server_risk=80 事件归档后无从溯源)。
                 ("@id", ev.Id), ("@e", examId), ("@seat", ev.SeatId), ("@agent", ev.AgentId), ("@machine", ev.MachineId), ("@seq", ev.Seq),
-                ("@ts", ev.Ts), ("@type", ev.Type), ("@payload", ev.Payload), ("@risk", ev.Risk),
+                ("@ts", ev.Ts), ("@type", ev.Type), ("@payload", ev.Payload), ("@risk", ev.Risk), ("@srisk", ev.ServerRisk),
                 ("@ev", ev.EvidenceImageId), ("@hp", ev.HashPrev), ("@hs", ev.HashSelf), ("@sig", ev.Sig));
 
         // 关键图片:移入冷存(改写 file_path)+ 其 OCR/Logo

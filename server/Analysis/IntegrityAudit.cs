@@ -121,6 +121,9 @@ public static class IntegrityAudit
             totalHashOk += hashOkCount;
             totalUnverifiable += unverifiable;
             totalRestart += restart;
+            // chainOk 口径 = 连续性未断的行数。**与 hashOk 口径不同**:hashOk 只数"锚点+签名都验过"的行(不含 unverifiable);
+            // 而连续性检查对**每一行**(含重启锚点、含迁移前缺 machineId 的行)都做了 hash_prev↔前驱 比对,故它们计入 chainOk 是正确的
+            // (它们的链确实没断)。看板若要"纯净度",另有 totalUnverifiable / totalRestartBoundaries 正交呈现。
             totalChainOk += rows.Count - chainMiss.Count;
             agents.Add(new AgentChain(
                 agentId, seatOf[agentId], rows.Count, hashOkCount, rows.Count - chainMiss.Count, unverifiable, restart,

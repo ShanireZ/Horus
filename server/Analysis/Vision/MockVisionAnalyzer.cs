@@ -9,6 +9,8 @@ public sealed class MockVisionAnalyzer : IVisionAnalyzer
 {
     public string Engine => "mock";
 
+    public bool SendsOffNetwork => false;   // 本地确定性判定,不出网 → 派生可直通(测试用假图字节保留 ASCII 标记)
+
     public Task<VisionVerdict?> AnalyzeAsync(byte[] imageBytes, VisionContext ctx, CancellationToken ct)
     {
         string s = Encoding.ASCII.GetString(imageBytes);

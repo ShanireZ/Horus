@@ -115,8 +115,13 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
         string relPath = await storage.SaveWebpAsync(examId, seatId, imageId, body);
         double recvTs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
 
-        db.Locked(conn =>
+        bool sealedInLock = db.Locked(conn =>
         {
+            // late-ingest 隔离:上方 :70 的 sealed 预检在**只读连接**(快速拒绝),此处在**写锁事务内**权威复检——
+            // 预检通过后、拿写锁前归档作业可能已翻转 archiving 并清理该考试,若此处不查会把孤儿图行插进已归档考试
+            // (既不再归档也不清理)。与 EventIngest/KeystrokeIngest 的锁内检查对齐。
+            if (conn.IsExamSealed(examId)) return true;
+
             using (SqliteCommand c = conn.Cmd(
                 @"INSERT INTO images (image_id,exam_id,seat_id,agent_id,ts,recv_ts,trigger,phash,file_path,format,bytes,uploaded_to_ocr,is_evidence)
                   VALUES (@id,@e,@s,@a,@ts,@recv,@trig,@ph,@fp,'webp',@bytes,0,0)
@@ -134,7 +139,15 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
                     ("@id", imageId));
                 mk.ExecuteNonQuery();
             }
+            return false;
         });
+
+        if (sealedInLock)   // 写锁内发现考试已封存:回滚已落盘的孤儿 webp(DB 行未插),按 exam_sealed 拒绝
+        {
+            storage.DeleteLive(relPath);
+            await ctx.Response.WriteAsJsonAsync(new { stored = false, error = "exam_sealed" });
+            return;
+        }
 
         // 送异步视觉分析(§5 最小化:触发型必送;随机基线按配置抽样)。视觉关时 no-op、不占本请求延迟。
         bool ocrQueued = vision.Enabled

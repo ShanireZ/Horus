@@ -29,7 +29,9 @@ public static class Endpoints
         app.MapPost("/api/login", async (HttpContext ctx) =>
         {
             if (!cfg.AdminAuthEnabled) return Results.Json(new { ok = true, authRequired = false });
-            JsonNode? body = await JsonNode.ParseAsync(ctx.Request.Body);
+            JsonNode? body;
+            try { body = await JsonNode.ParseAsync(ctx.Request.Body); }
+            catch (JsonException) { return Results.Json(new { ok = false, error = "bad_json" }, statusCode: 400); }
             string token = (string?)body?["token"] ?? "";
             if (!Crypto.FixedTimeEquals(token, cfg.AdminToken!))
                 return Results.Json(new { ok = false, error = "invalid_token" }, statusCode: 401);
@@ -204,11 +206,12 @@ public static class Endpoints
             {
                 string? status = Scalar<string?>(conn, "SELECT status FROM exams WHERE exam_id=@e", ("@e", examId));
                 if (status is null) return Results.NotFound(new { error = "no_such_exam" });
-                if (status == "archived")
+                // archiving(归档进行中,可能半清理)与 archived(已清理)都不做 live 连续性审计,避免对残缺 live 数据误报链断/伪装全绿。
+                if (status is "archived" or "archiving")
                     return Results.Json(new
                     {
-                        examId, status = "archived", applicable = false,
-                        note = "已归档:关键事件的 hash_self/sig 锚点在 archive 库,整链已因清理而断,不再做 live 连续性审计(见 §13.2)",
+                        examId, status, applicable = false,
+                        note = "归档中/已归档:关键事件的 hash_self/sig 锚点在 archive 库,整链已因清理而断,不再做 live 连续性审计(见 §13.2)",
                     });
                 return Results.Json(IntegrityAudit.Run(conn, examId, cfg.Psk));
             }));
@@ -256,11 +259,20 @@ public static class Endpoints
         // 建/更新考试 + 座位绑定
         app.MapPost("/api/exams", async (HttpContext ctx) =>
         {
-            JsonNode? body = await JsonNode.ParseAsync(ctx.Request.Body);
+            JsonNode? body;
+            try { body = await JsonNode.ParseAsync(ctx.Request.Body); }
+            catch (JsonException) { return Results.BadRequest(new { error = "bad_json" }); }
             if (body is null) return Results.BadRequest(new { error = "bad_json" });
             string examId = (string?)body["examId"] ?? "";
             string name = (string?)body["name"] ?? examId;
             if (string.IsNullOrEmpty(examId)) return Results.BadRequest(new { error = "missing_examId" });
+            if (!IsSafeId(examId)) return Results.BadRequest(new { error = "bad_examId" });   // 禁路径危险字符/超长(防目录混放·允许中文)
+            if (body["seats"] is JsonArray seatsPre)
+                foreach (JsonNode? sn in seatsPre)
+                {
+                    string sid = (string?)sn?["seatId"] ?? "";
+                    if (sid.Length > 0 && !IsSafeId(sid)) return Results.BadRequest(new { error = "bad_seatId" });
+                }
 
             double now = Now();
             int seatCount = db.Locked(conn =>
@@ -311,7 +323,9 @@ public static class Endpoints
         // 下发配置热更新:存最新配置并推送给该考试所有在线 Agent(新连/重连 Agent 在 hello 时也会收到)
         app.MapPost("/api/exams/{examId}/config", async (string examId, HttpContext ctx) =>
         {
-            JsonNode? body = await JsonNode.ParseAsync(ctx.Request.Body);
+            JsonNode? body;
+            try { body = await JsonNode.ParseAsync(ctx.Request.Body); }
+            catch (JsonException) { return Results.BadRequest(new { error = "bad_json" }); }
             if (body is not JsonObject) return Results.BadRequest(new { error = "config 必须是对象" });
             int pushedTo = await hub.PushConfigAsync(examId, body.ToJsonString(), ctx.RequestAborted);
             return Results.Json(new { ok = true, examId, pushedTo });
@@ -329,7 +343,9 @@ public static class Endpoints
         // 可疑裁决(人工)
         app.MapPost("/api/suspicious/{id:long}/decide", async (long id, HttpContext ctx) =>
         {
-            JsonNode? body = await JsonNode.ParseAsync(ctx.Request.Body);
+            JsonNode? body;
+            try { body = await JsonNode.ParseAsync(ctx.Request.Body); }
+            catch (JsonException) { return Results.BadRequest(new { error = "bad_json" }); }
             string status = (string?)body?["status"] ?? "";
             if (status is not ("confirmed" or "dismissed"))
                 return Results.BadRequest(new { error = "status must be confirmed|dismissed" });
@@ -366,6 +382,17 @@ public static class Endpoints
                 return Results.Json(new { ok = true, item });
             });
         });
+    }
+
+    /// examId / seatId 安全性:非空、≤128、不含路径危险字符(/ \ : * ? " &lt; &gt; | 控制字符)与 ".."。
+    /// **允许中文/字母数字/-_ 等普通字符**(考试名可中文)。防不同 id 经 Storage.Safe 归一到同一磁盘目录(目录混放),
+    /// 并收敛所有下游键长度。管理端点已鉴权,此为纵深收敛。
+    private static bool IsSafeId(string id)
+    {
+        if (id.Length is 0 or > 128 || id.Contains("..", StringComparison.Ordinal)) return false;
+        foreach (char c in id)
+            if (c < 0x20 || c is '/' or '\\' or ':' or '*' or '?' or '"' or '<' or '>' or '|') return false;
+        return true;
     }
 
     // ---- 读取小工具 ----
