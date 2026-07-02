@@ -44,8 +44,10 @@
   "visionApiKeyEnc": "",
   "visionConfidenceThreshold": 60,
   "visionAnalyzeBaseline": false,
-  // 补偿重扫间隔(分钟):周期性拾回被队列丢弃/重启丢内存队列的未分析触发型证据图。默认 5;≤0=关闭。
+  // 补偿重扫间隔(分钟):周期性拾回被队列丢弃/重启丢内存队列/临时云失败的未分析触发型证据图。默认 5;≤0=关闭。
   "visionBackstopMinutes": 5,
+  // 单张图视觉分析最大认领次数(含失败):临时云失败由补偿重扫重试,达此上限放弃防死循环。默认 5。
+  "visionMaxAttempts": 5,
   // §5 送云前派生处理(owner 决策 2026-07-02:不再打码/裁剪,只降采样;供应商=境内云 MiMo·PIPL 无跨境):
   //   visionMaxEdge: 送云图长边像素上限(降采样省 token·顺带剥离 EXIF/XMP/ICC 元数据)。默认 1600;0=不降采样直通。原图永不出网,只送派生图。
   "visionMaxEdge": 1600

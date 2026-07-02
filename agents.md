@@ -70,11 +70,20 @@ dotnet test  Horus.sln -c Debug      # 运行端到端测试
 - ✅ **§5 派生处理已实现**(`server/Analysis/Vision/VisionImagePrep.cs`·ImageSharp 3.1.12):送云前**降采样**(`visionMaxEdge` 默认 1600·压 token)+ **剥离元数据**(EXIF/XMP/IPTC/ICC)再重编码 WebP;**原图字节只读、永不出网**,只送派生图;`visionMaxEdge≤0` 直通不解码(mock 测试走此路)。★**打码/裁剪已按 owner 决策(2026-07-02)移除**(逐考场配矩形负担>收益·供应商=境内云 MiMo·PIPL 无跨境·已告知学员)。
 - ⏳ **待收尾**:基线抽样策略。
 
-**M3 取证强化(已实现两项 · 81 项测试全绿 · 三路独立审计放行)**:
+**M3 取证强化(已实现两项 · 三路独立审计放行 · 累计 130 项测试全绿)**:
 - ✅ **哈希链完整性复验**(闭合 §10.1「服务器不重算 canonical」)=①**ingest 时**从原始 payload 文本 + 落库字段逐字节复算 `canonicalCore`(`EventCanonical.CoreRaw`,与 Agent 端 `Core` 逐字节一致·黄金测试锁定 ~20 反例含中文/代理对/U+2028/数字格式)、复算 `hashSelf`,不符 **`bad_hash` 拒收不落库** → `hashSelf`/`sig` 成为**真正锚定 payload** 的取证锚点(此前 sig 只绑 hashSelf 字符串,payload 未被签名覆盖);②**离线审计** `IntegrityAudit` + `GET /api/exams/{id}/integrity`:按 (agent,seq) 复验**锚点自洽**(落库后改 payload → hashMismatch)+ **链连续**(删/插/重排 → continuityBreak)。落 `machine_id` 列(canonicalCore 含 machineId,离线复算必须)。**诚实残留**:持 PSK 者仍可构造自洽伪造链(内容为假·靠截图/视觉/人工兜底)。
 - ✅ **归档/清理作业** `ArchiveService`(后台 `PeriodicTimer` 每 6h + 手动 `POST /api/archive/run`)=扫描结束超 `RetentionDays`(默认30)天考试 → 关键数据(有效风险≥阈值 或 被 suspicious_queue 引用的**事件/证据图/OCR/Logo/击键样本**+裁决+汇总+hash锚)转独立 **archive 库**(证据图移冷存 `archive/<exam>/<seat>/<id>.webp`)→ 就地清理 live → `status='archived'` → VACUUM。**证据不丢**:pending 未裁决**跳过整场**;copy(INSERT OR IGNORE)+文件移动(容忍已迁)幂等,copy 后/delete 前崩溃重跑收敛。
 - ★**三路独立审计(丢证据/安全/正确性契约)+全修**:修 **C1 Critical**=被 confirmed 裁决引用的**击键样本**原会被无条件删且无归档表→定罪证据永久丢失(补 `archive_keystroke_samples`+ParseRefs 认 `keystroke:`+清理前先归档关键击键);修 **High/Med**=`machine_id` 迁移使 M3 前旧事件被离线审计**误报"篡改"**(改归 `unverifiable` 单列·**绝不误报历史数据**);修 **Med**=已归档考试 integrity 端点返回空 `ok:true` 伪装全绿(改 `applicable:false`)。审计**验证为非缺陷**:CoreRaw≡Core 逐字节(实测)·path traversal 双层封堵·新端点 admin gate 全覆盖·hashSelf 复验不误拒合法在线事件·归档幂等/崩溃安全/FK 顺/锁模型均稳。
 - ⏳ **M3 待做**:CLIP 按图搜图(需 sqlite-vec 原生 + CLIP ONNX 模型·`vec_images` 虚表 M1 起预留跳过·**owner 待定是否调模型**)+ 击键节奏**前端埋点**(判题网页·本仓外·server 侧 KSK 收 + 归档已就绪)。
+
+**第三轮独立审查(5 并行 agent)+ 全批修复(owner 拍板全修 · 130 项测试全绿)**:取证锚点核心(canonical 逐字节·验签绑定·ingest 复验·归档崩溃安全/幂等·并发单写者·注入/DoS/密钥)5 路复核**均无新缺陷**;修复集中在视觉链失败态语义/URL 判据边界/归档读路径/文档漂移:
+- **F1(High)**视觉临时云失败→证据图**永久漏析**(占位早置 uploaded_to_ocr、backstop 只捞未占位、失败不重置)→ 拆 `analysis_state`(处理闩锁·0待分析/1终结)与 `analysis_attempts`(重试上限 `visionMaxAttempts`),临时失败**不终结**由补偿重扫按 attempts<上限重试,确定态失败(文件缺失/派生失败)才终结;**F2** `uploaded_to_ocr` 语义拆净=**仅真出网(SendsOffNetwork 成功送出)才置 1**(mock/本地/失败恒 0·不再撒谎),meta 端点加 `analyzed`。
+- **F3** 归档后证据无 HTTP 读路径 → `/api/images/{id}`+`/meta` **回落 archive 库+冷存** + 新增 `GET /api/archive/exams/{id}` 只读复核。
+- **F4** 同一事件重复入队(ingest 一条+视觉一条)→ 视觉命中若已有 pending 引用该 event 则**并入**(score 取 max·note 追加 vision)不另插。
+- **F5** URL 黑名单 `Contains` 子串假阳性(richardbard→bard·foryou.com→you.com)→ `RiskModel.HostMatchesAny` 改**按 DNS 标签**(裸词配整段标签·dotted 配域后缀);进程名保留子串(改名远控)。HostOf 解析失败返空不撞整串。**F11** 空 host(about:blank/data:)不再误判高危。
+- **F6** `LocalBuffer.MaxBufferedSeq` 不再全量读图字节(只解析文件名)。**F7** config 端点补 `IsSafeId`。**F8** no-referrer/no-store 提全局中间件。**F9** ParseConfidence 整数 1 不再放大成 100(仅严格 0<d<1)。**F10** 视觉解码 `Image.Identify` 先探尺寸拒超 4096² 防解码炸弹。
+- **D2** `capture_now` 帧从文档承诺变**真**(`POST /api/agents/{agentId}/capture` 推帧)。**D6** integrity 报告加 `sigVerified`/`note`(psk=null 联调"绿"不伪装取证清白)。文档漂移全清(测试数 130·event:manual·旧术语"云OCR/裁剪打码"·尾部截断诚实残留)。
+- **⚠️ A1/A2 事件通道跨身份栽赃 + seq 抢占**(共享 PSK 下真实·"事件体身份==握手 query"修法**无效**因握手可伪造任意身份)→ **owner 决策 = 学员机改账密登录 + 每次 cpplearn OIDC 授权(per-user 身份取代共享 PSK)**,OIDC 跨系统另立项;已诚实写进 architecture §10.1。
 
 ## 提交约定
 默认不提交，除非用户明确要求。commit 信息用中文，简洁。
