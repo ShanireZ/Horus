@@ -118,7 +118,9 @@ M4 用 **cpplearn OIDC 的 per-user 身份**取代 Horus 现有的**全场共享
 
 ---
 
-## 5. Horus 端任务
+## 5. Horus 端任务（✅ S1–S7 + A1–A3 已实现 · 142 测试全绿含 12 项 M4 新增）
+
+**已实现总览**：`server/Identity/`(OidcTokenValidator·SessionStore·OidcExchange·OidcEndpoints·IngestAuth·OidcSecret/OidcJwks) + `contracts/SessionCrypto.cs`(ECDH) + ingest 改造(EventIngest/ImageIngest 会话验签 + 身份强制) + 看板富画像;`agentcore/Identity/OidcLoginFlow.cs`(loopback 登录) + UplinkClient 会话签名 + Agent Program 登录接线。**密钥选型最终定案**:①id_token 验签 = **纯 BCL RSA-PKCS1-SHA256**(无 JWT 依赖·预置 JWKS 离线验)②会话密钥 = **ECDH-P256(BCL)→ SHA256 KDF → K_sess**,复用既有 HMAC 哈希链(只换密钥源·私钥不过网)。**A1/A2 闭合已端到端锁定**(OidcIngestAuthTests:本人事件接受 / 拿自己会话给他人栽赃拒 / 改 agentId 抢 seq 拒 / both 模式 PSK 共存)。
 
 ### 5.1 Server（`Horus.Server`）
 

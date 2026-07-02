@@ -13,7 +13,19 @@ public sealed class AgentConfig
 
     public required string ServerWsBase { get; init; }     // ws://host:port
     public required string ServerHttpBase { get; init; }   // http://host:port
-    public required byte[] Psk { get; init; }              // 预共享 HMAC 密钥(base64)
+    public byte[]? Psk { get; init; }                     // 预共享 HMAC 密钥(base64)。OIDC 模式可省。
+
+    // ---- M4 身份层:OIDC 登录(取代共享 PSK)----
+    /// 采集鉴权:"psk"(默认) | "oidc"(经 cpplearn 登录换会话)。both 由服务器侧决定共存;Agent 只需二选一。
+    public string AuthMode { get; init; } = "psk";
+    /// cpplearn OIDC issuer(如 https://betaoi.cc)。oidc 模式必配。
+    public string? OidcIssuer { get; init; }
+    /// Horus 在 cpplearn 注册的 client_id(默认 horus-client)。
+    public string OidcClientId { get; init; } = "horus-client";
+    /// 请求的 scope(默认 openid + horus_profile 富画像)。
+    public string OidcScope { get; init; } = "openid horus_profile";
+
+    public bool OidcMode => string.Equals(AuthMode, "oidc", StringComparison.OrdinalIgnoreCase);
 
     // 截图
     public int TargetHeight { get; init; } = 1080;

@@ -16,8 +16,22 @@
   //   脚本客户端:X-Horus-Admin 头;图片字节端点兼容 ?t= 查询。
   // 留空 = 关闭管理鉴权(仅联调)。生产务必配置,否则同网学员机可下发配置关掉全场检测/拉证据图/抹裁决。
   "adminToken": "",
-  // 非 loopback 绑定时,缺 PSK 或 adminToken 会拒绝启动(fail-closed)。仅本机联调可设 true 放行。
+  // 非 loopback 绑定时,缺采集鉴权(PSK 或 OIDC)或 adminToken 会拒绝启动(fail-closed)。仅本机联调可设 true 放行。
   "allowInsecure": false,
+  // ---- M4 身份层:cpplearn OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
+  // authMode: "psk"(默认·共享 PSK) | "oidc"(仅 OIDC 会话) | "both"(迁移共存·可回退 PSK)。
+  "authMode": "psk",
+  // OIDC issuer(cpplearn 对外根域名,如 https://betaoi.cc)。oidc/both 必配。
+  "oidcIssuer": "",
+  // Horus 在 cpplearn 注册的 client_id(与 cpplearn OAUTH_HORUS_CLIENT_ID 一致)。
+  "oidcClientId": "horus-client",
+  // client_secret 明文(仅联调;生产用 oidcClientSecretEnc DPAPI 或 env HORUS_OIDC_SECRET)。Server-Broker:secret 只在本服务器。
+  "oidcClientSecret": "",
+  "oidcClientSecretEnc": "",
+  // cpplearn JWKS(RSA 公钥)内联 JSON:局域网离线验 id_token。留空则启动时从 issuer 拉取并缓存(需启动时可达 issuer)。
+  "oidcJwksJson": "",
+  // OIDC 会话有效期(分钟):派发的采集凭证寿命,建议 ≥ 考试时长。默认 180。
+  "oidcSessionMinutes": 180,
   "riskThreshold": 50,
   "dedupImagesByPhash": true,
   "onlineWindowSeconds": 90,

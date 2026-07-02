@@ -4,13 +4,15 @@ using Horus.Contracts;
 using Horus.Server.Analysis;
 using Horus.Server.Config;
 using Horus.Server.Data;
+using Horus.Server.Identity;
 using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Ingest;
 
 /// 事件通道(WebSocket /ingest/events)。见 api-contract §1。
 /// 握手校验 X-Horus-Auth;每事件校验 sig;幂等落库(agent_id,seq,type);risk≥阈值入可疑队列。
-public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<EventIngest> log)
+/// M4:鉴权密钥可为共享 PSK 或 OIDC 会话 K_sess(见 IngestAuth);OIDC 路径强制事件体身份==会话身份(闭合 A1/A2)。
+public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionStore sessions, ILogger<EventIngest> log)
 {
     public async Task HandleAsync(HttpContext ctx)
     {
@@ -20,11 +22,19 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
         string seatId = ctx.Request.Query["seatId"].ToString();
         string agentId = ctx.Request.Query["agentId"].ToString();
 
-        // 握手鉴权(见 §1.1)
-        if (cfg.AuthEnabled)
+        // 握手鉴权(见 §1.1)。M4:先解析鉴权上下文(PSK ↔ OIDC 会话共存)。
+        string sessionId = ctx.Request.Headers["X-Horus-Session"].ToString();
+        IngestAuth.Resolved auth = IngestAuth.Resolve(cfg, sessions, sessionId, examId, seatId, agentId, Now());
+        if (!auth.Ok)
+        {
+            ctx.Response.StatusCode = 401;
+            log.LogWarning("事件握手鉴权拒绝 agent={Agent} seat={Seat} 原因={Err}", agentId, seatId, auth.Error);
+            return;
+        }
+        if (auth.Key is not null)   // 用 PSK 或会话 K_sess 验握手
         {
             string got = ctx.Request.Headers["X-Horus-Auth"].ToString();
-            string want = Auth.Handshake(cfg.Psk!, examId, seatId, agentId);
+            string want = Auth.Handshake(auth.Key, examId, seatId, agentId);
             if (!Crypto.FixedTimeEquals(got, want))
             {
                 ctx.Response.StatusCode = 401;
@@ -58,7 +68,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
                         switch (frameType)
                         {
                             case "hello":    await OnHelloAsync(conn, agentId, ct); break;
-                            case "event":    await OnEventAsync(conn, root, ct); break;
+                            case "event":    await OnEventAsync(conn, root, auth.Key, auth.Session, ct); break;
                             case "ping":     await conn.SendAsync("{\"v\":1,\"type\":\"pong\"}", ct); break;
                             case "pong":     break;
                             default:         break;
@@ -96,7 +106,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
             await conn.SendAsync(AgentHub.BuildConfigFrame(cfgJson), ct);
     }
 
-    private async Task OnEventAsync(AgentHub.Conn link, JsonElement frame, CancellationToken ct)
+    private async Task OnEventAsync(AgentHub.Conn link, JsonElement frame, byte[]? authKey, HorusSession? session, CancellationToken ct)
     {
         if (!frame.TryGetProperty("event", out JsonElement e) || e.ValueKind != JsonValueKind.Object) return;
 
@@ -107,6 +117,15 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
         string seatId = Str(e, "seatId") ?? "";
         string agentId = Str(e, "agentId") ?? "";
         string machineId = Str(e, "machineId") ?? "";
+
+        // M4·闭合 A1:OIDC 路径下,事件体自报身份**必须 == 会话绑定身份**,否则是拿自己会话给他人栽赃 —— 拒收。
+        // (K_sess 只证明「是本会话所签」,不证明「身份为真」;身份真伪靠此强制 + OIDC 认证。)seq 空间归属本会话 agent → 闭合 A2。
+        if (session is not null && !session.IdentityMatches(examId, seatId, agentId))
+        {
+            await link.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "error", code = "identity_mismatch", seq }), ct);
+            log.LogWarning("事件身份与会话不符(疑跨身份栽赃) session={Seat} bodyAgent={Agent}", session.SeatId, agentId);
+            return;
+        }
         double ts = e.TryGetProperty("ts", out JsonElement tse) && tse.TryGetDouble(out double t) ? t : 0;
         string typeStr = Str(e, "type") ?? "";
         int risk = e.TryGetProperty("risk", out JsonElement rke) && rke.TryGetInt32(out int rr) ? rr : 0;
@@ -115,10 +134,10 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, ILogger<E
         string? hashSelf = Str(e, "hashSelf");
         string payloadRaw = e.TryGetProperty("payload", out JsonElement pe) ? pe.GetRawText() : "{}";
 
-        // 验签:sig = HMAC(PSK, hashSelf + "\n" + seq)。仅依赖 hashSelf 字符串,无需重算 canonical。
-        if (cfg.AuthEnabled)
+        // 验签:sig = HMAC(key, hashSelf + "\n" + seq)。key = PSK 或 OIDC 会话 K_sess(见 IngestAuth)。仅依赖 hashSelf 字符串。
+        if (authKey is not null)
         {
-            string want = EventCanonical.Sig(cfg.Psk!, hashSelf ?? "", seq);
+            string want = EventCanonical.Sig(authKey, hashSelf ?? "", seq);
             if (sig is null || !Crypto.FixedTimeEquals(sig, want))
             {
                 await link.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "error", code = "bad_sig", seq }), ct);

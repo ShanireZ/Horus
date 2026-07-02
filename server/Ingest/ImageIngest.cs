@@ -2,13 +2,15 @@ using Horus.Contracts;
 using Horus.Server.Analysis.Vision;
 using Horus.Server.Config;
 using Horus.Server.Data;
+using Horus.Server.Identity;
 using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Ingest;
 
 /// 图片通道(HTTP POST /ingest/images)。见 api-contract §2.1。
 /// 校验 X-Horus-Sig;pHash 去重;原图存盘;DB 存指针;新图入队异步视觉分析(L2)。
-public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, VisionAnalysisService vision, ILogger<ImageIngest> log)
+/// M4:验签密钥可为 PSK 或 OIDC 会话 K_sess(X-Horus-Session);OIDC 路径强制头部身份==会话身份。
+public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, VisionAnalysisService vision, SessionStore sessions, ILogger<ImageIngest> log)
 {
     public async Task HandleAsync(HttpContext ctx)
     {
@@ -52,11 +54,21 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
         long.TryParse(seqStr, out long seq);
         double.TryParse(tsStr, System.Globalization.CultureInfo.InvariantCulture, out double ts);
 
-        // 验签(见 §2.1):HMAC(PSK, canonicalHeaders + "\n" + sha256(body));canonical 含 imageId 防篡改
-        if (cfg.AuthEnabled)
+        // M4:解析鉴权(PSK ↔ OIDC 会话)。OIDC 路径下头部身份须 == 会话身份(否则拒·闭合 A1)。
+        double authNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+        IngestAuth.Resolved auth = IngestAuth.Resolve(cfg, sessions, req.Headers["X-Horus-Session"].ToString(), examId, seatId, agentId, authNow);
+        if (!auth.Ok)
+        {
+            ctx.Response.StatusCode = 401;
+            await ctx.Response.WriteAsJsonAsync(new { error = auth.Error });
+            return;
+        }
+
+        // 验签(见 §2.1):HMAC(key, canonicalHeaders + "\n" + sha256(body));key = PSK 或会话 K_sess;canonical 含 imageId 防篡改
+        if (auth.Key is not null)
         {
             string canon = Auth.ImageCanonicalHeaders(examId, seatId, agentId, seq, trigger, phash, tsStr, clientId);
-            string want = Auth.ImageSig(cfg.Psk!, canon, body);
+            string want = Auth.ImageSig(auth.Key, canon, body);
             if (string.IsNullOrEmpty(sig) || !Crypto.FixedTimeEquals(sig, want))
             {
                 ctx.Response.StatusCode = 401;

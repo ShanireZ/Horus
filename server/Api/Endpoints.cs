@@ -93,14 +93,21 @@ public static class Endpoints
             return db.Read(conn =>
             {
                 var list = new List<object>();
+                // M4·S6/S7:LEFT JOIN 最近一条 OIDC 会话,看板直呈 cpplearn 身份画像(用户名/昵称/道号/境界/战力/头像)。
+                // SQLite 特例:GROUP BY + MAX(issued_at) 时其余裸列取"最大 issued_at 那一行"的值。
                 using SqliteCommand c = conn.Cmd(
                     @"SELECT s.seat_id, s.student_id, s.display_name, s.agent_id, s.machine_id,
                         (SELECT MAX(ts) FROM agent_heartbeats h WHERE h.exam_id=s.exam_id AND h.seat_id=s.seat_id),
                         (SELECT MAX(ts) FROM events e WHERE e.exam_id=s.exam_id AND e.seat_id=s.seat_id),
                         (SELECT COALESCE(MAX(MAX(e.risk, COALESCE(e.server_risk,0))),0) FROM events e WHERE e.exam_id=s.exam_id AND e.seat_id=s.seat_id AND e.ts>=@rc),
                         (SELECT COUNT(*) FROM events e WHERE e.exam_id=s.exam_id AND e.seat_id=s.seat_id),
-                        (SELECT COUNT(*) FROM suspicious_queue q WHERE q.exam_id=s.exam_id AND q.seat_id=s.seat_id AND q.status='pending')
-                      FROM seats s WHERE s.exam_id=@e ORDER BY s.seat_id",
+                        (SELECT COUNT(*) FROM suspicious_queue q WHERE q.exam_id=s.exam_id AND q.seat_id=s.seat_id AND q.status='pending'),
+                        sess.sub, sess.username, sess.nickname, sess.dao_name, sess.avatar, sess.realm, sess.realm_level, sess.combat_power
+                      FROM seats s
+                      LEFT JOIN (SELECT exam_id, seat_id, sub, username, nickname, dao_name, avatar, realm, realm_level, combat_power, MAX(issued_at) AS mx
+                                 FROM oidc_sessions GROUP BY exam_id, seat_id) sess
+                        ON sess.exam_id=s.exam_id AND sess.seat_id=s.seat_id
+                      WHERE s.exam_id=@e ORDER BY s.seat_id",
                     ("@e", examId), ("@rc", recentCut));
                 using SqliteDataReader r = c.ExecuteReader();
                 while (r.Read())
@@ -108,6 +115,7 @@ public static class Endpoints
                     double? lastHb = NullDouble(r, 5);
                     double? lastEv = NullDouble(r, 6);
                     bool online = (lastHb is not null && lastHb >= cut) || (lastEv is not null && lastEv >= cut);
+                    string? sub = NullStr(r, 10);
                     list.Add(new
                     {
                         seatId = r.GetString(0),
@@ -121,6 +129,18 @@ public static class Endpoints
                         maxRecentRisk = r.GetInt32(7),
                         eventCount = r.GetInt32(8),
                         suspiciousCount = r.GetInt32(9),
+                        // OIDC 身份画像(未登录/PSK 模式为 null)
+                        identity = sub is null ? null : new
+                        {
+                            sub,
+                            username = NullStr(r, 11),
+                            nickname = NullStr(r, 12),
+                            daoName = NullStr(r, 13),
+                            avatar = NullStr(r, 14),
+                            realm = NullStr(r, 15),
+                            realmLevel = NullInt(r, 16),
+                            combatPower = NullInt(r, 17),
+                        },
                     });
                 }
                 return Results.Json(list);

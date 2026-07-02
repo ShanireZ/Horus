@@ -29,6 +29,30 @@ public sealed record ServerConfig
     /// 允许在非 loopback 绑定下缺 PSK / 管理令牌启动(裸奔)。默认 false = fail-closed。仅联调开。
     public bool AllowInsecure { get; init; }
 
+    // ---- M4 身份层:cpplearn OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
+    /// 采集面鉴权模式:"psk"(默认·共享 PSK·M1-M3 原样) | "oidc"(仅 OIDC 会话) | "both"(共存·迁移期回退网)。
+    public string AuthMode { get; init; } = "psk";
+    /// cpplearn OIDC issuer(如 https://betaoi.cc)。OIDC 模式必配。
+    public string? OidcIssuer { get; init; }
+    /// Horus 在 cpplearn 注册的 client_id(默认 horus-client)。
+    public string? OidcClientId { get; init; }
+    /// client_secret 明文(仅联调;生产用 OidcClientSecretEnc 或 env HORUS_OIDC_SECRET)。Server-Broker:secret 只在服务器。
+    public string? OidcClientSecret { get; init; }
+    /// client_secret DPAPI 密文(与视觉 key 同机制,见 SecretProtect)。
+    public string? OidcClientSecretEnc { get; init; }
+    /// cpplearn 的 JWKS(RSA 公钥)内联 JSON:局域网离线验 id_token 用,免运行时拉取。留空则启动时从 issuer 拉取 + 缓存。
+    public string? OidcJwksJson { get; init; }
+    /// OIDC 会话有效期(分钟):派发的采集凭证寿命,建议 ≥ 考试时长。默认 180。
+    public int OidcSessionMinutes { get; init; } = 180;
+
+    [JsonIgnore]
+    public bool OidcEnabled => AuthMode is "oidc" or "both";
+    [JsonIgnore]
+    public bool PskAcceptedForIngest => AuthMode is "psk" or "both";
+    /// OIDC token 端点(从 issuer 拼,去尾斜杠 + /oauth/token)。
+    [JsonIgnore]
+    public string? OidcTokenEndpoint => string.IsNullOrEmpty(OidcIssuer) ? null : OidcIssuer!.TrimEnd('/') + "/oauth/token";
+
     // ---- 视觉分析(L2:视觉 LLM 取代 OCR + L3 Logo,合并单一视觉级)----
     /// 视觉分析器:留空/"off" = 关(默认) | "mock"(确定性·测试联调) | "openai"(OpenAI 兼容端点)。
     public string? VisionProvider { get; init; }

@@ -147,6 +147,25 @@ CREATE TABLE IF NOT EXISTS exam_config (
   updated_at REAL NOT NULL
 );
 
+-- M4 身份层:OIDC 采集会话(取代共享 PSK) --------------------
+-- Agent 经 cpplearn OIDC 登录后,服务器派发一条会话:绑定 cpplearn 身份(sub + 富画像)到 (exam,seat,agent),
+-- 派生的 k_sess(ECDH·32B base64)作采集签名密钥。事件体身份须 == 本会话绑定值,闭合跨身份栽赃/seq 抢占。
+-- 持久化:服务器重启后会话不丢(考试中途不必强制学员重登)。k_sess 存于可信服务器 DB(同 PSK 的信任面)。
+CREATE TABLE IF NOT EXISTS oidc_sessions (
+  session_id   TEXT PRIMARY KEY,
+  exam_id      TEXT NOT NULL,
+  seat_id      TEXT NOT NULL,
+  agent_id     TEXT NOT NULL,
+  machine_id   TEXT,
+  sub          TEXT NOT NULL,                          -- cpplearn 稳定身份(UUID)
+  username     TEXT, nickname TEXT, dao_name TEXT, avatar TEXT, realm TEXT,
+  realm_level  INTEGER, combat_power INTEGER,
+  k_sess       TEXT NOT NULL,                          -- base64(32B) ECDH 派生会话密钥(HMAC 签名密钥)
+  issued_at    REAL NOT NULL,
+  expires_at   REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_oidc_sessions_agent ON oidc_sessions(exam_id, agent_id);
+
 -- Agent 心跳 / 在线状态 --------------------------------------
 CREATE TABLE IF NOT EXISTS agent_heartbeats (
   agent_id   TEXT NOT NULL,

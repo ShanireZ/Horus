@@ -4,6 +4,7 @@ using Horus.Server.Api;
 using Microsoft.Extensions.Logging;
 using Horus.Server.Config;
 using Horus.Server.Data;
+using Horus.Server.Identity;
 using Horus.Server.Ingest;
 using Horus.Server.Jobs;
 
@@ -56,6 +57,12 @@ cfg = cfg with
     VisionBaseUrl = Environment.GetEnvironmentVariable("HORUS_VISION_BASEURL") ?? cfg.VisionBaseUrl,
     VisionModel = Environment.GetEnvironmentVariable("HORUS_VISION_MODEL") ?? cfg.VisionModel,
     VisionApiKey = Environment.GetEnvironmentVariable("HORUS_VISION_KEY") ?? cfg.VisionApiKey,
+    // M4 身份层(OIDC)env 覆盖
+    AuthMode = Environment.GetEnvironmentVariable("HORUS_AUTH_MODE") ?? cfg.AuthMode,
+    OidcIssuer = Environment.GetEnvironmentVariable("HORUS_OIDC_ISSUER") ?? cfg.OidcIssuer,
+    OidcClientId = Environment.GetEnvironmentVariable("HORUS_OIDC_CLIENT_ID") ?? cfg.OidcClientId,
+    OidcClientSecret = Environment.GetEnvironmentVariable("HORUS_OIDC_SECRET") ?? cfg.OidcClientSecret,
+    OidcJwksJson = Environment.GetEnvironmentVariable("HORUS_OIDC_JWKS") ?? cfg.OidcJwksJson,
 };
 
 // ---- 解析数据目录与 DB 数据源 ----
@@ -79,9 +86,11 @@ bool lanExposed = urls.Any(u =>
     try { string h = new Uri(u).Host; return h is not ("localhost" or "127.0.0.1" or "::1" or "[::1]"); }
     catch { return true; }
 });
-if (lanExposed && !cfg.AllowInsecure && (!cfg.AuthEnabled || !cfg.AdminAuthEnabled))
+// 采集面安全 = 配了 PSK **或** OIDC(M4:oidc/both 模式凭 OIDC 会话鉴权,无需 PSK);管理面安全 = 配了 AdminToken。
+bool collectInsecure = !cfg.AuthEnabled && !cfg.OidcEnabled;
+if (lanExposed && !cfg.AllowInsecure && (collectInsecure || !cfg.AdminAuthEnabled))
     throw new InvalidOperationException(
-        "拒绝启动:绑定了非本机地址却未配置 PSK 或 AdminToken(采集/管理面将裸奔)。请配置两者,或仅联调时设 allowInsecure=true。");
+        "拒绝启动:绑定了非本机地址却未配置采集面鉴权(PSK 或 OIDC)或 AdminToken(采集/管理面将裸奔)。请配置,或仅联调时设 allowInsecure=true。");
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(urls);
@@ -112,6 +121,22 @@ if (cfg.VisionEnabled)
 }
 builder.Services.AddSingleton<VisionAnalysisService>();               // 未注册 IVisionAnalyzer 时内部 no-op
 builder.Services.AddHostedService(sp => sp.GetRequiredService<VisionAnalysisService>());
+
+// ---- M4 身份层:OIDC 采集会话(取代共享 PSK)。AuthMode=oidc/both 时启用 ----
+builder.Services.AddSingleton<Horus.Server.Identity.SessionStore>();   // both/oidc 下 ingest 会查会话
+if (cfg.OidcEnabled)
+{
+    if (string.IsNullOrEmpty(cfg.OidcIssuer)) throw new InvalidOperationException("authMode=oidc/both 需配 oidcIssuer");
+    string oidcClientId = cfg.OidcClientId ?? throw new InvalidOperationException("authMode=oidc/both 需配 oidcClientId");
+    string oidcSecret = Horus.Server.Identity.OidcSecret.Resolve(cfg);   // env > enc(DPAPI) > 明文
+    string jwksJson = await Horus.Server.Identity.OidcJwks.LoadAsync(cfg);   // 内联优先;否则从 issuer 拉取 + 缓存
+    var validator = new Horus.Server.Identity.OidcTokenValidator(jwksJson, cfg.OidcIssuer!, oidcClientId);
+    builder.Services.AddSingleton(validator);
+    builder.Services.AddSingleton(sp => new Horus.Server.Identity.OidcExchange(
+        new HttpClient { Timeout = TimeSpan.FromSeconds(30) }, validator,
+        sp.GetRequiredService<Horus.Server.Identity.SessionStore>(), cfg, oidcSecret,
+        sp.GetRequiredService<ILogger<Horus.Server.Identity.OidcExchange>>()));
+}
 
 // ---- M3 归档 / 清理作业:每日扫描到龄考试转 archive 库 + 清理 live(§13/§15)。ArchiveEnabled=false 时不起后台 ----
 builder.Services.AddSingleton<ArchiveService>();
@@ -173,6 +198,9 @@ if (cfg.AdminAuthEnabled)
 app.MapGet("/ingest/events", (HttpContext ctx, EventIngest h) => h.HandleAsync(ctx));      // WebSocket
 app.MapPost("/ingest/images", (HttpContext ctx, ImageIngest h) => h.HandleAsync(ctx));      // HTTP 图片
 app.MapPost("/ingest/keystroke", (HttpContext ctx, KeystrokeIngest h) => h.HandleAsync(ctx)); // HTTP 击键旁路
+
+// ---- M4 身份层:OIDC 登录换会话(采集面·由一次性 code+PKCE 保护·不走 admin gate) ----
+app.MapOidc();
 
 // ---- 看板 / 管理 API ----
 app.MapApi();

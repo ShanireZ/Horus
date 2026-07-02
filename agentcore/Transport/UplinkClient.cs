@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Horus.Agent.Buffer;
 using Horus.Agent.Config;
+using Horus.Agent.Identity;
 using Horus.Contracts;
 
 namespace Horus.Agent.Transport;
@@ -15,6 +16,7 @@ public sealed class UplinkClient : IAsyncDisposable
 {
     private readonly AgentConfig _cfg;
     private readonly LocalBuffer _buffer;
+    private readonly IngestCredential _cred;   // M4:签名密钥(PSK 或 OIDC K_sess)+ 可选 sessionId
     private readonly HttpClient _http;
     private readonly Func<Uri, CancellationToken, Task<WebSocket>> _wsConnect;
     private readonly Uri _wsUri;
@@ -33,11 +35,14 @@ public sealed class UplinkClient : IAsyncDisposable
     public Action<JsonElement>? OnConfigUpdate;
 
     public UplinkClient(AgentConfig cfg, LocalBuffer buffer,
+        IngestCredential? cred = null,
         HttpClient? http = null,
         Func<Uri, CancellationToken, Task<WebSocket>>? wsConnect = null)
     {
         _cfg = cfg;
         _buffer = buffer;
+        // 默认 PSK 模式(既有调用点无感);OIDC 模式由 Program 传入 {K_sess, sessionId}。
+        _cred = cred ?? new IngestCredential(cfg.Psk ?? Array.Empty<byte>(), null);
         _http = http ?? new HttpClient();
         _wsConnect = wsConnect ?? DefaultConnectAsync;
         _wsUri = new Uri($"{cfg.ServerWsBase}/ingest/events?examId={cfg.ExamId}&seatId={cfg.SeatId}&agentId={cfg.AgentId}");
@@ -64,7 +69,8 @@ public sealed class UplinkClient : IAsyncDisposable
     private async Task<WebSocket> DefaultConnectAsync(Uri uri, CancellationToken ct)
     {
         var ws = new ClientWebSocket();
-        ws.Options.SetRequestHeader("X-Horus-Auth", Auth.Handshake(_cfg.Psk, _cfg.ExamId, _cfg.SeatId, _cfg.AgentId));
+        ws.Options.SetRequestHeader("X-Horus-Auth", Auth.Handshake(_cred.Key, _cfg.ExamId, _cfg.SeatId, _cfg.AgentId));
+        if (_cred.SessionId is not null) ws.Options.SetRequestHeader("X-Horus-Session", _cred.SessionId);   // M4:OIDC 会话
         await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
         return ws;
     }
@@ -215,7 +221,7 @@ public sealed class UplinkClient : IAsyncDisposable
             string phashHex = phash.ToString("x16");
             string ts = Now().ToString(System.Globalization.CultureInfo.InvariantCulture);
             string canon = Auth.ImageCanonicalHeaders(_cfg.ExamId, _cfg.SeatId, _cfg.AgentId, seq, trigger, phashHex, ts, clientId ?? "");
-            string sig = Auth.ImageSig(_cfg.Psk, canon, webp);
+            string sig = Auth.ImageSig(_cred.Key, canon, webp);
 
             using var content = new ByteArrayContent(webp);
             content.Headers.ContentType = new MediaTypeHeaderValue("image/webp");
@@ -229,6 +235,7 @@ public sealed class UplinkClient : IAsyncDisposable
             req.Headers.Add("X-Horus-Phash", phashHex);
             req.Headers.Add("X-Horus-Ts", ts);
             req.Headers.Add("X-Horus-Sig", sig);
+            if (_cred.SessionId is not null) req.Headers.Add("X-Horus-Session", _cred.SessionId);   // M4:OIDC 会话
             if (clientId is not null) req.Headers.Add("X-Horus-Image-Id", clientId);   // 客户端预生成 id,服务器沿用
 
             using HttpResponseMessage resp = await _http.SendAsync(req, ct).ConfigureAwait(false);

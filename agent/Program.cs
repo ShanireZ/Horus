@@ -1,6 +1,7 @@
 using Horus.Agent.Buffer;
 using Horus.Agent.Capture;
 using Horus.Agent.Config;
+using Horus.Agent.Identity;
 using Horus.Agent.Integrity;
 using Horus.Agent.Model;
 using Horus.Agent.Signals;
@@ -23,8 +24,30 @@ internal static class Program
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
         var buffer = new LocalBuffer(Path.Combine(AppContext.BaseDirectory, "buffer"));
-        var uplink = new UplinkClient(cfg, buffer);
-        var chain = new HashChain(cfg.Psk);
+
+        // M4·A1/A2:采集凭证 —— OIDC 模式先经 cpplearn 登录换会话(浏览器·near-无感),得 K_sess + sessionId;
+        // PSK 模式沿用共享 PSK。登录前不连服务器、不采集(A3:未认证不上报)。
+        IngestCredential cred;
+        if (cfg.OidcMode)
+        {
+            try
+            {
+                Console.WriteLine("[horus-agent] OIDC 登录:即将打开系统浏览器完成 cpplearn 授权…");
+                using var loginHttp = new HttpClient();
+                OidcSession session = OidcLoginFlow.LoginAsync(cfg, loginHttp, ct: cts.Token).GetAwaiter().GetResult();
+                cred = new IngestCredential(session.KSess, session.SessionId);
+                Console.WriteLine("[horus-agent] OIDC 登录成功,会话已建立。");
+            }
+            catch (Exception ex) { Console.Error.WriteLine($"[horus-agent] OIDC 登录失败: {ex.Message}"); return 1; }
+        }
+        else
+        {
+            if (cfg.Psk is null) { Console.Error.WriteLine("[horus-agent] psk 模式需在配置提供 psk"); return 1; }
+            cred = new IngestCredential(cfg.Psk, null);
+        }
+
+        var uplink = new UplinkClient(cfg, buffer, cred);
+        var chain = new HashChain(cred.Key);
         var sealLock = new object();
         var live = new LiveConfig(cfg);   // 可热更新配置(白名单/阈值/截图参数),各源每轮读取
 
