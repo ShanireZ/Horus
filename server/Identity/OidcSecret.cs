@@ -15,6 +15,16 @@ public static class OidcSecret
             throw new PlatformNotSupportedException("oidcClientSecretEnc(DPAPI)仅 Windows 可解;非 Windows 用 HORUS_OIDC_SECRET env。");
         return SecretProtect.Unprotect(cfg.OidcClientSecretEnc!);
     }
+
+    /// M4·RBAC:监考员 dashboard client_secret 解析。优先级:env(已折进 OidcDashboardClientSecret) > Enc(DPAPI) > 空。
+    public static string ResolveDashboard(ServerConfig cfg)
+    {
+        if (!string.IsNullOrEmpty(cfg.OidcDashboardClientSecret)) return cfg.OidcDashboardClientSecret!;
+        if (string.IsNullOrEmpty(cfg.OidcDashboardClientSecretEnc)) return "";
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("oidcDashboardClientSecretEnc(DPAPI)仅 Windows 可解;非 Windows 用 HORUS_OIDC_DASHBOARD_SECRET env。");
+        return SecretProtect.Unprotect(cfg.OidcDashboardClientSecretEnc!);
+    }
 }
 
 /// M4:cpplearn JWKS(RSA 公钥)加载。**内联 `oidcJwksJson` 优先**(局域网离线·免运行时拉取);

@@ -167,6 +167,20 @@ CREATE TABLE IF NOT EXISTS oidc_sessions (
 );
 CREATE INDEX IF NOT EXISTS ix_oidc_sessions_agent ON oidc_sessions(exam_id, agent_id);
 
+-- M4·RBAC:监考员看板管理会话(cpplearn dashboard OIDC 登录·取代静态 adminToken) ----
+-- 监考员(长老)经 cpplearn 授权码流登录 → 服务器验 id_token(须 user_type='elder')→ 派发管理会话,
+-- 种 HttpOnly cookie horus_admin=session_id;admin gate(AdminAuthMode=oidc)校验此表(elder·未过期)。弟子登录被拒(非 elder)。
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  session_id   TEXT PRIMARY KEY,
+  sub          TEXT NOT NULL,                          -- cpplearn 稳定身份(UUID)
+  user_type    TEXT NOT NULL,                          -- 'elder'(监考员);建会话时已强制,弟子不入表
+  username     TEXT, nickname TEXT, dao_name TEXT, avatar TEXT, realm TEXT,
+  realm_level  INTEGER, combat_power INTEGER,
+  issued_at    REAL NOT NULL,
+  expires_at   REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_admin_sessions_sub ON admin_sessions(sub);
+
 -- Agent 心跳 / 在线状态 --------------------------------------
 CREATE TABLE IF NOT EXISTS agent_heartbeats (
   agent_id   TEXT NOT NULL,

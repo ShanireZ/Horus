@@ -63,6 +63,11 @@ cfg = cfg with
     OidcClientId = Environment.GetEnvironmentVariable("HORUS_OIDC_CLIENT_ID") ?? cfg.OidcClientId,
     OidcClientSecret = Environment.GetEnvironmentVariable("HORUS_OIDC_SECRET") ?? cfg.OidcClientSecret,
     OidcJwksJson = Environment.GetEnvironmentVariable("HORUS_OIDC_JWKS") ?? cfg.OidcJwksJson,
+    // M4·RBAC 监考员看板 OIDC 登录(dashboard client)env 覆盖
+    AdminAuthMode = Environment.GetEnvironmentVariable("HORUS_ADMIN_AUTH_MODE") ?? cfg.AdminAuthMode,
+    OidcDashboardClientId = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_CLIENT_ID") ?? cfg.OidcDashboardClientId,
+    OidcDashboardClientSecret = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_SECRET") ?? cfg.OidcDashboardClientSecret,
+    OidcDashboardRedirectUri = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_REDIRECT") ?? cfg.OidcDashboardRedirectUri,
 };
 
 // ---- 解析数据目录与 DB 数据源 ----

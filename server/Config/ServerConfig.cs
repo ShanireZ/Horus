@@ -52,6 +52,34 @@ public sealed record ServerConfig
     /// OIDC token 端点(从 issuer 拼,去尾斜杠 + /oauth/token)。
     [JsonIgnore]
     public string? OidcTokenEndpoint => string.IsNullOrEmpty(OidcIssuer) ? null : OidcIssuer!.TrimEnd('/') + "/oauth/token";
+    /// OIDC 授权端点(建监考员登录 URL 用)。
+    [JsonIgnore]
+    public string? OidcAuthorizeEndpoint => string.IsNullOrEmpty(OidcIssuer) ? null : OidcIssuer!.TrimEnd('/') + "/oauth/authorize";
+
+    // ---- M4·RBAC:监考员看板 OIDC 登录(cpplearn dashboard web client·取代静态 adminToken·见 m4-identity-oidc.md §10)----
+    /// 管理端鉴权模式:"token"(默认·静态 adminToken·M1-M3 原样) | "oidc"(仅 cpplearn 长老 OIDC 会话·R3 无令牌后门)。
+    public string AdminAuthMode { get; init; } = "token";
+    /// cpplearn dashboard web client_id(如 horus-dashboard)。AdminAuthMode=oidc 必配。
+    public string? OidcDashboardClientId { get; init; }
+    /// dashboard client_secret 明文(仅联调;生产用 Enc 或 env HORUS_OIDC_DASHBOARD_SECRET)。Server 持有,浏览器从不经手。
+    public string? OidcDashboardClientSecret { get; init; }
+    /// dashboard client_secret DPAPI 密文(与视觉/采集 secret 同机制)。
+    public string? OidcDashboardClientSecretEnc { get; init; }
+    /// dashboard 回调 URI(须与 cpplearn 注册的 OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致,如 https://<服务器>/cb)。
+    public string? OidcDashboardRedirectUri { get; init; }
+    /// 管理会话有效期(分钟):监考员登录后凭证寿命,建议 ≥ 考试时长。默认 180。
+    public int AdminSessionMinutes { get; init; } = 180;
+
+    [JsonIgnore]
+    public bool DashboardOidcEnabled => string.Equals(AdminAuthMode, "oidc", StringComparison.OrdinalIgnoreCase);
+
+    // ---- HTTPS(远端监考工作站 OIDC 回调须 https;自签证书启动生成/加载)----
+    /// 自签证书 pfx 路径(相对 DataDir)。留空则在 DataDir 下自动生成 horus-https.pfx。仅当 Urls 含 https 时生效。
+    public string? HttpsCertPath { get; init; }
+    /// 自签证书 pfx 密码(留空=无密码)。
+    public string? HttpsCertPassword { get; init; }
+    /// 自签证书额外 SAN 主机/IP(逗号分隔),如服务器 LAN IP / 主机名(localhost/127.0.0.1 自动含)。
+    public string? HttpsSanHosts { get; init; }
 
     // ---- 视觉分析(L2:视觉 LLM 取代 OCR + L3 Logo,合并单一视觉级)----
     /// 视觉分析器:留空/"off" = 关(默认) | "mock"(确定性·测试联调) | "openai"(OpenAI 兼容端点)。
@@ -114,7 +142,7 @@ public sealed record ServerConfig
     public bool KeystrokeAuthEnabled => Ksk is not null;
 
     [JsonIgnore]
-    public bool AdminAuthEnabled => !string.IsNullOrEmpty(AdminToken);
+    public bool AdminAuthEnabled => !string.IsNullOrEmpty(AdminToken) || DashboardOidcEnabled;
 
     [JsonIgnore]
     public bool VisionEnabled => !string.IsNullOrWhiteSpace(VisionProvider)
