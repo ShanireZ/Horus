@@ -11,7 +11,7 @@
 ## 构建 / 测试
 ```bash
 dotnet build ../Horus.sln -c Debug     # 全量(含 Agent，走 net8.0-windows)
-dotnet test  ../Horus.sln -c Debug     # 端到端测试(92 项)
+dotnet test  ../Horus.sln -c Debug     # 端到端测试(130 项)
 ```
 
 ## 运行
@@ -46,9 +46,13 @@ dotnet run -c Debug                                # 或运行已发布 exe
 
 **看板 / 复核（只读 + 写）**
 - `GET  /api/exams` · `/api/exams/{examId}/seats` · `/{examId}/suspicious?status=` · `/{examId}/events?seatId=&limit=`
-- `GET  /api/images/{imageId}`（webp 字节）· `/api/images/{imageId}/meta`
+- `GET  /api/images/{imageId}`（webp 字节）· `/api/images/{imageId}/meta` — live 未命中**自动回落 archive 库 + 冷存**（归档考试证据仍可取证）。
+- `GET  /api/exams/{examId}/integrity` — 哈希链完整性离线审计（`sigVerified` 标注是否验签；psk 未配时 `ok` 仅表锚点自洽+链连续）。
+- `GET  /api/archive/exams/{examId}` — 归档考试只读复核（汇总 + 裁决 + 关键事件 + 证据图列表）。
 - `POST /api/exams`（建考试+座位）· `/api/exams/{examId}/end` · `/api/suspicious/{id}/decide`（人工裁决）
 - `POST /api/exams/{examId}/config` — 下发**配置热更新**给该考试在线 Agent（白名单/阈值/截图参数），返回 `pushedTo`；新连/重连 Agent 在 hello 时补推。
+- `POST /api/agents/{agentId}/capture` — 监考员点名抓图：向在线 Agent 推 `capture_now`，返回 `pushed`。
+- `POST /api/archive/run` — 手动触发归档作业（后台亦每 `archiveScanIntervalHours` 自动跑）。
 
 ## 实现进度（见 architecture §15）
 - **M1 已实现**：ingest 落库 / 幂等去重 / 图片存盘去重 / HMAC 验签 / 可疑队列 / 看板 + 人工裁决 + Agent 采集/握手/续传/断线重连。

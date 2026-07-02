@@ -34,9 +34,12 @@ public static class IntegrityAudit
 
     public sealed record Report(
         string ExamId, int TotalEvents, int TotalHashOk, int TotalChainOk, int TotalUnverifiable, int TotalRestartBoundaries,
-        IReadOnlyList<AgentChain> Agents)
+        bool SigVerified, IReadOnlyList<AgentChain> Agents)
     {
         public bool Ok => Agents.All(a => a.Ok);
+        // 诚实标注(第三轮 D6):psk=null(联调/未配 PSK)时**从未验签**,ok:true 只代表"锚点自洽 + 链连续",
+        // **不代表**未被持 PSK 者篡改。sigVerified=false 时消费方(看板/运维)须知这是"未验签的绿"。
+        public string? Note => SigVerified ? null : "未验签(psk 未配置):ok 仅表锚点自洽+链连续,不含 sig 校验;生产须配 PSK";
     }
 
     private sealed record Row(
@@ -130,7 +133,7 @@ public static class IntegrityAudit
                 hashMiss, chainMiss));
         }
 
-        return new Report(examId, totalEvents, totalHashOk, totalChainOk, totalUnverifiable, totalRestart, agents);
+        return new Report(examId, totalEvents, totalHashOk, totalChainOk, totalUnverifiable, totalRestart, psk is not null, agents);
     }
 
     private static string Short(string h) => h.Length <= 12 ? h : h[..12] + "…";
