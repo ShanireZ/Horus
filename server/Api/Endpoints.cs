@@ -57,6 +57,8 @@ public static class Endpoints
             mode = cfg.DashboardOidcEnabled ? "oidc" : "token",
             authRequired = cfg.AdminAuthEnabled,
             loginUrl = "/admin/login",
+            // 采集面鉴权模式(psk/oidc/both):看板据此在 both 灰度期高亮仍走 PSK 的座位。
+            collectAuthMode = cfg.AuthMode,
         }));
 
         // ---- 考前连通性 / 配置预检(admin 门内):监考员开考前一键自查,防 fail-closed 当天翻车。----
@@ -151,7 +153,38 @@ public static class Endpoints
                 $"{noWl}/{actives.Count} 个 active 考试未下发白名单 → 非黑名单站/进程 server_risk 退回靠 Agent 自报(§10.1 缺口)");
             else Add("whitelist", "ok", "白名单覆盖", $"全部 {actives.Count} 个 active 考试已下发白名单");
 
-            return Results.Json(new { ok = fails == 0, fails, warns, checks, activeExams });
+            // 6) both→oidc 灰度迁移状态(go/no-go:切 oidc 前须全部在线座位已走 OIDC,否则这些座位会被拒)。
+            int onlineTotal = 0, onlineOidc = 0;
+            if (cfg.OidcEnabled)
+            {
+                double now2 = Now(), cut2 = now2 - cfg.OnlineWindowSeconds;
+                (onlineTotal, onlineOidc) = db.Read(conn =>
+                {
+                    long tot = Scalar(conn,
+                        "SELECT COUNT(DISTINCT seat_id) FROM agent_heartbeats WHERE ts>=@cut AND exam_id IN (SELECT exam_id FROM exams WHERE status='active')",
+                        ("@cut", cut2));
+                    long oidc = Scalar(conn,
+                        @"SELECT COUNT(DISTINCT h.seat_id) FROM agent_heartbeats h WHERE h.ts>=@cut
+                            AND h.exam_id IN (SELECT exam_id FROM exams WHERE status='active')
+                            AND EXISTS (SELECT 1 FROM oidc_sessions s WHERE s.exam_id=h.exam_id AND s.seat_id=h.seat_id AND s.expires_at>@now)",
+                        ("@cut", cut2), ("@now", now2));
+                    return ((int)tot, (int)oidc);
+                });
+            }
+            if (cfg.AuthMode == "psk")
+                Add("migration", "ok", "迁移状态", "采集面 = psk(未启用 OIDC · A1 栽赃/A2 seq 抢占残留 · 见 §10.1)");
+            else if (cfg.AuthMode == "oidc")
+                Add("migration", "ok", "迁移状态", "采集面 = oidc(PSK 已拒 · A1/A2 已闭合)");
+            else   // both
+            {
+                int pskSeats = onlineTotal - onlineOidc;
+                if (onlineTotal == 0) Add("migration", "ok", "迁移状态", "both 灰度期 · 当前无在线座位");
+                else if (pskSeats > 0) Add("migration", "warn", "迁移状态",
+                    $"both 灰度期:{onlineOidc}/{onlineTotal} 在线座位已走 OIDC,仍有 {pskSeats} 座位走 PSK → 未全部迁移,勿切 oidc(切了这些座位会被拒)");
+                else Add("migration", "ok", "迁移状态", $"both 灰度期:全部 {onlineTotal} 在线座位已走 OIDC → 可择机切 oidc 强制");
+            }
+
+            return Results.Json(new { ok = fails == 0, fails, warns, checks, activeExams, migration = new { onlineTotal, onlineOidc } });
         });
 
         // ---- 登出:清 cookie(oidc 模式一并销毁服务器端管理会话)----
@@ -238,6 +271,9 @@ public static class Endpoints
                         agentId = NullStr(r, 3),
                         machineId = NullStr(r, 4),
                         online,
+                        // M4→both→oidc 灰度可见性:有 OIDC 会话=已迁移;在线但无会话=仍走 PSK(未迁移);离线=offline。
+                        // 近似判据(有会话行即视为 OIDC;2h 考试内会话不过期,足够指示迁移覆盖)。
+                        authMode = sub is not null ? "oidc" : (online ? "psk" : "offline"),
                         lastHeartbeatTs = lastHb,
                         lastEventTs = lastEv,
                         maxRecentRisk = r.GetInt32(7),

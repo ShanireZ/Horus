@@ -186,7 +186,8 @@
     autoRefresh: true,
     pollTimer: null,
     inflight: false,          // 防止轮询叠加
-    drawerMode: null          // "seat" | "suspicious"
+    drawerMode: null,         // "seat" | "suspicious"
+    collectAuthMode: null     // 采集面模式(psk/oidc/both):both 灰度期高亮 PSK 座位
   };
 
   var POLL_MS = 5000;
@@ -208,6 +209,9 @@
     //   · 401 → api() 里的 handleUnauthorized() 自动弹门要令牌。
     // 即使本地已存令牌也照此流程：让服务器裁决，而不是前端预判。
     hideLoginGate();
+    // 取一次采集面模式(both 灰度期看板要高亮 PSK 座位);失败静默(默认不高亮)。
+    fetch("/api/authmode", { credentials: "same-origin" }).then(function (r) { return r.json(); })
+      .then(function (j) { if (j && j.collectAuthMode) state.collectAuthMode = j.collectAuthMode; }).catch(function () {});
     loadExams();
   }
 
@@ -256,6 +260,7 @@
     return fetch("/api/authmode", { credentials: "same-origin", headers: { "Accept": "application/json" } })
       .then(function (r) { return r.json(); })
       .then(function (j) {
+        if (j && j.collectAuthMode) state.collectAuthMode = j.collectAuthMode;
         var oidc = !!(j && j.mode === "oidc");
         var form = $("#loginForm"), btn = $("#oidcLoginBtn");
         var title = $("#loginTitle"), hint = $("#loginHint");
@@ -550,9 +555,14 @@
         ? '<span title="采集健康告警" style="position:absolute;top:.3rem;left:.3rem;background:#f9e2af;color:#1e1e2e;'
           + 'font-size:.7rem;font-weight:700;border-radius:.4rem;padding:.05rem .3rem">⚠' + s.healthAlerts + '</span>'
         : "";
+      // both 灰度期:仍走 PSK 的在线座位高亮(未迁移到 OIDC),切 oidc 前据此逐个确认。
+      var pskTag = (state.collectAuthMode === "both" && s.authMode === "psk")
+        ? '<span title="仍走 PSK（未迁移到 OIDC）" style="position:absolute;bottom:.3rem;left:.3rem;background:#89b4fa;color:#1e1e2e;'
+          + 'font-size:.62rem;font-weight:700;border-radius:.35rem;padding:.03rem .25rem">PSK</span>'
+        : "";
 
       el.innerHTML =
-        badge + offlineTag + healthTag +
+        badge + offlineTag + healthTag + pskTag +
         '<span class="seat__id">' + esc(s.seatId) + "</span>" +
         '<span class="seat__name">' + esc(dash(s.displayName)) + "</span>" +
         '<span class="seat__meta">风险 ' + dash(s.maxRecentRisk) +
@@ -796,6 +806,8 @@
         idRows +
         "<dt>Agent</dt><dd class='mono'>" + esc(dash(s.agentId)) + "</dd>" +
         "<dt>机器</dt><dd class='mono'>" + esc(dash(s.machineId)) + "</dd>" +
+        "<dt>采集鉴权</dt><dd>" + (s.authMode === "oidc" ? "OIDC（已迁移）"
+          : s.authMode === "psk" ? "<span style='color:#89b4fa'>PSK（未迁移）</span>" : "离线") + "</dd>" +
         "<dt>在线</dt><dd>" + (s.online ? "在线" : "离线") + "</dd>" +
         "<dt>最后心跳</dt><dd class='mono'>" + fmtTime(s.lastHeartbeatTs) + "</dd>" +
         "<dt>最近事件</dt><dd class='mono'>" + fmtTime(s.lastEventTs) + "</dd>" +

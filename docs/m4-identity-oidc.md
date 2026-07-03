@@ -1,7 +1,7 @@
 # M4 身份层 —— cpplearn OIDC 接入 · 取代共享 PSK（设计与任务计划）
 
 - 项目：**Horus** 局域网考试监考系统 · 里程碑：**M4 身份层（健壮性/信任模型）**
-- 日期：2026-07-02（RBAC 增补 2026-07-03）· 状态：**采集面 OIDC + RBAC(S8/S9) 均已实现·151 测试全绿·真机 https smoke 通过**（cpplearn 两批改动待 owner commit）
+- 日期：2026-07-02（RBAC 增补 + §11 灰度验收清单 2026-07-03）· 状态：**采集面 OIDC + RBAC(S8/S9) + both→oidc 灰度验收清单/工具均已实现·180 测试全绿·真机 smoke 通过**（cpplearn 两批改动待 owner commit）
 - 关联：[architecture-v0.2.md §10.1](architecture-v0.2.md)（事件通道跨身份栽赃残留）· [api-contract-m1.md](api-contract-m1.md)
 - 依据：对 `Cpplearn`（OIDC provider）与 `Round1`（OIDC 客户端样板）的只读调研（见文末《调研证据》）
 
@@ -246,6 +246,67 @@ M4 的 OIDC 只把身份用在**采集面防栽赃**（A1/A2）；身份的**授
 - **fail-closed**：`oidc` 模式下 cpplearn 不可达 → 监考员无法登录管理端（无令牌后门）。缓解=考前先登录（会话 = 考试时长，登录后不依赖 cpplearn）+ 连通性预检。
 - **自签证书信任**：监考机首用需点过浏览器警告或预装证书（受管机建议预装）。
 - **cpplearn 两批改动未 commit**（owner 自提）：`user_type` claim（claims.js/account.js/identityCore.js）+ `horus-dashboard` web client（oauth.js/db.js/.env.example/测试）。
+
+---
+
+## 11. both → oidc 现场灰度验收清单（采集面迁移 runbook）
+
+> **适用范围**：本清单是**采集面** `AuthMode`（psk → both → oidc）的现场迁移验收，闭合 A1 跨身份栽赃 + A2 seq 抢占。**与管理端 `AdminAuthMode`（token→oidc·§10 RBAC）是两条独立轴**，互不阻塞——可各自灰度。
+
+### 11.1 前置条件（考前一次性）
+- [ ] cpplearn 已部署 horus **native** client（`OAUTH_HORUS_*` env·§4）+ 重启,`/.well-known/jwks.json` 公网可达。
+- [ ] Horus config：`oidcIssuer` / `oidcClientId=horus-client` / `oidcClientSecret`(或 Enc/env) / `oidcSessionMinutes ≥ 考试时长`；建议内联 `oidcJwksJson` 或确保启动可拉 JWKS。
+- [ ] 学员机有默认浏览器（OIDC 授权走系统浏览器·A4 无浏览器降级兜底）。
+- [ ] **考前连通性预检**：看板「预检」按钮 / `GET /api/preflight` 全绿——重点看 `collect_auth`、`issuer_reachable`（fail-closed 关键）、`migration` 三项。
+
+### 11.2 阶段与判据
+
+| 阶段 | `authMode` | 行为 | 进入判据 |
+|---|---|---|---|
+| M4.0 | `psk` | 全场共享 PSK（**A1/A2 残留**） | 现状 |
+| M4.1 灰度 | `both` | Server **同时**接受旧 PSK 连接与新 OIDC 会话·可逐座位迁移·随时回退 | 前置条件全绿 |
+| M4.2 强制 | `oidc` | **拒 PSK**·身份绑会话·**A1/A2 闭合** | 11.4 go 判据全满足 |
+
+### 11.3 灰度执行（现场·both 模式）
+1. Horus config `authMode=both` + 重启（旧 PSK 座位不受影响,照常上报）。
+2. 试点 1 台学员机走 **OIDC 登录**（Agent `oidcMode`）→ 看板该座位抽屉「采集鉴权=OIDC（已迁移）」、`identity` 画像正确、事件/图片/击键正常。
+3. 分批把学员机切到 OIDC 登录。**看板灰度可见性**：`both` 模式下**仍走 PSK 的在线座位显示蓝色「PSK」角标**（`authMode=psk`）——据此逐个盯迁移进度。
+4. 全量 both：所有在线座位无「PSK」角标（都已 OIDC）。预检 `migration` 项转 **ok（全部 N 在线座位已走 OIDC）**。
+
+### 11.4 切 oidc 强制（go/no-go）
+**go 判据（全满足才切）**：
+- [ ] 预检 `migration` = **ok**：`onlineOidc == onlineTotal`（`GET /api/preflight` 的 `migration.{onlineTotal,onlineOidc}` 相等·看板无「PSK」角标）。
+- [ ] both 模式下**已稳定跑完至少一场**真实考试（OIDC 登录/续传/断线重连/看板画像均无异常）。
+- [ ] `issuer_reachable` = ok（考试期 cpplearn 稳定可达）。
+- [ ] 现场有**物理监考**在场（fail-closed 兜底：见 11.6）。
+
+**操作**：`authMode=oidc` + 重启。
+**验收**：
+- [ ] 新 Agent OIDC 登录 → 采集正常；
+- [ ] **PSK 连接被拒**（旧 PSK 握手 → 401 `session_required`）——A1/A2 闭合的直接证据；
+- [ ] 抽查一座位：看板 `identity` 画像正确、事件时间线连续。
+
+### 11.5 A1/A2 闭合的现场验证（可选·验收增强）
+- **A1（栽赃）**：拿 A 的会话给 B 的座位发事件（改事件体 seatId）→ 服务器 `identity_mismatch` 拒（`OidcIngestAuthTests` 已端到端锁定）。
+- **A2（seq 抢占）**：用他人 agentId 抢 seq → 会话身份不符被拒。
+- 两者在 `oidc` 模式由「事件体身份 == 会话身份」强制关闭；`both` 模式下**PSK 座位仍留 A1/A2 残留**（故 go 判据要求全部迁 OIDC 才切）。
+
+### 11.6 回退预案（fail-closed 兜底）
+- **考试当天 cpplearn 不可达 / OIDC 基建故障**：`oidc` 模式下 Agent 无法认证 → 无法采集。**临时回退 `authMode=both`**（放开 PSK）保监考不中断,**记响亮告警 + 事后复盘**；极端情况回 `psk`。
+- 缓解:考前连通性预检 + 会话有效期 = 考试时长（登录后不依赖 cpplearn）+ 物理监考在场。
+
+### 11.7 工具支撑（本仓已实现）
+- **预检** `GET /api/preflight`（看板「预检」按钮）：`migration` 项给灰度 go/no-go（both 期在线座位 OIDC 覆盖）+ `issuer_reachable`/`collect_auth`。
+- **看板灰度可见性**：`both` 模式在线 PSK 座位蓝色「PSK」角标 + 座位抽屉「采集鉴权」行（OIDC 已迁移 / PSK 未迁移 / 离线）。
+- **`GET /api/authmode`** 返回 `collectAuthMode`（前端据此决定是否高亮）。
+
+### 11.8 常见故障排查
+| 现象 | 可能原因 | 处置 |
+|---|---|---|
+| Agent OIDC 登录失败 | cpplearn 不可达 / horus client 未部署 / redirect 端口被占 | 预检 `issuer_reachable`；查 cpplearn `OAUTH_HORUS_*`；A4 降级 |
+| 启动即 `kid 未命中 JWKS` | cpplearn RS256 密钥轮换 | 同步新 JWKS（内联或重拉）+ 重启 |
+| 切 oidc 后大量座位掉线 | 还有座位没迁就切了 | 立即回 `both`；看板补迁「PSK」角标座位后再切 |
+| 座位一直显示「PSK」角标 | 该机仍走 PSK 登录 | 切该 Agent 到 `oidcMode` 重登 |
 
 ---
 

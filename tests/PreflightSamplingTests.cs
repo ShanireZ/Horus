@@ -1,6 +1,8 @@
 using System.Net;
+using System.Net.WebSockets;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Horus.Contracts;
 using Horus.Server.Ingest;
 using Xunit;
 
@@ -83,6 +85,50 @@ public class PreflightTests
         await PushWhitelist(http, "E9");
         JsonElement after = await AdminGet(http, "/api/exams");
         Assert.True(after[0].GetProperty("hasWhitelist").GetBoolean());
+    }
+
+    [Fact]
+    public async Task authmode_带采集面模式()
+    {
+        using var app = new TestApp(adminAuth: true);   // 采集面默认 psk
+        JsonElement am = JsonSerializer.Deserialize<JsonElement>(
+            await app.CreateClient().GetStringAsync("/api/authmode"));
+        Assert.Equal("psk", am.GetProperty("collectAuthMode").GetString());
+    }
+
+    [Fact]
+    public async Task 预检_psk模式_迁移状态ok且提示残留()
+    {
+        using var app = new TestApp(adminAuth: true);
+        JsonElement pf = await AdminGet(app.CreateClient(), "/api/preflight");
+        string? level = null, detail = null;
+        foreach (JsonElement c in pf.GetProperty("checks").EnumerateArray())
+            if (c.GetProperty("id").GetString() == "migration") { level = c.GetProperty("level").GetString(); detail = c.GetProperty("detail").GetString(); }
+        Assert.Equal("ok", level);
+        Assert.Contains("psk", detail);
+    }
+
+    [Fact]
+    public async Task 座位authMode_PSK在线_与_闲置offline()
+    {
+        using var app = new TestApp(adminAuth: true);
+        HttpClient http = app.CreateClient();
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/exams")
+        { Content = JsonContent.Create(new { examId = "E1", name = "T", seats = new[] { new { seatId = "A07" }, new { seatId = "A08" } } }) };
+        req.Headers.Add("X-Horus-Admin", TestApp.AdminToken);
+        (await http.SendAsync(req)).EnsureSuccessStatusCode();
+
+        // A07 走 PSK 发一条事件 → 在线;A08 闲置 → offline
+        using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
+        await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}"); await Ws.ReceiveAsync(ws);
+        double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+        await Ws.SendAsync(ws, Ws.SignedEventTs("E1", "A07", "ag-A07", "PC", SignalType.WindowFocus, new() { ["title"] = "t" }, 0, 1, now));
+        await Ws.ReceiveAsync(ws);
+
+        JsonElement seats = await AdminGet(http, "/api/exams/E1/seats");
+        var by = seats.EnumerateArray().ToDictionary(s => s.GetProperty("seatId").GetString()!);
+        Assert.Equal("psk", by["A07"].GetProperty("authMode").GetString());
+        Assert.Equal("offline", by["A08"].GetProperty("authMode").GetString());
     }
 }
 

@@ -258,6 +258,30 @@ public class OidcIngestAuthTests
         JsonElement ack = await Ws.ReceiveAsync(ws);
         Assert.Equal("ack", ack.GetProperty("type").GetString());
     }
+
+    [Fact]
+    public async Task both灰度_OIDC座位_authMode为oidc且迁移覆盖全量()
+    {
+        using var app = new TestApp(authMode: "both");
+        HttpClient http = app.CreateClient();
+        await CreateExamAsync(http);
+        var (sid, k) = MakeSession(app, "A07", "ag-A07");
+        using WebSocket ws = await ConnectWithSessionAsync(app, "A07", "ag-A07", sid, k);
+        await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
+        await Ws.ReceiveAsync(ws);
+        double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+        await Ws.SendAsync(ws, Ws.SignedEventTs("E1", "A07", "ag-A07", "PC", SignalType.Heartbeat,
+            new() { ["status"] = "alive" }, 0, 1, now, psk: k));
+        await Ws.ReceiveAsync(ws);
+
+        JsonElement seats = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/seats");
+        Assert.Equal("oidc", seats[0].GetProperty("authMode").GetString());   // 有会话 → 已迁移
+
+        // 迁移覆盖:1/1 在线座位走 OIDC → 可切 oidc。
+        JsonElement pf = await http.GetFromJsonAsync<JsonElement>("/api/preflight");
+        Assert.Equal(1, pf.GetProperty("migration").GetProperty("onlineTotal").GetInt32());
+        Assert.Equal(1, pf.GetProperty("migration").GetProperty("onlineOidc").GetInt32());
+    }
 }
 
 /// M4·RBAC·S8:监考员看板 OIDC 登录 + 管理端授权（长老进 / 弟子拒 / 过期拒 / 静态令牌退役）。
