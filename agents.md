@@ -93,7 +93,7 @@ dotnet test  Horus.sln -c Debug      # 运行端到端测试
 - ✅ **全场远程登出** `POST /api/exams/{id}/logout`(admin 门内):`SessionStore.RevokeByExam` 吊销全部采集会话 + 推 `session_revoked` + **强断在线连接**(吊销会话的旧 WS 不能续用),重连 401;`POST /api/exams/{id}/end` 现在向在线 Agent 推 `exam_ended`(响应带 notified)。
 - ✅ **换场缓冲卫生**:新 OIDC 会话开始即 `LocalBuffer.PurgeSession`(旧 K_sess 已死,残留缓冲必 bad_sig 永不 ack → 每次重连重放-被拒死循环);seq 高水位保留 + hello_ack 对齐不撞旧 seq。
 - ✅ **默认管理员运行**:agent exe 内嵌 `requireAdministrator` manifest(双击即 UAC 提权,免右键);⚠️ requireAdministrator 程序**不能**挂 Run 键自启(系统静默跳过)—— 本就不常驻自启(考试前手动打开),保活场景走 `install-service`(LocalSystem 无 UAC)。看门狗单例键改 `agentId_machineId`(与考试解耦)。
-- ✅ **Agent 近零配置**(owner 决策 2026-07-03):`AgentConfig` 所有字段内置默认,**配置文件整个可选**(缺文件即全默认)。authMode=oidc / issuer=betaoi.cc / 采集参数 / 白名单(洛谷 + 常见 IDE)全烤默认;**agentId/machineId 留空由主机名自动推导**(machineId=主机名·agentId="ag-"+主机名·`ApplyIdentityDefaults`);examId/seatId/psk 在 oidc 无需配。**唯一去不掉 = 服务器地址**(Agent 连上前须知道服务器在哪·无法下发)→ owner 拍板烤固定默认 `192.168.1.10:8080`(IP 不符才覆盖);dist/client 只留这一项。★STJ init 集合属性:配置提供的 whitelist **替换**(非合并)内置默认。
+- ✅ **Agent 近零配置**(owner 决策 2026-07-03):`AgentConfig` 所有字段内置默认,**配置文件整个可选**(缺文件即全默认)。authMode=oidc / issuer=betaoi.cc / 采集参数 / 白名单(洛谷 + 常见 IDE)全烤默认;**agentId/machineId 留空由主机名自动推导**(machineId=主机名·agentId="ag-"+主机名·`ApplyIdentityDefaults`);examId/seatId/psk 在 oidc 无需配。**唯一去不掉 = 服务器地址**(Agent 连上前须知道服务器在哪·无法下发)→ owner 拍板烤固定默认 `192.168.32.145:8080`(IP 不符才覆盖);**dist/client 不再带任何配置文件**(纯默认零配置)。★STJ init 集合属性:配置提供的 whitelist **替换**(非合并)内置默认。
 
 ## 提交约定
 默认不提交，除非用户明确要求。commit 信息用中文，简洁。

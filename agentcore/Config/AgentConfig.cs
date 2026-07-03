@@ -19,8 +19,8 @@ public sealed class AgentConfig
     public string MachineId { get; set; } = "";
 
     // 服务器地址:内置默认 = 考场服务器(IP 不符才在配置覆盖)。唯一常需现场核对的字段。
-    public string ServerWsBase { get; init; } = "ws://192.168.1.10:8080";     // ws://host:port
-    public string ServerHttpBase { get; init; } = "http://192.168.1.10:8080"; // http://host:port
+    public string ServerWsBase { get; init; } = "ws://192.168.32.145:8080";     // ws://host:port
+    public string ServerHttpBase { get; init; } = "http://192.168.32.145:8080"; // http://host:port
     public byte[]? Psk { get; init; }                     // 预共享 HMAC 密钥(base64)。OIDC 模式可省。
 
     // ---- M4 身份层:OIDC 登录(取代共享 PSK)----
