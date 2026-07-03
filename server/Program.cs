@@ -41,27 +41,32 @@ string cfgPath = Environment.GetEnvironmentVariable("HORUS_CONFIG")
                  ?? (args.Length > 0 ? args[0] : "server.config.json");
 ServerConfig cfg = ServerConfig.Load(cfgPath);
 
-// ---- 自动加密:配置文件里若填了明文 visionApiKey,启动时加密为 visionApiKeyEnc 并清除明文(密文回写) ----
-// UX = 运维直接在配置栏输入明文 key,启动一次即自动加密落盘、明文不再存在。DPAPI 机器绑定,仅 Windows。
-if (OperatingSystem.IsWindows() && File.Exists(cfgPath) && !string.IsNullOrEmpty(cfg.VisionApiKey))
+// ---- 自动加密:配置文件里若填了明文密钥,启动时加密为对应 *Enc 字段并清除明文(密文回写) ----
+// UX = 运维直接在配置栏输入明文,启动一次即自动加密落盘、明文不再存在。DPAPI 机器绑定,仅 Windows。
+// 覆盖三个密钥:视觉 key + 采集 OIDC client_secret + 看板 dashboard client_secret。
+// ★须在 env 覆盖**之前**跑(只加密文件里的明文,绝不把 env 注入的秘密写回磁盘)。逐个独立回写(互不影响)。
+if (OperatingSystem.IsWindows() && File.Exists(cfgPath))
 {
-    try
+    // 返回密文(成功)或 null(空/失败)。失败只告警不阻断,本次仍用内存明文。
+    string? Encrypt(string plainField, string encField, string? plaintext)
     {
-        string? enc = SecretProtect.EncryptVisionKeyInFile(cfgPath, cfg.VisionApiKey!);
-        if (enc is not null)
+        if (string.IsNullOrEmpty(plaintext)) return null;
+        try
         {
-            cfg = cfg with { VisionApiKeyEnc = enc, VisionApiKey = null };
-            Console.WriteLine("[Horus] 已将配置里的明文 visionApiKey 加密为 visionApiKeyEnc 并回写(明文已清除)。");
+            string? enc = SecretProtect.EncryptSecretInFile(cfgPath, plainField, encField, plaintext!);
+            if (enc is not null) { Console.WriteLine($"[Horus] 已将配置里的明文 {plainField} 加密为 {encField} 并回写(明文已清除)。"); return enc; }
+            Console.Error.WriteLine($"[Horus] {plainField} 自动加密失败(配置非 JSON 对象);本次仍用内存明文,请检查配置。");
         }
-        else
-        {
-            Console.Error.WriteLine("[Horus] 明文 key 自动加密失败(配置非 JSON 对象);本次仍用内存中的明文,请检查配置。");
-        }
+        catch (Exception ex) { Console.Error.WriteLine($"[Horus] {plainField} 自动加密回写失败(如文件只读):{ex.Message}。本次仍用内存明文。"); }
+        return null;
     }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"[Horus] 明文 key 自动加密回写失败(如文件只读):{ex.Message}。本次仍用内存中的明文。");
-    }
+
+    if (Encrypt("visionApiKey", "visionApiKeyEnc", cfg.VisionApiKey) is string ve)
+        cfg = cfg with { VisionApiKeyEnc = ve, VisionApiKey = null };
+    if (Encrypt("oidcClientSecret", "oidcClientSecretEnc", cfg.OidcClientSecret) is string oe)
+        cfg = cfg with { OidcClientSecretEnc = oe, OidcClientSecret = null };
+    if (Encrypt("oidcDashboardClientSecret", "oidcDashboardClientSecretEnc", cfg.OidcDashboardClientSecret) is string de)
+        cfg = cfg with { OidcDashboardClientSecretEnc = de, OidcDashboardClientSecret = null };
 }
 
 cfg = cfg with
