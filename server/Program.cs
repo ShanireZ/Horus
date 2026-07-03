@@ -216,9 +216,12 @@ if (cfg.EmbedEnabled)
     else if (string.Equals(cfg.EmbedProvider, "onnx", StringComparison.OrdinalIgnoreCase))
     {
         // 本地 ONNX CLIP(MiMo 无 embeddings 端点·走本地·零出网)。模型部署提供。
-        string modelPath = cfg.EmbedOnnxModelPath ?? throw new InvalidOperationException("embedProvider=onnx 需配 embedOnnxModelPath");
+        // ★约定文件名 = model.onnx(与 HF 仓 Qdrant/clip-ViT-B-32-vision 原名一致,下载免改名):
+        //   embedOnnxModelPath 留空 → 默认找 dataDir\model.onnx;也可显式指定相对(按 dataDir)或绝对路径。
+        string modelPath = string.IsNullOrWhiteSpace(cfg.EmbedOnnxModelPath) ? "model.onnx" : cfg.EmbedOnnxModelPath!;
         string modelFull = Path.IsPathRooted(modelPath) ? modelPath : Path.Combine(dataDir, modelPath);
-        if (!File.Exists(modelFull)) throw new InvalidOperationException($"ONNX CLIP 模型不存在:{modelFull}(embedOnnxModelPath)");
+        if (!File.Exists(modelFull))
+            throw new InvalidOperationException($"ONNX CLIP 模型不存在:{modelFull}(约定:下载 model.onnx 原名放进 dataDir;或用 embedOnnxModelPath 指定路径)");
         builder.Services.AddSingleton<Horus.Server.Analysis.Search.IImageEmbedder>(sp =>
             new Horus.Server.Analysis.Search.OnnxClipEmbedder(
                 modelFull, cfg.EmbedOnnxInput, cfg.EmbedOnnxOutput, cfg.EmbedDim,

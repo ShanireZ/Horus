@@ -89,9 +89,10 @@
   //   部署前可 `Horus.Server probe-embed [model]` 探测某云端点是否有图像 embedding 模型。
   "embedProvider": "",
   // --- provider=onnx(本地 CLIP·推荐·零出网)---
-  // embedOnnxModelPath: CLIP ViT-B/32 **图像编码器** ONNX(512 维)路径(相对 dataDir 或绝对)。只需下一个 .onnx,预处理/解码器已内置。
+  // embedOnnxModelPath: CLIP ViT-B/32 **图像编码器** ONNX(512 维)。★约定文件名 = model.onnx:
+  //   **留空 = 默认找 dataDir\model.onnx**(与推荐仓原始文件名一致,下载免改名);放别处才显式填(相对 dataDir 或绝对)。
   //   下载(推荐·MIT·352MB): https://huggingface.co/Qdrant/clip-ViT-B-32-vision/resolve/main/model.onnx
-  //   小体积备选:            https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model.onnx (或 vision_model_quantized.onnx int8)
+  //   小体积备选(下载后**改名 model.onnx**): https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model.onnx (或 vision_model_quantized.onnx int8)
   "embedOnnxModelPath": "",
   // embedOnnxInput / embedOnnxOutput: 张量名。**留空即可**——自动选(输入取首个;输出优先名含 embed/pool 的·正确取嵌入向量)。特殊模型用 Netron 看输出名再填。
   "embedOnnxInput": "",
