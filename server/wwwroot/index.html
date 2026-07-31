@@ -24,8 +24,8 @@
           placeholder="在此粘贴管理令牌" aria-label="管理令牌" autocomplete="off" />
         <button type="submit" class="btn btn--primary login-submit" id="tokenSubmit">进入</button>
       </form>
-      <!-- M4·RBAC：OIDC 模式下用 cpplearn 账号登录（仅长老/监考员可进），默认隐藏，authmode=oidc 时显示 -->
-      <a class="btn btn--primary login-submit" id="oidcLoginBtn" href="/admin/login" hidden>用 cpplearn 账号登录（监考员）</a>
+      <!-- M4·RBAC：OIDC 模式下用 wentian 账号登录（仅长老/监考员可进），默认隐藏，authmode=oidc 时显示 -->
+      <a class="btn btn--primary login-submit" id="oidcLoginBtn" href="/admin/login" hidden>用 wentian 账号登录（监考员）</a>
     </div>
   </div>
 
@@ -71,7 +71,7 @@
         <span class="toggle__track"><span class="toggle__thumb"></span></span>
         <span class="toggle__text">自动刷新</span>
       </label>
-      <button id="preflightBtn" class="btn btn--ghost" title="开考前自查：鉴权配置 / cpplearn 可达 / 白名单覆盖">预检</button>
+      <button id="preflightBtn" class="btn btn--ghost" title="开考前自查：鉴权配置 / wentian 可达 / 白名单覆盖">预检</button>
       <button id="manualRefresh" class="btn btn--ghost" title="立即刷新">刷新</button>
       <span class="topbar__clock" id="clock" title="最后刷新时间">--:--:--</span>
       <button id="logoutBtn" class="btn btn--ghost" title="退出监考员登录，返回登录门">退出登录</button>

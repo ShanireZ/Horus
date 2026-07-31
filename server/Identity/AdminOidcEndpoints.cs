@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 namespace Horus.Server.Identity;
 
 /// M4·RBAC·S8:监考员看板 OIDC 登录端点(**不走 admin gate** —— 本就是获取管理凭证的入口,且不在 /api 下)。
-///   GET /admin/login —— 重定向到 cpplearn 授权页(生成 state+nonce+PKCE)。
-///   GET /cb          —— cpplearn 回调:换 token → 验 id_token → 须 elder → 建管理会话 → 种 HttpOnly cookie → 跳看板。
+///   GET /admin/login —— 重定向到 wentian 授权页(生成 state+nonce+PKCE)。
+///   GET /cb          —— wentian 回调:换 token → 验 id_token → 须 elder → 建管理会话 → 种 HttpOnly cookie → 跳看板。
 public static class AdminOidcEndpoints
 {
     public static void MapAdminOidc(this WebApplication app)

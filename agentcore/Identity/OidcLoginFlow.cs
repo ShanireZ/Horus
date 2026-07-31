@@ -17,7 +17,7 @@ public sealed record IngestCredential(byte[] Key, string? SessionId);
 /// Agent 采用它们填事件体/握手 —— 配置文件里已无这两项。
 public sealed record OidcSession(string SessionId, byte[] KSess, double ExpiresAt, string ProfileJson, string ExamId, string SeatId);
 
-/// M4·A1:Agent 登录流(拓扑 A·Server-Broker)。系统浏览器走 cpplearn 授权码 + PKCE,回调落本机 loopback,
+/// M4·A1:Agent 登录流(拓扑 A·Server-Broker)。系统浏览器走 wentian 授权码 + PKCE,回调落本机 loopback,
 /// 拿 code + PKCE verifier + 自己的 ECDH 公钥 POST 到 **Horus Server /oidc/exchange**(Server 持 secret 换 token+验签),
 /// 得 sessionId + serverEcdhPub → 本地派生 K_sess(私钥不过网)。见 docs/m4-identity-oidc.md §3.1。
 public static class OidcLoginFlow
@@ -35,14 +35,14 @@ public static class OidcLoginFlow
         using ECDiffieHellman agentKey = SessionCrypto.NewEphemeralKey();
         string agentPub = SessionCrypto.ExportPublicKeyB64(agentKey);
 
-        // 2) loopback 监听(动态端口;native app 下 cpplearn 端口无关匹配)
+        // 2) loopback 监听(动态端口;native app 下 wentian 端口无关匹配)
         int port = FreePort();
         string redirectUri = $"http://127.0.0.1:{port}/cb";
         using var listener = new HttpListener();
         listener.Prefixes.Add($"http://127.0.0.1:{port}/cb/");   // HttpListener 前缀需尾斜杠
         listener.Start();
 
-        // 3) 构造 authorize URL,开系统浏览器(已登 cpplearn → near-无感)
+        // 3) 构造 authorize URL,开系统浏览器(已登 wentian → near-无感)
         string authorizeUrl =
             $"{cfg.OidcIssuer!.TrimEnd('/')}/oauth/authorize?response_type=code" +
             $"&client_id={Uri.EscapeDataString(cfg.OidcClientId)}" +

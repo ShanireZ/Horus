@@ -32,18 +32,18 @@ public sealed record ServerConfig
     /// 启动成功后自动在默认浏览器打开管理端看板(仅 Windows 交互式运行的真 exe;测试宿主/输出重定向/服务化不弹)。
     public bool OpenDashboard { get; init; } = true;
 
-    // ---- M4 身份层:cpplearn OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
+    // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
     /// 采集面鉴权模式:"psk"(默认·共享 PSK·M1-M3 原样) | "oidc"(仅 OIDC 会话) | "both"(共存·迁移期回退网)。
     public string AuthMode { get; init; } = "psk";
-    /// cpplearn OIDC issuer(如 https://betaoi.cc)。OIDC 模式必配。
+    /// wentian OIDC issuer(如 https://betaoi.cc)。OIDC 模式必配。
     public string? OidcIssuer { get; init; }
-    /// Horus 在 cpplearn 注册的 client_id(默认 horus-client)。
+    /// Horus 在 wentian 注册的 client_id(默认 horus-client)。
     public string? OidcClientId { get; init; }
     /// client_secret 明文(仅联调;生产用 OidcClientSecretEnc 或 env HORUS_OIDC_SECRET)。Server-Broker:secret 只在服务器。
     public string? OidcClientSecret { get; init; }
     /// client_secret DPAPI 密文(与视觉 key 同机制,见 SecretProtect)。
     public string? OidcClientSecretEnc { get; init; }
-    /// cpplearn 的 JWKS(RSA 公钥)内联 JSON:局域网离线验 id_token 用,免运行时拉取。留空则启动时从 issuer 拉取 + 缓存。
+    /// wentian 的 JWKS(RSA 公钥)内联 JSON:局域网离线验 id_token 用,免运行时拉取。留空则启动时从 issuer 拉取 + 缓存。
     public string? OidcJwksJson { get; init; }
     /// OIDC 会话有效期(分钟):派发的采集凭证寿命,建议 ≥ 考试时长。默认 180。
     public int OidcSessionMinutes { get; init; } = 180;
@@ -59,16 +59,16 @@ public sealed record ServerConfig
     [JsonIgnore]
     public string? OidcAuthorizeEndpoint => string.IsNullOrEmpty(OidcIssuer) ? null : OidcIssuer!.TrimEnd('/') + "/oauth/authorize";
 
-    // ---- M4·RBAC:监考员看板 OIDC 登录(cpplearn dashboard web client·取代静态 adminToken·见 m4-identity-oidc.md §10)----
-    /// 管理端鉴权模式:"token"(默认·静态 adminToken·M1-M3 原样) | "oidc"(仅 cpplearn 长老 OIDC 会话·R3 无令牌后门)。
+    // ---- M4·RBAC:监考员看板 OIDC 登录(wentian dashboard web client·取代静态 adminToken·见 m4-identity-oidc.md §10)----
+    /// 管理端鉴权模式:"token"(默认·静态 adminToken·M1-M3 原样) | "oidc"(仅 wentian 长老 OIDC 会话·R3 无令牌后门)。
     public string AdminAuthMode { get; init; } = "token";
-    /// cpplearn dashboard web client_id(如 horus-dashboard)。AdminAuthMode=oidc 必配。
+    /// wentian dashboard web client_id(如 horus-dashboard)。AdminAuthMode=oidc 必配。
     public string? OidcDashboardClientId { get; init; }
     /// dashboard client_secret 明文(仅联调;生产用 Enc 或 env HORUS_OIDC_DASHBOARD_SECRET)。Server 持有,浏览器从不经手。
     public string? OidcDashboardClientSecret { get; init; }
     /// dashboard client_secret DPAPI 密文(与视觉/采集 secret 同机制)。
     public string? OidcDashboardClientSecretEnc { get; init; }
-    /// dashboard 回调 URI(须与 cpplearn 注册的 OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致,如 https://<服务器>/cb)。
+    /// dashboard 回调 URI(须与 wentian 注册的 OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致,如 https://<服务器>/cb)。
     public string? OidcDashboardRedirectUri { get; init; }
     /// 管理会话有效期(分钟):监考员登录后凭证寿命,建议 ≥ 考试时长。默认 180。
     public int AdminSessionMinutes { get; init; } = 180;

@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Identity;
 
-/// M4·S2:OIDC 采集会话(取代共享 PSK)。经 /oidc/exchange 建立,绑定 cpplearn 身份到 (exam,seat,agent),
+/// M4·S2:OIDC 采集会话(取代共享 PSK)。经 /oidc/exchange 建立,绑定 wentian 身份到 (exam,seat,agent),
 /// 携派生密钥 k_sess 供采集签名。DB 持久化(服务器重启不丢·考试中途不强制重登)。见 docs/m4-identity-oidc.md §5 S2/S3。
 public sealed record HorusSession(
     string SessionId, string ExamId, string SeatId, string AgentId, string? MachineId,

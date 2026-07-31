@@ -45,7 +45,7 @@ public class OidcTokenValidatorTests
     {
         using RSA rsa = RSA.Create(2048);
         var v = new OidcTokenValidator(BuildJwks(rsa, Kid), Issuer, Audience);
-        // 手工造一枚**不含 user_type** claim 的合法 id_token(模拟旧 cpplearn / 未请求 horus_profile)。
+        // 手工造一枚**不含 user_type** claim 的合法 id_token(模拟旧 wentian / 未请求 horus_profile)。
         string payload = JsonSerializer.Serialize(new { iss = Issuer, aud = Audience, sub = "sub-x", exp = Now() + 3600, nonce = "n1" });
         OidcClaims c = v.Validate(SignJwt(rsa, Kid, payload), "n1", Now());
         Assert.Equal("disciple", c.UserType);   // fail-safe:缺省绝不当监考员
@@ -383,7 +383,7 @@ public class AdminOidcTests
     }
 
     [Fact]
-    public async Task admin_login_重定向到cpplearn授权页()
+    public async Task admin_login_重定向到wentian授权页()
     {
         using var app = new TestApp(adminOidc: true);
         HttpClient http = NoRedirect(app);

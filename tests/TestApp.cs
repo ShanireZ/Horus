@@ -43,7 +43,7 @@ public sealed class TestApp : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("HORUS_OIDC_ISSUER", (oidc || adminOidc) ? "https://oidc.test" : null);
         Environment.SetEnvironmentVariable("HORUS_OIDC_CLIENT_ID", oidc ? "horus-client" : null);
         Environment.SetEnvironmentVariable("HORUS_OIDC_JWKS", (oidc || adminOidc) ? DummyJwks : null);
-        // M4·RBAC:adminOidc → 管理端走 cpplearn 长老 OIDC(dashboard client),静态令牌退役。
+        // M4·RBAC:adminOidc → 管理端走 wentian 长老 OIDC(dashboard client),静态令牌退役。
         Environment.SetEnvironmentVariable("HORUS_ADMIN_AUTH_MODE", adminOidc ? "oidc" : null);
         Environment.SetEnvironmentVariable("HORUS_OIDC_DASHBOARD_CLIENT_ID", adminOidc ? "horus-dashboard" : null);
         Environment.SetEnvironmentVariable("HORUS_OIDC_DASHBOARD_SECRET", adminOidc ? "dash-secret" : null);

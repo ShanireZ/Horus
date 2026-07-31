@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Horus.Server.Identity;
 
-/// M4·RBAC·S8:监考员看板 **OIDC 登录**(cpplearn dashboard web client·标准服务器端授权码 + PKCE 流)。
+/// M4·RBAC·S8:监考员看板 **OIDC 登录**(wentian dashboard web client·标准服务器端授权码 + PKCE 流)。
 /// 与采集面 <see cref="OidcExchange"/> 的差异:用 dashboard client(aud 独立)、**要求 user_type='elder'**、建 <see cref="AdminSession"/>(无 ECDH/无 exam-seat 绑定)。
 /// 拓扑 R5:回调走 https(远端监考工作站可达),client_secret 只在服务器。见 docs/m4-identity-oidc.md §10.3。
 public sealed class AdminOidcFlow
@@ -31,7 +31,7 @@ public sealed class AdminOidcFlow
         _http = http; _validator = dashboardValidator; _sessions = sessions; _cfg = cfg; _clientSecret = clientSecret; _log = log;
     }
 
-    /// 起登录:生成 state+nonce+PKCE,存 pending,返回要重定向到的 cpplearn 授权 URL。
+    /// 起登录:生成 state+nonce+PKCE,存 pending,返回要重定向到的 wentian 授权 URL。
     public string BeginLogin(double now)
     {
         Prune(now);

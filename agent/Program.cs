@@ -87,7 +87,7 @@ internal static class Program
             OidcSession session;
             try
             {
-                Console.WriteLine("[horus-agent] 检测到活跃考试:即将打开系统浏览器完成 cpplearn 授权…");
+                Console.WriteLine("[horus-agent] 检测到活跃考试:即将打开系统浏览器完成 wentian 授权…");
                 using var loginHttp = new HttpClient();
                 session = OidcLoginFlow.LoginAsync(cfg, loginHttp, ct: cts.Token).GetAwaiter().GetResult();
             }

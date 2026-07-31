@@ -20,31 +20,31 @@
   "allowInsecure": false,
   // 启动成功自动在默认浏览器打开管理端看板(仅交互式运行的真 exe;服务化/脚本运行不弹)。
   "openDashboard": true,
-  // ---- M4 身份层:cpplearn OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
+  // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
   // authMode: "psk"(默认·共享 PSK) | "oidc"(仅 OIDC 会话) | "both"(迁移共存·可回退 PSK)。
   "authMode": "psk",
-  // OIDC issuer(cpplearn 对外根域名,如 https://betaoi.cc)。oidc/both 必配。
+  // OIDC issuer(wentian 对外根域名,如 https://betaoi.cc)。oidc/both 必配。
   "oidcIssuer": "",
-  // Horus 在 cpplearn 注册的 client_id(与 cpplearn OAUTH_HORUS_CLIENT_ID 一致)。
+  // Horus 在 wentian 注册的 client_id(与 wentian OAUTH_HORUS_CLIENT_ID 一致)。
   "oidcClientId": "horus-client",
   // client_secret:**把明文填进 oidcClientSecret,启动一次即自动加密为 oidcClientSecretEnc 并清空明文**(同 visionApiKey 机制·DPAPI)。
   //   也可 `Horus.Server protect-secret <secret>` 预生成密文直接填 Enc、明文留空;或 env HORUS_OIDC_SECRET 注入(不落盘)。Server-Broker:secret 只在本服务器。
   "oidcClientSecret": "",
   "oidcClientSecretEnc": "",
-  // cpplearn JWKS(RSA 公钥)内联 JSON:局域网离线验 id_token。留空则启动时从 issuer 拉取并缓存(需启动时可达 issuer)。
+  // wentian JWKS(RSA 公钥)内联 JSON:局域网离线验 id_token。留空则启动时从 issuer 拉取并缓存(需启动时可达 issuer)。
   "oidcJwksJson": "",
   // OIDC 会话有效期(分钟):派发的采集凭证寿命,建议 ≥ 考试时长。默认 180。
   "oidcSessionMinutes": 180,
-  // ---- M4·RBAC:监考员看板 OIDC 登录(cpplearn dashboard web client·取代静态 adminToken·见 §10)----
-  // adminAuthMode: "token"(默认·静态 adminToken) | "oidc"(仅 cpplearn 长老 OIDC·R3 无令牌后门·监考员走 /admin/login)。
+  // ---- M4·RBAC:监考员看板 OIDC 登录(wentian dashboard web client·取代静态 adminToken·见 §10)----
+  // adminAuthMode: "token"(默认·静态 adminToken) | "oidc"(仅 wentian 长老 OIDC·R3 无令牌后门·监考员走 /admin/login)。
   "adminAuthMode": "token",
-  // cpplearn dashboard web client_id(与 cpplearn OAUTH_HORUS_DASHBOARD_CLIENT_ID 一致)。adminAuthMode=oidc 必配。
+  // wentian dashboard web client_id(与 wentian OAUTH_HORUS_DASHBOARD_CLIENT_ID 一致)。adminAuthMode=oidc 必配。
   "oidcDashboardClientId": "horus-dashboard",
   // dashboard client_secret:**填明文进 oidcDashboardClientSecret,启动自动加密为 oidcDashboardClientSecretEnc 并清空明文**(同上)。
   //   亦可 protect-secret 预生成填 Enc,或 env HORUS_OIDC_DASHBOARD_SECRET 注入。
   "oidcDashboardClientSecret": "",
   "oidcDashboardClientSecretEnc": "",
-  // dashboard 回调 URI:须与 cpplearn OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致(如 https://<服务器>/cb)。
+  // dashboard 回调 URI:须与 wentian OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致(如 https://<服务器>/cb)。
   "oidcDashboardRedirectUri": "",
   // 管理会话有效期(分钟):监考员登录后凭证寿命,建议 ≥ 考试时长。默认 180。
   "adminSessionMinutes": 180,

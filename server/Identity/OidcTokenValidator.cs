@@ -4,8 +4,8 @@ using System.Text.Json;
 
 namespace Horus.Server.Identity;
 
-/// M4·S1:cpplearn OIDC **id_token 离线验签**(RS256 JWT)。**纯 BCL,无第三方 JWT 依赖**——
-/// 局域网服务器预置 cpplearn JWKS(RSA 公钥)后即可离线验,不必每次回调 cpplearn(见 docs/m4-identity-oidc.md §5 S1)。
+/// M4·S1:wentian OIDC **id_token 离线验签**(RS256 JWT)。**纯 BCL,无第三方 JWT 依赖**——
+/// 局域网服务器预置 wentian JWKS(RSA 公钥)后即可离线验,不必每次回调 wentian(见 docs/m4-identity-oidc.md §5 S1)。
 ///
 /// 验:①header.alg=RS256 且 kid 命中 JWKS ②RSA-PKCS1-SHA256 签名 over "header.payload" ③iss==配置 issuer
 ///     ④aud 含本 client_id ⑤exp 未过(含 60s 容差)⑥nonce==登录时下发(防重放)。
@@ -17,7 +17,7 @@ public sealed class OidcTokenValidator
     private readonly string _audience;
     private const int ClockSkewSeconds = 60;
 
-    /// jwksJson:cpplearn `/.well-known/jwks.json` 的原文({keys:[{kty:RSA,n,e,kid,alg}]})。
+    /// jwksJson:wentian `/.well-known/jwks.json` 的原文({keys:[{kty:RSA,n,e,kid,alg}]})。
     public OidcTokenValidator(string jwksJson, string issuer, string audience)
     {
         _issuer = issuer;
@@ -70,8 +70,8 @@ public sealed class OidcTokenValidator
 
         return new OidcClaims(
             Sub: sub!,
-            // M4·RBAC:cpplearn horus_profile 的角色 claim。'elder'=长老=监考员(可进管理端),其余=参考学员(考生)。
-            // **缺省 fail-safe 到 'disciple'**:claim 缺失(旧 cpplearn / 未请求 horus_profile)时按最小权限当考生,绝不误授监考权。
+            // M4·RBAC:wentian horus_profile 的角色 claim。'elder'=长老=监考员(可进管理端),其余=参考学员(考生)。
+            // **缺省 fail-safe 到 'disciple'**:claim 缺失(旧 wentian / 未请求 horus_profile)时按最小权限当考生,绝不误授监考权。
             UserType: NormalizeUserType(Str(payload, "user_type")),
             Username: Str(payload, "username") ?? "",
             Nickname: Str(payload, "nickname") ?? Str(payload, "name") ?? "",
@@ -138,7 +138,7 @@ public sealed class OidcTokenValidator
         => string.Equals(raw, "elder", StringComparison.Ordinal) ? "elder" : "disciple";
 }
 
-/// 验签通过后的 cpplearn 身份 + Horus 富画像(见 cpplearn claims horus_profile)。
+/// 验签通过后的 wentian 身份 + Horus 富画像(见 wentian claims horus_profile)。
 /// UserType:'elder'(长老=监考员)| 'disciple'(参考学员=考生),M4·RBAC 用。
 public sealed record OidcClaims(
     string Sub, string UserType, string Username, string Nickname, string DaoName, string Avatar, string Realm, int RealmLevel, int CombatPower);

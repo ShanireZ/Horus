@@ -256,7 +256,7 @@
      考试管理：开始 / 结束 / 全场登出（后端端点已存在，此处只连 UI）
      ------------------------------------------------------------
        · 开始考试：建一个 active 考试（POST /api/exams）。学员机 Agent 每 5s 轮询
-         /oidc/active-exam，检测到即弹 cpplearn 登录、开始采集。
+         /oidc/active-exam，检测到即弹 wentian 登录、开始采集。
        · 结束考试：POST .../end → 通知在线 Agent 停采、排空缓冲后回待命。
        · 全场登出：POST .../logout → 吊销该考试全部采集会话 + 强断连接（学员须重登）。
      结束 / 全场登出仅当当前考试为「进行中」时可点。
@@ -347,7 +347,7 @@
     $("#loginGate").hidden = false;
     var input = $("#tokenInput");
     input.value = "";
-    // M4·RBAC：据后端鉴权方式切换令牌输入 / cpplearn OIDC 登录按钮；token 模式才聚焦输入框。
+    // M4·RBAC：据后端鉴权方式切换令牌输入 / wentian OIDC 登录按钮；token 模式才聚焦输入框。
     applyAuthMode().then(function (oidc) {
       if (!oidc) setTimeout(function () { try { input.focus(); } catch (e) {} }, 0);
     });
@@ -367,7 +367,7 @@
           if (btn) { btn.hidden = false; btn.href = j.loginUrl || "/admin/login"; }
           if (title) title.textContent = "监考员登录";
           if (hint && !hint.classList.contains("is-error"))
-            hint.textContent = "用 cpplearn 账号登录，仅长老（监考员）可进入监考看板。";
+            hint.textContent = "用 wentian 账号登录，仅长老（监考员）可进入监考看板。";
         } else {
           if (form) form.hidden = false;
           if (btn) btn.hidden = true;
@@ -1059,7 +1059,7 @@
     openDrawer("seat", "座位详情 · " + (s.seatId || ""));
     var body = $("#drawerBody");
 
-    // M4·RBAC：OIDC 登录的 cpplearn 身份画像（未登录/PSK 模式 s.identity 为 null，不渲染这些行）。
+    // M4·RBAC：OIDC 登录的 wentian 身份画像（未登录/PSK 模式 s.identity 为 null，不渲染这些行）。
     var id = s.identity;
     var idRows = id ? (
         "<dt>身份</dt><dd>" + (id.userType === "elder"

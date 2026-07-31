@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Identity;
 
-/// M4·RBAC:监考员看板**管理会话**(cpplearn dashboard OIDC 登录后派发·取代静态 adminToken)。
+/// M4·RBAC:监考员看板**管理会话**(wentian dashboard OIDC 登录后派发·取代静态 adminToken)。
 /// 与采集会话 <see cref="HorusSession"/> 相互独立:此会话不绑 exam/seat/agent、无 k_sess,只承载"某长老已认证进管理端"。
 /// 仅 user_type='elder' 才建会话(弟子在 /cb 被拒,不入表)。gate 校验此表(未过期)→ 放行 /api/*。见 docs/m4-identity-oidc.md §10.3。
 public sealed record AdminSession(

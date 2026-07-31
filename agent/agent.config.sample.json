@@ -11,7 +11,7 @@
   "agentId": "",
   "machineId": "",
 
-  // 采集鉴权:默认 oidc(启动待命,开考弹浏览器登录 cpplearn)。以下三项都有默认,一般不用写。
+  // 采集鉴权:默认 oidc(启动待命,开考弹浏览器登录 wentian)。以下三项都有默认,一般不用写。
   "authMode": "oidc",
   "oidcIssuer": "https://betaoi.cc",
   "oidcClientId": "horus-client",

@@ -24,7 +24,7 @@ cp agent.config.sample.json agent.config.json   # 改好里面的 server 地址/
 ```
 
 **鉴权模式（`authMode`，默认 `oidc`）**：
-- `oidc`（默认·推荐）：**per-user 身份**，登录时经系统浏览器走 cpplearn 授权码 + PKCE，Agent 本地生成临时密钥对（**私钥永不出学员机 / 不过网**），会话密钥 ECDH 派生。无共享 PSK，闭合事件通道栽赃 + seq 抢占（见 [../docs/m4-identity-oidc.md](../docs/m4-identity-oidc.md)）。
+- `oidc`（默认·推荐）：**per-user 身份**，登录时经系统浏览器走 wentian 授权码 + PKCE，Agent 本地生成临时密钥对（**私钥永不出学员机 / 不过网**），会话密钥 ECDH 派生。无共享 PSK，闭合事件通道栽赃 + seq 抢占（见 [../docs/m4-identity-oidc.md](../docs/m4-identity-oidc.md)）。
 - `psk`（迁移期兼容）：全场共享 PSK（base64 的 32 字节）。生成：
   ```powershell
   [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))

@@ -35,7 +35,7 @@ public static class Endpoints
         app.MapPost("/api/login", async (HttpContext ctx) =>
         {
             if (!cfg.AdminAuthEnabled) return Results.Json(new { ok = true, authRequired = false });
-            // M4·RBAC(R3):oidc 模式下静态令牌登录退役,监考员走 cpplearn OIDC(/admin/login),无令牌后门。
+            // M4·RBAC(R3):oidc 模式下静态令牌登录退役,监考员走 wentian OIDC(/admin/login),无令牌后门。
             if (cfg.DashboardOidcEnabled)
                 return Results.Json(new { ok = false, error = "use_oidc_login", loginUrl = "/admin/login" }, statusCode: 400);
             JsonNode? body;
@@ -55,7 +55,7 @@ public static class Endpoints
             return Results.Json(new { ok = true, authRequired = true });
         });
 
-        // ---- 鉴权模式(公开·gate 豁免):前端据此决定登录门显示令牌输入还是 cpplearn OIDC 登录按钮 ----
+        // ---- 鉴权模式(公开·gate 豁免):前端据此决定登录门显示令牌输入还是 wentian OIDC 登录按钮 ----
         app.MapGet("/api/authmode", () => Results.Json(new
         {
             mode = cfg.DashboardOidcEnabled ? "oidc" : "token",
@@ -94,7 +94,7 @@ public static class Endpoints
         });
 
         // ---- 考前连通性 / 配置预检(admin 门内):监考员开考前一键自查,防 fail-closed 当天翻车。----
-        // 检查采集/管理端鉴权配置完整性、cpplearn issuer 可达(JWKS 拉取)、视觉 key、active 考试白名单覆盖(§10.1)。
+        // 检查采集/管理端鉴权配置完整性、wentian issuer 可达(JWKS 拉取)、视觉 key、active 考试白名单覆盖(§10.1)。
         app.MapGet("/api/preflight", async (HttpContext ctx) =>
         {
             var checks = new List<object>();
@@ -128,7 +128,7 @@ public static class Endpoints
             }
             else Add("admin_auth", "ok", "管理端令牌", "adminAuthMode=token(静态令牌·非 OIDC)");
 
-            // 3) cpplearn issuer 可达性(fail-closed 关键:oidc 下不可达 = 当天登录/换 token 失败)
+            // 3) wentian issuer 可达性(fail-closed 关键:oidc 下不可达 = 当天登录/换 token 失败)
             if (cfg.OidcEnabled || cfg.DashboardOidcEnabled)
             {
                 string jwksUrl = cfg.OidcIssuer!.TrimEnd('/') + "/.well-known/jwks.json";
@@ -139,13 +139,13 @@ public static class Endpoints
                     using HttpResponseMessage resp = await http.GetAsync(jwksUrl, ctx.RequestAborted);
                     string body = await resp.Content.ReadAsStringAsync(ctx.RequestAborted);
                     if (resp.IsSuccessStatusCode && body.Contains("\"keys\""))
-                        Add("issuer_reachable", "ok", "cpplearn 可达", "JWKS 拉取成功(" + jwksUrl + ")");
+                        Add("issuer_reachable", "ok", "wentian 可达", "JWKS 拉取成功(" + jwksUrl + ")");
                     else
-                        Add("issuer_reachable", "warn", "cpplearn 可达性", $"JWKS 端点响应异常({(int)resp.StatusCode})");
+                        Add("issuer_reachable", "warn", "wentian 可达性", $"JWKS 端点响应异常({(int)resp.StatusCode})");
                 }
                 catch (Exception ex)
                 {
-                    Add("issuer_reachable", inlineJwks ? "warn" : "fail", "cpplearn 可达性",
+                    Add("issuer_reachable", inlineJwks ? "warn" : "fail", "wentian 可达性",
                         "无法拉取 JWKS:" + ex.Message + (inlineJwks
                             ? "(已配内联 JWKS 可离线验签,但授权/换 token 仍需 issuer 可达)"
                             : "(且未配内联 oidcJwksJson,验签也无兜底)"));
@@ -286,7 +286,7 @@ public static class Endpoints
             return db.Read(conn =>
             {
                 var list = new List<object>();
-                // M4·S6/S7:LEFT JOIN 最近一条 OIDC 会话,看板直呈 cpplearn 身份画像(用户名/昵称/道号/境界/战力/头像)。
+                // M4·S6/S7:LEFT JOIN 最近一条 OIDC 会话,看板直呈 wentian 身份画像(用户名/昵称/道号/境界/战力/头像)。
                 // 性能#2:各相关表**先按 seat_id 各自分组聚合**(hb/ev/hlt/sq 四个 CTE),再与 seats 单次 LEFT JOIN,
                 // 避免"座位 × 多个相关子查询"在 SQLite 内形成的交叉乘积(座位越多放大越明显)。
                 // SQLite 特例:oidc_sessions 用 GROUP BY + MAX(issued_at) 时其余裸列取"最大 issued_at 那一行"的值。

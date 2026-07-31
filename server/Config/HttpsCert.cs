@@ -4,7 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace Horus.Server.Config;
 
-/// M4·RBAC·S8:监考员看板远端 OIDC 回调需 https(cpplearn dashboard client 回调是 HTTPS)。
+/// M4·RBAC·S8:监考员看板远端 OIDC 回调需 https(wentian dashboard client 回调是 HTTPS)。
 /// 局域网无公网域名/证书,故**启动时自签证书**(首用点过浏览器警告或预装证书)。
 /// 仅当 Urls 含 https 时被调用;pfx 落 DataDir 复用(重启不重签,SAN 稳定)。
 public static class HttpsCert

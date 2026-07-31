@@ -24,11 +24,11 @@ public sealed class AgentConfig
     public byte[]? Psk { get; init; }                     // 预共享 HMAC 密钥(base64)。OIDC 模式可省。
 
     // ---- M4 身份层:OIDC 登录(取代共享 PSK)----
-    /// 采集鉴权:"oidc"(默认·经 cpplearn 登录换会话) | "psk"(legacy·须配 psk+examId+seatId)。both 由服务器侧决定。
+    /// 采集鉴权:"oidc"(默认·经 wentian 登录换会话) | "psk"(legacy·须配 psk+examId+seatId)。both 由服务器侧决定。
     public string AuthMode { get; init; } = "oidc";
-    /// cpplearn OIDC issuer。内置默认 = 生产站(自建部署才需覆盖)。
+    /// wentian OIDC issuer。内置默认 = 生产站(自建部署才需覆盖)。
     public string? OidcIssuer { get; init; } = "https://betaoi.cc";
-    /// Horus 在 cpplearn 注册的 client_id(默认 horus-client)。
+    /// Horus 在 wentian 注册的 client_id(默认 horus-client)。
     public string OidcClientId { get; init; } = "horus-client";
     /// 请求的 scope(默认 openid + horus_profile 富画像)。
     public string OidcScope { get; init; } = "openid horus_profile";

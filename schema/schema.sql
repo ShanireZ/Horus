@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS exam_config (
 );
 
 -- M4 身份层:OIDC 采集会话(取代共享 PSK) --------------------
--- Agent 经 cpplearn OIDC 登录后,服务器派发一条会话:绑定 cpplearn 身份(sub + 富画像)到 (exam,seat,agent),
+-- Agent 经 wentian OIDC 登录后,服务器派发一条会话:绑定 wentian 身份(sub + 富画像)到 (exam,seat,agent),
 -- 派生的 k_sess(ECDH·32B base64)作采集签名密钥。事件体身份须 == 本会话绑定值,闭合跨身份栽赃/seq 抢占。
 -- 持久化:服务器重启后会话不丢(考试中途不必强制学员重登)。k_sess 存于可信服务器 DB(同 PSK 的信任面)。
 CREATE TABLE IF NOT EXISTS oidc_sessions (
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS oidc_sessions (
   seat_id      TEXT NOT NULL,
   agent_id     TEXT NOT NULL,
   machine_id   TEXT,
-  sub          TEXT NOT NULL,                          -- cpplearn 稳定身份(UUID)
+  sub          TEXT NOT NULL,                          -- wentian 稳定身份(UUID)
   user_type    TEXT,                                    -- M4·RBAC:'elder'(长老=监考员)| 'disciple'(参考学员=考生)
   username     TEXT, nickname TEXT, dao_name TEXT, avatar TEXT, realm TEXT,
   realm_level  INTEGER, combat_power INTEGER,
@@ -170,12 +170,12 @@ CREATE TABLE IF NOT EXISTS oidc_sessions (
 );
 CREATE INDEX IF NOT EXISTS ix_oidc_sessions_agent ON oidc_sessions(exam_id, agent_id);
 
--- M4·RBAC:监考员看板管理会话(cpplearn dashboard OIDC 登录·取代静态 adminToken) ----
--- 监考员(长老)经 cpplearn 授权码流登录 → 服务器验 id_token(须 user_type='elder')→ 派发管理会话,
+-- M4·RBAC:监考员看板管理会话(wentian dashboard OIDC 登录·取代静态 adminToken) ----
+-- 监考员(长老)经 wentian 授权码流登录 → 服务器验 id_token(须 user_type='elder')→ 派发管理会话,
 -- 种 HttpOnly cookie horus_admin=session_id;admin gate(AdminAuthMode=oidc)校验此表(elder·未过期)。弟子登录被拒(非 elder)。
 CREATE TABLE IF NOT EXISTS admin_sessions (
   session_id   TEXT PRIMARY KEY,
-  sub          TEXT NOT NULL,                          -- cpplearn 稳定身份(UUID)
+  sub          TEXT NOT NULL,                          -- wentian 稳定身份(UUID)
   user_type    TEXT NOT NULL,                          -- 'elder'(监考员);建会话时已强制,弟子不入表
   username     TEXT, nickname TEXT, dao_name TEXT, avatar TEXT, realm TEXT,
   realm_level  INTEGER, combat_power INTEGER,
