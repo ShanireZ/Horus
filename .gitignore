@@ -21,8 +21,11 @@ agent.config.json
 **/agent.config.json
 server.config.json
 **/server.config.json
-# Agent 断网缓冲
-**/buffer/
+# Agent 断网缓冲:运行时目录紧贴 exe(agent/Program.cs 用 AppContext.BaseDirectory/buffer),
+# 即只会落在 agent/bin 或发布物 dist 之下;仅列运行时子目录,
+# 避免笼统 **/buffer/ 在 Windows git 大小写不敏感下误吞源码目录 agentcore/Buffer/。
+agent/bin/**/buffer/
+dist/**/buffer/
 # 服务器运行时:SQLite 库与证据截图
 *.db
 *.db-wal
