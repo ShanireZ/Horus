@@ -43,6 +43,13 @@
 - [tests/](tests/) — 端到端测试（`Horus.Server.Tests`）
 - [Horus.sln](Horus.sln) — 解决方案（4 个项目）
 
+## Cloudflare Web Analytics / RUM 硬约束
+
+- Rocket Loader 保持关闭，Web Analytics / RUM 保持开启。`.betaoi.cc` 公网页面只使用 Cloudflare 自动注入，源码不得重复加载 beacon。
+- `.betaoi.cn` 公网页面手工加载 `https://static.cloudflareinsights.com/beacon.min.js`（`type="module"`），统一公开 site token 为 `c113fb69d7e84d38a645c5160f6f1bda`；运行时 hostname 门控必须排除 `.cc`、localhost、IP 和 LAN，因此本地监考部署不得产生新的分析外联。
+- 任何覆盖 Analytics 公网页面的 CSP 都必须在 `script-src` 放行 `https://static.cloudflareinsights.com`，并在 `connect-src` 放行 `'self' https://cloudflareinsights.com`；现有业务来源只能追加，不能被 Analytics 改造覆盖。
+- 修改看板入口、CSP、配置下发或 loader 时，必须保留 `.cc` 自动 / `.cn` 手工、统一 token、LAN/IP 零采集与单页最多一个 beacon 的合同测试。
+
 ## 构建 / 测试（需 .NET 8 SDK，无需 VS）
 ```
 dotnet build Horus.sln -c Debug      # 全量编译(Agent 走 net8.0-windows)
