@@ -7,6 +7,7 @@ using Horus.Server.Data;
 using Horus.Server.Identity;
 using Horus.Server.Ingest;
 using Horus.Server.Jobs;
+using System.Text.Json;
 
 // ---- 双击运维 UX:未处理异常(fail-closed / 配置错等)给友好中文提示并暂停,仅**真 exe**(非测试宿主)生效 ----
 // 否则双击运行时窗口"黑框一闪"即逝,拒绝启动的原因根本看不见(真机验收实际踩过)。
@@ -98,6 +99,7 @@ cfg = cfg with
     OidcDashboardClientId = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_CLIENT_ID") ?? cfg.OidcDashboardClientId,
     OidcDashboardClientSecret = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_SECRET") ?? cfg.OidcDashboardClientSecret,
     OidcDashboardRedirectUri = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_REDIRECT") ?? cfg.OidcDashboardRedirectUri,
+    CloudflareWebAnalyticsToken = Environment.GetEnvironmentVariable("HORUS_CLOUDFLARE_WEB_ANALYTICS_TOKEN") ?? cfg.CloudflareWebAnalyticsToken,
 };
 
 // ---- 诊断:`Horus.Server probe-embed [model]` —— 复用视觉 key 探测 embeddings 端点(部署前验证按图搜图可用性,不落库不起服务) ----
@@ -296,7 +298,9 @@ app.Use(async (ctx, next) =>
     IHeaderDictionary h = ctx.Response.Headers;
     h["Content-Security-Policy"] =
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
-        "script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+        "script-src 'self' https://static.cloudflareinsights.com; " +
+        "connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com; " +
+        "object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
     h["X-Content-Type-Options"] = "nosniff";
     h["X-Frame-Options"] = "DENY";
     h["Referrer-Policy"] = "no-referrer";
@@ -363,6 +367,11 @@ app.MapAdminOidc();
 app.MapApi();
 
 // ---- 静态看板(wwwroot 单页) ----
+// 公开 token 通过同源脚本配置下发；loader 仅在 betaoi.cn 主机加载 beacon，LAN/IP 保持零分析外联。
+app.MapGet("/cloudflare-web-analytics-config.js", () => Results.Text(
+    "window.__HORUS_CLOUDFLARE_WEB_ANALYTICS_TOKEN=" +
+    JsonSerializer.Serialize(cfg.CloudflareWebAnalyticsToken ?? "") + ";",
+    "application/javascript; charset=utf-8"));
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapFallbackToFile("index.html");

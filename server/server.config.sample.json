@@ -20,6 +20,9 @@
   "allowInsecure": false,
   // 启动成功自动在默认浏览器打开管理端看板(仅交互式运行的真 exe;服务化/脚本运行不弹)。
   "openDashboard": true,
+  // Cloudflare Web Analytics 的公开 site token。仅 betaoi.cn 正式主机手动加载；LAN/IP 不出网。
+  // `.cc` 由 Cloudflare 自动注入，不在这里重复加载。也可用 env HORUS_CLOUDFLARE_WEB_ANALYTICS_TOKEN。
+  "cloudflareWebAnalyticsToken": "c113fb69d7e84d38a645c5160f6f1bda",
   // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
   // authMode: "psk"(默认·共享 PSK) | "oidc"(仅 OIDC 会话) | "both"(迁移共存·可回退 PSK)。
   "authMode": "psk",

@@ -32,6 +32,9 @@ public sealed record ServerConfig
     /// 启动成功后自动在默认浏览器打开管理端看板(仅 Windows 交互式运行的真 exe;测试宿主/输出重定向/服务化不弹)。
     public bool OpenDashboard { get; init; } = true;
 
+    /// Cloudflare Web Analytics 公开 site token。只在 betaoi.cn 正式主机手动加载；LAN/IP 下不出网。
+    public string? CloudflareWebAnalyticsToken { get; init; } = "c113fb69d7e84d38a645c5160f6f1bda";
+
     // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
     /// 采集面鉴权模式:"psk"(默认·共享 PSK·M1-M3 原样) | "oidc"(仅 OIDC 会话) | "both"(共存·迁移期回退网)。
     public string AuthMode { get; init; } = "psk";

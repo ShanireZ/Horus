@@ -220,7 +220,7 @@ L2 现为**视觉 LLM 识图**(取代 OCR,见 §4)。走**云端点**时这是�
 > 完整性说明：清理非关键事件会使原始哈希链**不连续**；归档保留每条关键事件的 `hashSelf` 作为独立锚点，复验以"单条事件内容 ↔ 其 `hashSelf` / `sig`"为准，不再依赖整链连续。
 
 ## 14. 部署形态
-- 服务器：笔记本跑单进程（接收 + 分析 + 看板 Web + SQLite + 文件存储），**对外联网仅供视觉 LLM 识图**（走云端点时；本地自托管则零出网）。
+- 服务器：笔记本跑单进程（接收 + 分析 + 看板 Web + SQLite + 文件存储）。LAN / IP / localhost 访问时，**对外联网仅供视觉 LLM 识图**（走云端点时；本地自托管则零出网）。owner 2026-08-04 另行允许正式 `betaoi.cn` Web 主机启用 Cloudflare Web Analytics / RUM：只有 hostname 属于 `betaoi.cn` 且配置公开 site token 时加载，`.cc` 由 Cloudflare 自动注入；考场内网访问不触发该外联。
 - Agent：考前分发 exe，登录自启、绑定座位号、需管理员权限（采 ETW / UIAutomation / WMI），考后停止。
 
 ## 15. 分期实现

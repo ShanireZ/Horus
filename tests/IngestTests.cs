@@ -374,7 +374,9 @@ public class IngestTests
         Assert.True(r.Headers.Contains("X-Frame-Options"), "缺 X-Frame-Options 头");
         // 断言 CSP **具体指令**(防有人误改成 unsafe-inline / 删关键收紧项而测试仍绿):
         string csp = string.Join(" ", r.Headers.GetValues("Content-Security-Policy"));
-        Assert.Contains("script-src 'self'", csp);       // 脚本仅自身(内联/外链脚本被挡)
+        Assert.Contains("script-src 'self'", csp);       // 同源脚本 + 下方明确允许的 Cloudflare 分析来源
+        Assert.Contains("https://static.cloudflareinsights.com", csp);
+        Assert.Contains("connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com", csp);
         Assert.Contains("object-src 'none'", csp);
         Assert.Contains("base-uri 'none'", csp);
         Assert.Contains("frame-ancestors 'none'", csp);
