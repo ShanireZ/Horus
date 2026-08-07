@@ -56,7 +56,3 @@ public static class OidcJwks
     }
 }
 
-/// 贝塔通 JWKS 原文的 DI 持有者。
-/// ★ 撤权端点要按**两个** client_id 分别试 `aud`(采集面 / 监考台,贝塔通 P83),
-///   因此不能复用某一个已构造好的 <see cref="OidcTokenValidator"/> —— 那个绑死了单一 aud。
-public sealed record BetapassJwks(string Json);

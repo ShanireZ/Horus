@@ -28,14 +28,15 @@ public class BetapassRevokeTests
         RSAParameters p = rsa.ExportParameters(false);
         return JsonSerializer.Serialize(new
         {
-            keys = new[] { new { kty = "RSA", use = "sig", alg = "PS256", kid, n = B64Url(p.Modulus!), e = B64Url(p.Exponent!) } },
+            keys = new[] { new { kty = "RSA", use = "sig", alg = OidcTokenValidator.SigningAlg, kid, n = B64Url(p.Modulus!), e = B64Url(p.Exponent!) } },
         });
     }
 
-    /// 按贝塔通真实形态签:**PS256**(其 P58),claims 含 `jti` 与 `purpose`。
+    /// 按贝塔通真实形态签,claims 含 `jti` 与 `purpose`。
+    /// ★ 算法与 JWKS 里的 `alg` 都**从生产常量派生**,不再写死字面量 —— 见 OidcTests 里同款说明。
     private static string SignNotice(RSA rsa, string aud, string jti, string sub, string purpose)
     {
-        string header = JsonSerializer.Serialize(new { alg = "PS256", typ = "JWT", kid = Kid });
+        string header = JsonSerializer.Serialize(new { alg = OidcTokenValidator.SigningAlg, typ = "JWT", kid = Kid });
         string payload = JsonSerializer.Serialize(new { iss = Issuer, aud, sub, jti, purpose, exp = Now() + 120 });
         string input = B64Url(Encoding.UTF8.GetBytes(header)) + "." + B64Url(Encoding.UTF8.GetBytes(payload));
         byte[] sig = rsa.SignData(Encoding.ASCII.GetBytes(input), HashAlgorithmName.SHA256, RSASignaturePadding.Pss);

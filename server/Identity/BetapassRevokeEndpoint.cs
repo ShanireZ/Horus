@@ -57,7 +57,7 @@ public static class BetapassRevokeEndpoint
             Notice notice;
             try
             {
-                notice = await VerifyAsync(ctx, cfg, bearer);
+                notice = ctx.RequestServices.GetRequiredService<BetapassRevokeVerifier>().Verify(bearer);
             }
             catch (OidcValidationException ex)
             {
@@ -100,42 +100,7 @@ public static class BetapassRevokeEndpoint
         return parts.Length == 2 && parts[0].Equals("Bearer", StringComparison.OrdinalIgnoreCase) ? parts[1] : null;
     }
 
-    /// 验签 + 取 claims。
-    /// ★ 与验 id_token **共用同一套公钥**(贝塔通就是同一套签名密钥),所以复用
-    ///   <see cref="OidcTokenValidator"/> —— 零新增密钥材料,轮转时这条链路自动跟着走。
-    /// ★ `aud` 必须是**本机登记的两个 client_id 之一**;不是就拒。这一条就是「谁都能踢人下线」
-    ///   与「只有贝塔通能踢」的全部差别。
-    private static Task<Notice> VerifyAsync(HttpContext ctx, ServerConfig cfg, string token)
-    {
-        string[] candidates = [.. new[] { cfg.OidcClientId, cfg.OidcDashboardClientId }
-            .Where(one => !string.IsNullOrEmpty(one)).Select(one => one!)];
-        if (candidates.Length == 0) throw new OidcValidationException("本机没有登记任何 client_id");
-
-        string jwks = ctx.RequestServices.GetRequiredService<BetapassJwks>().Json;
-        foreach (string aud in candidates)
-        {
-            try
-            {
-                // 撤权令牌**没有 nonce**(不是登录流程),因此这里传 null 跳过 nonce 校验;
-                // iss / aud / exp / 签名 / alg 五项一个不少。
-                var v = new OidcTokenValidator(jwks, cfg.OidcIssuer!, aud);
-                JsonElement payload = v.ValidatePayload(token, expectedNonce: null,
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0);
-                string jti = Req(payload, "jti");
-                string sub = Req(payload, "sub");
-                // 令牌里的 `purpose` 与报文里的 `reason` 同源,用哪个都行(契约明写)。
-                string reason = Opt(payload, "purpose") ?? "";
-                return Task.FromResult(new Notice(jti, sub, aud, reason));
-            }
-            catch (OidcValidationException)
-            {
-                // aud 不是这一个,试下一个。★ 全部试完仍不过才算失败。
-            }
-        }
-        throw new OidcValidationException("撤权令牌的 aud 不是本机任何一个 client_id");
-    }
-
-    private static bool BodyMatches(JsonElement body, Notice n)
+    internal static bool BodyMatches(JsonElement body, Notice n)
         => body.ValueKind == JsonValueKind.Object
            && Opt(body, "jti") == n.Jti
            && Opt(body, "sub") == n.Sub
@@ -160,10 +125,7 @@ public static class BetapassRevokeEndpoint
             c.ExecuteNonQuery();
         });
 
-    private static string Req(JsonElement o, string k)
-        => Opt(o, k) ?? throw new OidcValidationException($"撤权令牌缺 {k}");
-
-    private static string? Opt(JsonElement o, string k)
+    internal static string? Opt(JsonElement o, string k)
         => o.ValueKind == JsonValueKind.Object && o.TryGetProperty(k, out JsonElement e)
            && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
 }

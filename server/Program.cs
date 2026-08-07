@@ -245,11 +245,16 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<Horus.Server.Analy
 // ---- M4 身份层:OIDC 采集会话(取代共享 PSK)。AuthMode=oidc/both 时启用 ----
 builder.Services.AddSingleton<Horus.Server.Identity.SessionStore>();   // both/oidc 下 ingest 会查会话
 
-// 撤权端点要按**两个** client_id 分别试 aud(采集面 / 监考台),因此把 JWKS 原文单独注册一份。
+// 撤权通知的验签器:要按**两个** client_id 分别试 aud(采集面 / 监考台),而 OidcTokenValidator
+// 构造时绑死单一 aud,故按候选各备一个。★ **单例** —— 每次请求现 new 等于每一发通知都重新
+// 解析 JWKS 并 RSA.Create 若干把,而那些句柄从不 Dispose;端点频率低不会立刻出事,
+// 正因如此也不会有人来修。
 // ★ 与验 id_token 共用同一套公钥 —— 贝塔通就是同一套签名密钥,零新增密钥材料(其 P44 的判据)。
 if (cfg.OidcEnabled || cfg.DashboardOidcEnabled)
-    builder.Services.AddSingleton(new Horus.Server.Identity.BetapassJwks(
-        await Horus.Server.Identity.OidcJwks.LoadAsync(cfg)));
+{
+    string revokeJwks = await Horus.Server.Identity.OidcJwks.LoadAsync(cfg);
+    builder.Services.AddSingleton(new Horus.Server.Identity.BetapassRevokeVerifier(revokeJwks, cfg));
+}
 if (cfg.OidcEnabled)
 {
     if (string.IsNullOrEmpty(cfg.OidcIssuer)) throw new InvalidOperationException("authMode=oidc/both 需配 oidcIssuer");

@@ -224,8 +224,12 @@ public class OidcTokenValidatorTests
     /// 按贝塔通真实的形态签:**PS256**(RSA-PSS · SHA-256)。
     /// ★ 替身的形状就是判据的一部分 —— 这里若仍按旧 wentian 的 RS256 签,
     ///   整套用例会在一个**生产上根本不存在**的算法下全绿,而真接上贝塔通当场全红。
-    private static string SignJwt(RSA rsa, string kid, string payloadJson, string alg = "PS256")
+    /// ★ 默认算法**从生产常量派生**(`OidcTokenValidator.SigningAlg`),不是再写一遍字面量 ——
+    ///   两处各写一份必然漂,而漂了的表现是「测试在一个生产上不存在的算法下全绿」。
+    ///   常量本身由「允许的签名算法只有 PS256 一项」那条钉着,所以这不是把判据交给被测方。
+    private static string SignJwt(RSA rsa, string kid, string payloadJson, string? alg = null)
     {
+        alg ??= OidcTokenValidator.SigningAlg;
         string header = JsonSerializer.Serialize(new { alg, typ = "JWT", kid });
         string signingInput = B64Url(Encoding.UTF8.GetBytes(header)) + "." + B64Url(Encoding.UTF8.GetBytes(payloadJson));
         RSASignaturePadding padding = alg == "PS256" ? RSASignaturePadding.Pss : RSASignaturePadding.Pkcs1;
