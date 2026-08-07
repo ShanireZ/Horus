@@ -50,6 +50,16 @@ public sealed class SessionStore(Db db)
             return c.ExecuteNonQuery();
         });
 
+    /// 按 `sub` 吊销该人的全部采集会话(贝塔通撤权通知·rp-contract)。返回吊销条数。
+    /// ★ 与 <see cref="RevokeByExam"/> 的区别:那条是监考员主动清全场,这条是身份中心告知
+    ///   「这个人的凭据失效了」—— 跨考试、只针对一个人。
+    public int RevokeBySub(string sub)
+        => db.Write(conn =>
+        {
+            using SqliteCommand c = conn.Cmd("DELETE FROM oidc_sessions WHERE sub=@s", ("@s", sub));
+            return c.ExecuteNonQuery();
+        });
+
     /// 按 sessionId 取会话;不存在或**已过期**返回 null(过期即拒,Agent 须重登)。
     public HorusSession? Get(string sessionId, double now)
     {

@@ -47,6 +47,14 @@ public sealed class AdminSessionStore(Db db)
         });
     }
 
+    /// 按 `sub` 吊销该人的全部管理会话(贝塔通撤权通知·rp-contract)。返回吊销条数。
+    public int RevokeBySub(string sub)
+        => db.Write(conn =>
+        {
+            using SqliteCommand c = conn.Cmd("DELETE FROM admin_sessions WHERE sub=@s", ("@s", sub));
+            return c.ExecuteNonQuery();
+        });
+
     /// 登出:删会话(幂等)。
     public void Delete(string sessionId)
     {

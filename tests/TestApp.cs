@@ -25,7 +25,9 @@ public sealed class TestApp : WebApplicationFactory<Program>
     // M4:一份最小合法 JWKS(内联·让 OIDC 模式启动不去拉 issuer)。ingest 测试直接建会话,不走真验签。
     private const string DummyJwks = "{\"keys\":[{\"kty\":\"RSA\",\"use\":\"sig\",\"alg\":\"RS256\",\"kid\":\"test\",\"n\":\"sXchDaQebHnPiGvyDOAT4saGEUetSyo9MKLOoWFsueri23bOdgWp4Dy1WlUzewbgBHod5pcM9H5UGVn9YMcJDp5c\",\"e\":\"AQAB\"}]}";
 
-    public TestApp(bool adminAuth = false, bool keystrokeAuth = false, bool visionMock = false, string? authMode = null, bool adminOidc = false, bool embedMock = false)
+    /// ★ `jwks`:注入一份**真能验签**的 JWKS —— 撤权通知那类用例要用真私钥签令牌打进来。
+    /// 留空则用 <see cref="DummyJwks"/>,它只保证「能构造出验证器」,签不出也验不过任何真令牌。
+    public TestApp(bool adminAuth = false, bool keystrokeAuth = false, bool visionMock = false, string? authMode = null, bool adminOidc = false, bool embedMock = false, string? jwks = null)
     {
         _dataDir = Path.Combine(Path.GetTempPath(), "horus-test-" + Guid.NewGuid().ToString("N")[..12]);
         Directory.CreateDirectory(_dataDir);
@@ -42,7 +44,7 @@ public sealed class TestApp : WebApplicationFactory<Program>
         bool oidc = authMode is "oidc" or "both";
         Environment.SetEnvironmentVariable("HORUS_OIDC_ISSUER", (oidc || adminOidc) ? "https://oidc.test" : null);
         Environment.SetEnvironmentVariable("HORUS_OIDC_CLIENT_ID", oidc ? "horus-client" : null);
-        Environment.SetEnvironmentVariable("HORUS_OIDC_JWKS", (oidc || adminOidc) ? DummyJwks : null);
+        Environment.SetEnvironmentVariable("HORUS_OIDC_JWKS", (oidc || adminOidc) ? (jwks ?? DummyJwks) : null);
         // M4·RBAC:adminOidc → 管理端走 wentian 长老 OIDC(dashboard client),静态令牌退役。
         Environment.SetEnvironmentVariable("HORUS_ADMIN_AUTH_MODE", adminOidc ? "oidc" : null);
         Environment.SetEnvironmentVariable("HORUS_OIDC_DASHBOARD_CLIENT_ID", adminOidc ? "horus-dashboard" : null);

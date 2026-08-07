@@ -185,6 +185,20 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
 );
 CREATE INDEX IF NOT EXISTS ix_admin_sessions_sub ON admin_sessions(sub);
 
+-- 贝塔通撤权通知的幂等台账(其 P44/P69·rp-contract「/internal/revoke」) ----
+-- 贝塔通判成功的口径是 **2xx**,超时只有 5 秒 —— 处理成功但花了 6 秒的一发会被判失败并重投,
+-- 于是同一个 `jti` 必然会来第二次。「反正只会来一次」是错的,幂等不是可选项。
+-- ★ 重投时 `jti` **不变**,所以按它做主键即可;记下处置结果好让重投原样回同一个答案。
+CREATE TABLE IF NOT EXISTS betapass_revocations (
+  jti           TEXT PRIMARY KEY,                      -- 幂等键(贝塔通队列行 id)·重投不变
+  sub           TEXT NOT NULL,                         -- 被撤权的账号(贝塔通稳定身份)
+  client_id     TEXT NOT NULL,                         -- 令牌的 aud:区分撤的是采集面还是监考台
+  reason        TEXT,                                  -- 只用于留痕与提示语,**不参与是否清会话的判断**
+  received_at   REAL NOT NULL,
+  revoked_count INTEGER NOT NULL                       -- 这一发实际清掉几条本地会话
+);
+CREATE INDEX IF NOT EXISTS ix_betapass_revocations_sub ON betapass_revocations(sub);
+
 -- Agent 心跳 / 在线状态 --------------------------------------
 CREATE TABLE IF NOT EXISTS agent_heartbeats (
   agent_id   TEXT NOT NULL,

@@ -42,6 +42,17 @@ public sealed class OidcTokenValidator
 
     public OidcClaims Validate(string idToken, string? expectedNonce, double nowUnix)
     {
+        JsonElement payload = ValidatePayload(idToken, expectedNonce, nowUnix);
+        return ToClaims(payload);
+    }
+
+    /// 只验签与协议 claims,返回原始 payload。
+    /// ★ 抽出来是给**撤权通知**用的(见 <see cref="BetapassRevokeEndpoint"/>):那枚令牌走同一套
+    ///   公钥与同样的 iss/aud/exp/alg 校验,但载荷是 `jti`/`purpose` 而不是身份 claims,
+    ///   且**没有 nonce**(不是登录流程)。**共用这一段而不是另写一份验签**,是为了不让
+    ///   「两处各有一套验签」这种最容易分家的形态出现。
+    public JsonElement ValidatePayload(string idToken, string? expectedNonce, double nowUnix)
+    {
         string[] parts = idToken.Split('.');
         if (parts.Length != 3) throw new OidcValidationException("id_token 结构非法(非 3 段 JWT)");
 
@@ -83,11 +94,15 @@ public sealed class OidcTokenValidator
         if (expectedNonce is not null && Str(payload, "nonce") != expectedNonce)
             throw new OidcValidationException("id_token nonce 不符(疑重放 / 非本次登录)");
 
-        string? sub = Str(payload, "sub");
-        if (string.IsNullOrEmpty(sub)) throw new OidcValidationException("id_token 缺 sub");
+        if (string.IsNullOrEmpty(Str(payload, "sub"))) throw new OidcValidationException("id_token 缺 sub");
+        return payload;
+    }
 
+    private static OidcClaims ToClaims(JsonElement payload)
+    {
+        string sub = Str(payload, "sub")!;
         return new OidcClaims(
-            Sub: sub!,
+            Sub: sub,
             // 真实姓名与用户名走标准 `profile` scope,贝塔通的 claims 出口里本来就有这两项。
             Name: Str(payload, "name") ?? "",
             // ★ 座位标识用它(见 ExamDispatch.SeatFrom)。贝塔通对**未设置用户名的账号直接省略这个 claim**

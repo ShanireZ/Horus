@@ -244,6 +244,12 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<Horus.Server.Analy
 
 // ---- M4 身份层:OIDC 采集会话(取代共享 PSK)。AuthMode=oidc/both 时启用 ----
 builder.Services.AddSingleton<Horus.Server.Identity.SessionStore>();   // both/oidc 下 ingest 会查会话
+
+// 撤权端点要按**两个** client_id 分别试 aud(采集面 / 监考台),因此把 JWKS 原文单独注册一份。
+// ★ 与验 id_token 共用同一套公钥 —— 贝塔通就是同一套签名密钥,零新增密钥材料(其 P44 的判据)。
+if (cfg.OidcEnabled || cfg.DashboardOidcEnabled)
+    builder.Services.AddSingleton(new Horus.Server.Identity.BetapassJwks(
+        await Horus.Server.Identity.OidcJwks.LoadAsync(cfg)));
 if (cfg.OidcEnabled)
 {
     if (string.IsNullOrEmpty(cfg.OidcIssuer)) throw new InvalidOperationException("authMode=oidc/both 需配 oidcIssuer");
@@ -364,6 +370,12 @@ app.MapOidc();
 
 // ---- M4·RBAC:监考员看板 OIDC 登录(/admin/login + /cb·非 /api,不受 admin gate) ----
 app.MapAdminOidc();
+
+// ---- 贝塔通撤权通知接收端(其 P44/P69·rp-contract)。非 /api,不受 admin gate ----
+// ★ **必须始终挂上**:贝塔通判成功的口径是 2xx,而 404/405 与 5xx 一样会被重投 12 次
+//   (「RP 还没实现这个端点」正是最需要重投的情形)。未开 OIDC 时端点自己回 410「别再投了」,
+//   而不是让它落到 404 去被反复敲。
+Horus.Server.Identity.BetapassRevokeEndpoint.Map(app);
 
 // ---- 看板 / 管理 API ----
 app.MapApi();
