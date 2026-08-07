@@ -32,7 +32,13 @@
 ## 目录
 - [docs/architecture-v0.2.md](docs/architecture-v0.2.md) — 总体架构（**权威设计**）
 - [docs/api-contract-m1.md](docs/api-contract-m1.md) — M1 接口契约（Agent↔Server 协议 + 数据模型）
-- [docs/m4-identity-oidc.md](docs/m4-identity-oidc.md) — **M4 身份层**：wentian OIDC 取代共享 PSK（拓扑 A · 闭合 §10.1 栽赃/seq 抢占 · §10 RBAC 角色映射 + 监考员 OIDC 登录）
+- [docs/m4-identity-oidc.md](docs/m4-identity-oidc.md) — **M4 身份层**：OIDC 取代共享 PSK（★ **2026-08-07 起 IdP 是贝塔通不是问天录**，该文档首段有现状订正表；通用契约以 `BetaPass/docs/rp-contract.md` 为准）—— 原文写的是 wentian OIDC（拓扑 A · 闭合 §10.1 栽赃/seq 抢占 · §10 RBAC 角色映射 + 监考员 OIDC 登录）
+- ★★ **接入的身份提供方是「贝塔通 BetaPass」，不是问天录**（2026-08-07 起）。改任何与登录、
+  claims、令牌、端点、撤权有关的东西之前，先读 `BetaPass/docs/rp-contract.md`（**通用 RP 契约、
+  以它为准**）与本仓 `docs/m4-identity-oidc.md` 首段的现状订正表。
+  五条最容易照旧文做错的：**PS256 不是 RS256**（允许清单只有一项）、**端点在根路径**不是 `/oauth/*`、
+  **scope 是 `openid profile`**（`horus_profile` 永不登记）、**身份只有 `sub`/`name`/`username` 三项**
+  （`username` 是**座位标识**不是显示字段）、**看板准入不在本地判**（贝塔通 `horus-admin` 平台开关）。
 - [docs/m5-agent-hardening.md](docs/m5-agent-hardening.md) — **M5 采集端硬化**：保活/防挂起/防遮蔽/防降权限（纯检测=检测+上报+看板健康告警 + 三层保活看门狗·不做内核对抗）
 - [schema/schema.sql](schema/schema.sql) — SQLite **live** DB DDL
 - [schema/schema-archive.sql](schema/schema-archive.sql) — SQLite **archive** DB DDL
@@ -104,7 +110,7 @@ dotnet test  Horus.sln -c Debug      # 运行端到端测试
 
 **M4 身份层 + M5 采集端硬化（承前·补记状态·功能面见对应 docs）**:
 - ✅ **M4 采集面 OIDC 取代共享 PSK**（闭合 §10.1 A1 跨身份栽赃 / A2 seq 抢占）：学员机 wentian per-user 身份，事件体身份 == 会话身份强制一致；`both` 灰度共存、预检判据要求全部迁 OIDC 才切。见 [docs/m4-identity-oidc.md](docs/m4-identity-oidc.md)。
-- ✅ **M4·RBAC 监考员看板 OIDC 登录**：wentian **长老 = 监考员**（elder 才进管理端），弟子 = 考生；缺 `user_type` fail-safe 到 disciple 绝不误授；**移除静态令牌后门**（adminAuthMode=oidc 时）；自签 HTTPS + wentian `horus-dashboard` client。
+- ✅ **监考员看板 OIDC 登录**：★★ **2026-08-07 起准入由贝塔通的 `horus-admin` 平台开关回答**（其 P83），本地**不再判角色** —— `user_type == 'elder'` 那行已整个删除。~~wentian 长老 = 监考员，弟子 = 考生；缺 `user_type` fail-safe 到 disciple 绝不误授~~（**已随 P83 整个消失**）；**移除静态令牌后门**（adminAuthMode=oidc 时，仍然成立）；自签 HTTPS + 贝塔通 `horus-dashboard` client（★ 归属平台 `horus-admin`，`redirect_uri` **每台监考机一条**）。
 - ✅ **M5 采集端硬化**（纯检测 = 检测 + 上报 + 看板健康告警·不做内核对抗）：三层保活（Windows 服务 LocalSystem + 兄弟看门狗互拉 + 心跳告警）+ 4 健康信号（防挂起 `suspected_suspend` / 防遮蔽 `screenshot_obscured` / 防降权限 `capability_degraded` / 服务保活）。见 [docs/m5-agent-hardening.md](docs/m5-agent-hardening.md)。
 
 **M3 续批 · CLIP 按图搜图（已落地）+ 运维 UX 收尾（2026-07-03）**:

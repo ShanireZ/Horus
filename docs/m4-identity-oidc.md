@@ -1,7 +1,53 @@
-# M4 身份层 —— wentian OIDC 接入 · 取代共享 PSK（设计与任务计划）
+# M4 身份层 —— OIDC 接入 · 取代共享 PSK（设计与任务计划）
+
+> ## ★★ 2026-08-07 现状订正 —— 先读这一段，再读下文
+>
+> **本文其余部分停在 2026-07-03，写的是「接入 wentian（问天录）」那一版。**
+> 问天录已降级为普通业务系统、不再是身份提供方，Horus 现在接的是**贝塔通 BetaPass**。
+> 下文的时序图、claims、算法、端点、RBAC 全都**不再是当前契约**。
+>
+> **保留原文不改写**，因为它记着当时的判据与踩过的坑（尤其 §3.2 的凭证机制、
+> §11 的灰度 runbook 仍然有效）。★ **但不要照它排工作，也不要照它写代码。**
+>
+> ### 与下文相比，实际已经变成这样
+>
+> | 项 | 本文原写 | 现在（2026-08-07） | 依据 |
+> |---|---|---|---|
+> | IdP | 问天录 `betaoi.cc` | **贝塔通**，issuer `https://betaoi.cn` | 贝塔通 M7 |
+> | 签名算法 | RS256（RSA-PKCS1） | **PS256（RSA-PSS）**，允许清单**只有一项** | 贝塔通 P58 |
+> | 协议端点 | `/oauth/authorize`、`/oauth/token`、`/.well-known/jwks.json` | **根路径**：`/auth`、`/token`、`/jwks`、`/session/end` | 贝塔通 `docs/oidc-mounting.md` |
+> | 备用域 | 无 | `OidcEndpointBase` —— **端点整套换入口而 issuer 不变** | 贝塔通 P72 |
+> | scope | `openid horus_profile` | **`openid profile`**（`horus_profile` 永不登记） | 贝塔通 P81 |
+> | 身份字段 | 9 项富画像 | **3 项**：`sub` / `name` / `username` | 贝塔通 P81 |
+> | 看板准入 | `user_type == 'elder'`（本地判） | **贝塔通 `horus-admin` 平台开关**（本地不判） | 贝塔通 P83 |
+> | 撤权传播 | 无 | **`/internal/revoke`**（按 `jti` 幂等 · 按 `aud` 分别处置） | 贝塔通 P44 / P69 |
+>
+> ### 三条最容易照旧文做错的
+>
+> 1. ★★ **`username` 不是显示字段，是座位标识**（`ExamDispatch.SeatFrom`）。D4 把它列在
+>    「富展示数据」里，照那个理解会连它一起删掉，于是全场座位号退化成 `sub`。
+>    它现在来自标准 `profile` 的 `preferred_username`，而贝塔通对**未设用户名的账号直接省略
+>    这个 claim**（不发空串），所以回退 `sub` 的分支必须留着。
+> 2. ★★ **D4 那套富画像不是「暂时没接」而是「永远不接」**。贝塔通 §1.1 只管
+>    「账号 × 平台 → 能否访问」，道号/境界/战力属问天录的业务字段。
+>    §10 整章的 `user_type` RBAC 更是被明确点名为**要清除的反面案例**。
+> 3. ★★ **D5「只认 ID Token」仍然成立，但算法变了**。RS256 与 PS256 用**同一把 RSA 公钥**
+>    都验得通 —— 所以「顺手放宽成两种都收」不是兼容性而是**安全问题**，
+>    贝塔通根本签不出 RS256，多出来那条路只服务于攻击者。
+>
+> ### 当前实现落点（读代码从这几处进）
+>
+> - `server/Identity/OidcTokenValidator.cs` —— PS256 离线验签 + `SigningAlg` 常量
+> - `server/Identity/AdminOidcFlow.cs` —— 监考台登录；**准入判据已整个移除**，见其行内说明
+> - `server/Identity/BetapassRevokeEndpoint.cs` + `BetapassRevokeVerifier.cs` —— 撤权接收端
+> - `server/Config/ServerConfig.cs` —— 端点推导与 `OidcEndpointBase`（P72 双域）
+> - `tests/{OidcTests,BetapassRevokeTests,SchemaDriftTests}.cs` —— 契约回归
+> - 对侧权威：`BetaPass/docs/rp-contract.md`（**通用 RP 契约，以它为准**）
+
 
 - 项目：**Horus** 局域网考试监考系统 · 里程碑：**M4 身份层（健壮性/信任模型）**
-- 日期：2026-07-02（RBAC 增补 + §11 灰度验收清单 2026-07-03）· 状态：**采集面 OIDC + RBAC(S8/S9) + both→oidc 灰度验收清单/工具均已实现·180 测试全绿（M4 里程碑时·累计 225 全绿）·真机 smoke 通过**（wentian 两批改动待 owner commit）
+- 日期：2026-07-02（RBAC 增补 + §11 灰度验收清单 2026-07-03）· ★ **2026-08-07 转接贝塔通，见文首订正块**
+- 状态：**采集面 OIDC + both→oidc 灰度清单/工具均已实现**；★ 接入对象已从问天录换成**贝塔通**（PS256 / 根路径端点 / 双域 / 身份三项 / 平台开关准入 / `/internal/revoke`），**298 测试全绿**。~~wentian 两批改动待 owner commit~~ —— 随问天录 OP 退役消失
 - 关联：[architecture-v0.2.md §10.1](architecture-v0.2.md)（事件通道跨身份栽赃残留）· [api-contract-m1.md](api-contract-m1.md)
 - 依据：对 `WenTian`（OIDC provider）与 `Round1`（OIDC 客户端样板）的只读调研（见文末《调研证据》）
 
@@ -22,6 +68,9 @@ M4 用 **wentian OIDC 的 per-user 身份**取代 Horus 现有的**全场共享 
 
 ## 1. 已锁定决策（owner 2026-07-02）
 
+> ★ **D1 / D4 / D5 已被上面那张表取代**：IdP 换成贝塔通、富画像整套不再分发、算法改 PS256。
+> **D2（Server-Broker，secret 只在服务器）与 D3（以 `sub` 为权威身份）仍然成立且更硬了。**
+
 | # | 决策点 | 选定 | 理由 |
 |---|---|---|---|
 | D1 | 考场网络前提 | **能触达公网 wentian**（issuer `https://betaoi.cc`） | 网页判题本就用 wentian 生态，学员机/Server 考试期可达 |
@@ -32,7 +81,11 @@ M4 用 **wentian OIDC 的 per-user 身份**取代 Horus 现有的**全场共享 
 
 ---
 
-## 2. wentian OIDC 现状（硬约束 · 调研结论）
+## 2. ~~wentian OIDC 现状~~（硬约束 · 调研结论）
+
+> ★ **整节已作废**：问天录不再是身份提供方，其 `oidc_clients` / 授权端点都在 M7 下线名单里。
+> 贝塔通的对应事实见 `BetaPass/docs/oidc-mounting.md` 与 `docs/rp-contract.md`。
+> 原文保留只为记住当时的调研方法。
 
 | 维度 | 现状 | 出处 |
 |---|---|---|
@@ -97,7 +150,11 @@ M4 用 **wentian OIDC 的 per-user 身份**取代 Horus 现有的**全场共享 
 
 ---
 
-## 4. wentian 端适配清单（✅ 已实现 · WenTian 仓 · OIDC 测试全绿）
+## 4. ~~wentian 端适配清单~~（✅ 已实现 · WenTian 仓 · OIDC 测试全绿）
+
+> ★ **整节已作废**：那些改动随问天录 OP 退役一并消失（`round1` client 已于 2026-08-07 摘除）。
+> 现在需要的是**在贝塔通后台登记两个平台 + 两个客户端** —— 清单在
+> `BetaPass/handoff/26-8-6-first.md`「第 4 步：stg 上要登记的两家」。
 
 **核心安全保证**：全部改动在 `OAUTH_HORUS_*` env 缺失时**完全 no-op** —— 生产（betaoi）与 Round1 集成零影响。唯一非门控项 `conformIdTokenClaims:false` 对 Round1 **纯加性**（把它已请求的 name/email 补进其 id_token，Round1 本就从 id_token 读）。
 
@@ -199,7 +256,22 @@ M4 用 **wentian OIDC 的 per-user 身份**取代 Horus 现有的**全场共享 
 
 ---
 
-## 10. M4·RBAC —— 角色→权限映射（owner 2026-07-02 拍板 + 实现进度）
+## 10. ~~M4·RBAC —— 角色→权限映射~~（owner 2026-07-02 拍板 + 实现进度）
+
+> ★★ **整章的判据已被贝塔通 P83 取代，且 `user_type` 那套被明确点名为要清除的反面案例。**
+> 「谁能进监考看板」现在由**贝塔通的 `horus-admin` 平台开关**回答：看板客户端归属该平台、
+> 采集端归属 `horus`，没有该平台权限的人**在授权阶段就被拒、换不到 code**，走不到 Horus 的代码里。
+> `AdminOidcFlow` 里那行 `user_type == 'elder'` 已**整个删除**，`AdminSession` 不再有任何角色字段
+> （`SchemaDriftTests` 钉着这一点）。
+>
+> ★ **为什么不是「换一种本地实现」**：判据放在本地就会与身份中心分家，变成同一个问题两个来源 ——
+> 本仓库与贝塔通都反复吃过这个亏。判据完全上移，正是把身份抽离出去的本意。
+>
+> ★ **连带好处**：撤权变精确了 —— 可以「取消某人的监考员资格但保留他作为考生」，
+> 而此前撤 `horus` 是采集端与看板一起断。
+>
+> **下文保留原文**，记着当时的时序与踩过的坑（§10.3 的 R5 拓扑仍然有效且重要：
+> 监考服务器跑在监考电脑上、自签 HTTPS、`redirect_uri` 每台一条）。
 
 M4 的 OIDC 只把身份用在**采集面防栽赃**（A1/A2）；身份的**授权语义**（谁是考生、谁是监考员）此前为零——看板/管理端仍靠**独立的静态 `adminToken`**，与 wentian 身份无任何关联。M4·RBAC 补上这层。
 
@@ -245,6 +317,10 @@ M4 的 OIDC 只把身份用在**采集面防栽赃**（A1/A2）；身份的**授
 > **Horus 端部署配置**（对应 wentian dashboard client）：`adminAuthMode=oidc` · `oidcIssuer`（同采集面）· `oidcDashboardClientId=horus-dashboard` · `oidcDashboardClientSecret`(或 Enc/env `HORUS_OIDC_DASHBOARD_SECRET`) · `oidcDashboardRedirectUri=https://<服务器>/cb`（须与 wentian `OAUTH_HORUS_DASHBOARD_REDIRECT_URIS` 一条精确一致）· Urls 含 https · 可选 `httpsSanHosts=<服务器LAN IP/主机名>`。wentian 侧填 `OAUTH_HORUS_DASHBOARD_CLIENT_ID/SECRET/REDIRECT_URIS` + 重启。
 
 ### 10.4 M4·RBAC 残留（诚实标注）
+
+> ★ 这两条的现状：**自签证书信任仍然成立**；**fail-closed 也仍然成立**，
+> 且贝塔通停服切换当天要特别注意 —— 那段窗口内**没有任何监考机能新登录管理端**。
+> 「wentian 两批改动未 commit」那条已随问天录退役消失。
 - **fail-closed**：`oidc` 模式下 wentian 不可达 → 监考员无法登录管理端（无令牌后门）。缓解=考前先登录（会话 = 考试时长，登录后不依赖 wentian）+ 连通性预检。
 - **自签证书信任**：监考机首用需点过浏览器警告或预装证书（受管机建议预装）。
 - **wentian 两批改动未 commit**（owner 自提）：`user_type` claim（claims.js/account.js/identityCore.js）+ `horus-dashboard` web client（oauth.js/db.js/.env.example/测试）。
