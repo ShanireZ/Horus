@@ -400,6 +400,24 @@ public class AdminOidcTests
     }
 
     [Fact]
+    public async Task 无权限时停在未登录_给一句人话而不是系统错误()
+    {
+        // ★ 贝塔通 P83 之后,「没有监考台权限」在**授权阶段**就被拒,回调带的是
+        //   `error=access_denied` 且**没有 code**。按其 rp-contract「无权限时停在未登录」:
+        //   ① 停在未登录(不种 cookie、不建会话)②必须给一句人话,**不得显示成「系统错误」**。
+        using var app = new TestApp(adminOidc: true);
+        HttpClient http = NoRedirect(app);
+        HttpResponseMessage resp = await http.GetAsync("/cb?error=access_denied&state=whatever");
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.False(resp.Headers.Contains("Set-Cookie"));            // ★ 停在未登录
+        string html = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("监考台", html);                               // 说清是哪个权限
+        Assert.Contains("联系管理员", html);                            // 说清下一步该干什么
+        Assert.DoesNotContain("系统错误", html);
+    }
+
+    [Fact]
     public async Task 无会话_拒管理端()
     {
         using var app = new TestApp(adminOidc: true);

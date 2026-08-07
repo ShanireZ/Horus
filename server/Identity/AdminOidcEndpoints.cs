@@ -25,6 +25,24 @@ public static class AdminOidcEndpoints
         app.MapGet("/cb", async (HttpContext ctx) =>
         {
             if (flow is null) return Results.Json(new { ok = false, error = "admin_oidc_disabled" }, statusCode: 404);
+
+            // ★★ **无权限现在走这条错误回调,不再走「换到令牌之后发现不是长老」**(贝塔通 P83)。
+            //   没有 `horus-admin` 平台权限的账号**在贝塔通的授权阶段就被拒**(其 §3.2),
+            //   于是回调带的是 `error=access_denied` 而**没有 code** —— 拿不到 code、换不到令牌、
+            //   **没有本地会话**。按其 rp-contract「无权限时停在未登录」:只换提示语,
+            //   ★ **必须给一句人话,不得显示成「系统错误」**;
+            //   ★ 再点一次登录会得到**同一个结果**(贝塔通已有会话、秒回、仍然无权限),
+            //     这是对的行为 —— 但别把它做成无限转圈,所以这里是一屏静态页而不是自动重试。
+            string oauthError = ctx.Request.Query["error"].ToString();
+            if (!string.IsNullOrEmpty(oauthError))
+            {
+                string denied = oauthError == "access_denied"
+                    ? "你的账号还没有开通「贝塔天目·监考台」权限，请联系管理员开通后再登录。"
+                    : "贝塔通没有完成这次授权，请重试。";
+                return Results.Content(ErrorPage(denied), "text/html; charset=utf-8",
+                    statusCode: oauthError == "access_denied" ? 403 : 400);
+            }
+
             string code = ctx.Request.Query["code"].ToString();
             string state = ctx.Request.Query["state"].ToString();
             double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
@@ -32,12 +50,9 @@ public static class AdminOidcEndpoints
             AdminOidcFlow.Result res = await flow.CompleteAsync(code, state, now, ctx.RequestAborted);
             if (!res.Ok || res.Session is null)
             {
-                // 弟子(非监考员)明确 403 + 可读页;其余登录错误给通用页(不泄细节)。
-                int status = res.Error == "not_proctor" ? 403 : 400;
-                string msg = res.Error == "not_proctor"
-                    ? "你不是监考员（长老），无权访问 Horus 监考看板。"
-                    : "登录失败，请重试。";
-                return Results.Content(ErrorPage(msg), "text/html; charset=utf-8", statusCode: status);
+                // 走到这里说明拿到了 code 却没换成会话 —— 那是协议/网络层的问题,不是权限问题
+                // (权限问题上面已经拦掉了)。不泄细节。
+                return Results.Content(ErrorPage("登录失败，请重试。"), "text/html; charset=utf-8", statusCode: 400);
             }
 
             // 种管理会话 cookie(HttpOnly·SameSite=Lax 便于登录后 top-level 跳转携带;不设 Secure 因自签 https 亦可,浏览器对 https 会发)。
