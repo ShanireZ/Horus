@@ -5,8 +5,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Horus.Contracts;
+using Horus.Server.Config;
 using Horus.Server.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -21,40 +23,34 @@ public class OidcTokenValidatorTests
     private const string Kid = "test-kid-1";
 
     [Fact]
-    public void 合法id_token_验签通过_只取出标准claims()
+    public void 合法id_token_验签通过_只取出sub()
     {
         using RSA rsa = RSA.Create(2048);
         string jwks = BuildJwks(rsa, Kid);
         var v = new OidcTokenValidator(jwks, Issuer, Audience);
 
         string token = SignJwt(rsa, Kid, Payload(nonce: "n1"));
-        OidcClaims c = v.Validate(token, "n1", Now());
+        OidcSubject s = v.Validate(token, "n1", Now());
 
-        Assert.Equal("sub-abc", c.Sub);
-        Assert.Equal("叶锋", c.Name);             // profile.name = 真实姓名
-        Assert.Equal("ye_feng", c.Username);      // profile.preferred_username → 座位标识
+        Assert.Equal("sub-abc", s.Sub);
     }
 
     [Fact]
-    public void 未设用户名的账号_preferred_username缺失_取空串而不是编一个()
+    public void 验签器给不出姓名与用户名_那两项只在userinfo()
     {
-        // ★ 贝塔通对**未设置用户名的账号直接省略** `preferred_username`(不发空串,见其 rp-contract)。
-        //   这里必须取到空串,好让 ExamDispatch.SeatFrom 走它那条回退 sub 的分支 ——
-        //   在验证器里编一个默认值会让「没设用户名的人」共用同一个座位号。
-        using RSA rsa = RSA.Create(2048);
-        var v = new OidcTokenValidator(BuildJwks(rsa, Kid), Issuer, Audience);
-        string payload = JsonSerializer.Serialize(new { iss = Issuer, aud = Audience, sub = "sub-x", exp = Now() + 3600, nonce = "n1" });
-        OidcClaims c = v.Validate(SignJwt(rsa, Kid, payload), "n1", Now());
-        Assert.Equal("", c.Username);
-        Assert.Equal("", c.Name);
-        Assert.Equal("sub-x", c.Sub);
+        // ★★ **直接断言不变量本身**:验签的产物**只有** sub 一项。
+        //   贝塔通把 `conformIdTokenClaims` 留在上游默认 `true`,授权码流下 id_token 里根本没有
+        //   `name` / `preferred_username`(其 docs/rp-contract.md)。把它们从 id_token 取会恒得空串,
+        //   而空的 Username 让 ExamDispatch.SeatFrom 对每个人回退成 sub —— 不报错、不抛异常。
+        //   旧 wentian 之所以能那么干,是它专门设了 `conformIdTokenClaims: false`,**那条豁免不随迁移过来**。
+        Assert.Single(typeof(OidcSubject).GetProperties());
     }
 
     [Fact]
-    public void 不再提取horus_profile那套业务字段()
+    public void id_token里混进身份claim也不被采信()
     {
-        // 贝塔通 P81:即便令牌里混进了那些 claim(例如对着旧 IdP 跑),也一律不进 OidcClaims ——
-        // 判据是「出口只有三项」,而不是「我们没请求所以不会有」。
+        // 贝塔通 P81:即便令牌里混进了那些 claim(例如对着旧 IdP 跑),也一律不进身份 ——
+        // 判据是「验签的出口只有 sub」,而不是「我们没请求所以不会有」。
         using RSA rsa = RSA.Create(2048);
         var v = new OidcTokenValidator(BuildJwks(rsa, Kid), Issuer, Audience);
         string payload = JsonSerializer.Serialize(new
@@ -63,11 +59,116 @@ public class OidcTokenValidatorTests
             name = "叶锋", preferred_username = "ye_feng",
             user_type = "elder", dao_name = "问天", realm = "金丹", realm_level = 3, combat_power = 12345,
         });
-        OidcClaims c = v.Validate(SignJwt(rsa, Kid, payload), "n1", Now());
+        OidcSubject s = v.Validate(SignJwt(rsa, Kid, payload), "n1", Now());
+        Assert.Equal("sub-y", s.Sub);
+    }
+
+    // ---- userinfo:身份 claims 的唯一来源 ----
+
+    [Fact]
+    public void userinfo取出姓名与用户名()
+    {
+        OidcClaims c = Userinfo.Parse(
+            """{"sub":"sub-abc","name":"叶锋","preferred_username":"ye_feng"}""",
+            new OidcSubject("sub-abc"));
+
+        Assert.Equal("sub-abc", c.Sub);
+        Assert.Equal("叶锋", c.Name);             // profile.name = 真实姓名
+        Assert.Equal("ye_feng", c.Username);      // profile.preferred_username → 座位标识
         Assert.Equal(3, typeof(OidcClaims).GetProperties().Length);   // Sub / Name / Username,不多不少
-        Assert.Equal("sub-y", c.Sub);
-        Assert.Equal("叶锋", c.Name);
+    }
+
+    [Fact]
+    public void 未设用户名的账号_preferred_username缺失_取空串而不是编一个()
+    {
+        // ★ 贝塔通对**未设置用户名的账号直接省略** `preferred_username`(不发空串,见其 rp-contract)。
+        //   这里必须取到空串,好让 ExamDispatch.SeatFrom 走它那条回退 sub 的分支 ——
+        //   在这里编一个默认值会让「没设用户名的人」共用同一个座位号。
+        OidcClaims c = Userinfo.Parse("""{"sub":"sub-x"}""", new OidcSubject("sub-x"));
+        Assert.Equal("", c.Username);
+        Assert.Equal("", c.Name);
+        Assert.Equal("sub-x", c.Sub);
+    }
+
+    [Fact]
+    public void userinfo的sub与id_token不符_丢弃()
+    {
+        // ★★ OIDC Core 5.3.2 的硬性要求。不比这一下,「令牌是谁的」与「资料是谁的」就成了两件事。
+        var ex = Assert.Throws<OidcValidationException>(() => Userinfo.Parse(
+            """{"sub":"sub-EVIL","name":"别人","preferred_username":"other"}""",
+            new OidcSubject("sub-abc")));
+        Assert.Contains("sub", ex.Message);
+    }
+
+    [Fact]
+    public void userinfo缺sub_丢弃()
+    {
+        Assert.Throws<OidcValidationException>(() => Userinfo.Parse(
+            """{"name":"叶锋"}""", new OidcSubject("sub-abc")));
+    }
+
+    [Fact]
+    public void userinfo不是JSON_如实报错而不是当成没有claims()
+    {
+        // 贝塔通不给客户端登记 `userinfo_signed_response_alg`,响应恒为 JSON。
+        // 真收到 JWT(后台登记被改过)时要报出来 —— 静默当成空 claims 又是一次「无症状」。
+        var ex = Assert.Throws<OidcValidationException>(() => Userinfo.Parse(
+            "eyJhbGciOiJQUzI1NiJ9.e30.sig", new OidcSubject("sub-abc")));
+        Assert.Contains("JSON", ex.Message);
+    }
+
+    [Fact]
+    public async Task 取userinfo带Bearer访问令牌()
+    {
+        // 少了这个头,贝塔通回 401 —— 而 401 在旧写法里根本不会发生(压根没这一次请求),
+        // 所以这条锁的是「请求确实发出去了、且带对了凭据」。
+        var handler = new RecordingHandler("""{"sub":"sub-abc","name":"叶锋","preferred_username":"ye_feng"}""");
+        using var http = new HttpClient(handler);
+        OidcClaims c = await Userinfo.FetchAsync(
+            http, "https://betaoi.cn/me", "at-xyz", new OidcSubject("sub-abc"), NullLogger.Instance, CancellationToken.None);
+
+        Assert.Equal("Bearer", handler.LastAuth?.Scheme);
+        Assert.Equal("at-xyz", handler.LastAuth?.Parameter);
+        Assert.Equal("https://betaoi.cn/me", handler.LastUrl);
         Assert.Equal("ye_feng", c.Username);
+    }
+
+    [Fact]
+    public async Task userinfo非2xx_登录失败而不是放行空身份()
+    {
+        // ★ fail-closed,与 R3 同一取向:宁可登不进去,也不要一个「进得去但谁也认不出是谁」的考场。
+        var handler = new RecordingHandler("nope", HttpStatusCode.Unauthorized);
+        using var http = new HttpClient(handler);
+        await Assert.ThrowsAsync<OidcValidationException>(() => Userinfo.FetchAsync(
+            http, "https://betaoi.cn/me", "at-xyz", new OidcSubject("sub-abc"), NullLogger.Instance, CancellationToken.None));
+    }
+
+    [Fact]
+    public void userinfo端点跟着入口前缀走_而不是拼在issuer上()
+    {
+        // ★ 贝塔通 P72:`.cc` 是同一个 issuer 的第二条入口。端点**整套**换前缀,issuer 不动。
+        //   userinfo 是本轮新增的一条,与 token / auth / jwks 同源派生,不能漏进这条口径。
+        var cfg = new ServerConfig { OidcIssuer = "https://betaoi.cn", OidcEndpointBase = "https://betaoi.cc" };
+        Assert.Equal("https://betaoi.cc/me", cfg.OidcUserinfoEndpoint);
+        Assert.Equal("https://betaoi.cn", cfg.OidcIssuer);
+
+        // 不填前缀时回落 issuer;★ 路径是根 `/me`,**不是**旧 wentian 的 `/oauth/userinfo`。
+        var plain = new ServerConfig { OidcIssuer = "https://betaoi.cn" };
+        Assert.Equal("https://betaoi.cn/me", plain.OidcUserinfoEndpoint);
+    }
+
+    /// 记录最后一次请求的桩 handler(取 userinfo 用:要验 Bearer 头与目标 URL 都对)。
+    private sealed class RecordingHandler(string body, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler
+    {
+        public System.Net.Http.Headers.AuthenticationHeaderValue? LastAuth { get; private set; }
+        public string? LastUrl { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            LastAuth = request.Headers.Authorization;
+            LastUrl = request.RequestUri?.ToString();
+            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+        }
     }
 
     [Fact]
@@ -143,8 +244,8 @@ public class OidcTokenValidatorTests
         {
             iss = Issuer, aud = Audience, sub = "sub-w", exp = Now() + 3600, nbf = Now() - 100, nonce = "n1",
         });
-        OidcClaims c = v.Validate(SignJwt(rsa, Kid, payload), "n1", Now());
-        Assert.Equal("sub-w", c.Sub);
+        OidcSubject s = v.Validate(SignJwt(rsa, Kid, payload), "n1", Now());
+        Assert.Equal("sub-w", s.Sub);
     }
 
     [Fact]

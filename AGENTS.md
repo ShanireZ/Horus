@@ -36,9 +36,13 @@
 - ★★ **接入的身份提供方是「贝塔通 BetaPass」，不是问天录**（2026-08-07 起）。改任何与登录、
   claims、令牌、端点、撤权有关的东西之前，先读 `BetaPass/docs/rp-contract.md`（**通用 RP 契约、
   以它为准**）与本仓 `docs/m4-identity-oidc.md` 首段的现状订正表。
-  五条最容易照旧文做错的：**PS256 不是 RS256**（允许清单只有一项）、**端点在根路径**不是 `/oauth/*`、
+  六条最容易照旧文做错的：**PS256 不是 RS256**（允许清单只有一项）、**端点在根路径**不是 `/oauth/*`、
   **scope 是 `openid profile`**（`horus_profile` 永不登记）、**身份只有 `sub`/`name`/`username` 三项**
-  （`username` 是**座位标识**不是显示字段）、**看板准入不在本地判**（贝塔通 `horus-admin` 平台开关）。
+  （`username` 是**座位标识**不是显示字段）、**看板准入不在本地判**（贝塔通 `horus-admin` 平台开关）、
+  ★★ **姓名与用户名走 userinfo（`/me`）不在 id_token 里** —— 问天录曾专门为本项目设
+  `conformIdTokenClaims: false`，**贝塔通没有这条豁免**；照旧从 id_token 取的表现是那两项恒为空串、
+  座位号对每个人静默回退成 `sub`，**不报错不抛异常测试全绿**（测试的令牌是自己签的、手工塞了那两个 claim）。
+  现在 `OidcTokenValidator` 只给得出 `OidcSubject`，要身份必须经 `Userinfo.FetchAsync`。
 - [docs/m5-agent-hardening.md](docs/m5-agent-hardening.md) — **M5 采集端硬化**：保活/防挂起/防遮蔽/防降权限（纯检测=检测+上报+看板健康告警 + 三层保活看门狗·不做内核对抗）
 - [schema/schema.sql](schema/schema.sql) — SQLite **live** DB DDL
 - [schema/schema-archive.sql](schema/schema-archive.sql) — SQLite **archive** DB DDL

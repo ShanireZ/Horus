@@ -81,6 +81,9 @@ public sealed record ServerConfig
     /// JWKS 端点(未内联 OidcJwksJson 时启动拉取用)。
     [JsonIgnore]
     public string? OidcJwksEndpoint => EndpointBase is null ? null : EndpointBase + "/jwks";
+    /// userinfo 端点。★ **身份 claims 只在这里拿得到**,id_token 里没有(见 <see cref="Identity.Userinfo"/>)。
+    [JsonIgnore]
+    public string? OidcUserinfoEndpoint => EndpointBase is null ? null : EndpointBase + "/me";
     /// RP-Initiated Logout 端点(贝塔通 P24:RP 退出连带退掉 IdP 会话)。
     [JsonIgnore]
     public string? OidcEndSessionEndpoint => EndpointBase is null ? null : EndpointBase + "/session/end";

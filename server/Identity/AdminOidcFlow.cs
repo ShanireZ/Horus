@@ -71,7 +71,9 @@ public sealed class AdminOidcFlow
         if (now - p.CreatedAt > PendingTtlSeconds) return new Result(false, "state_expired", null);
 
         // 换 token(client_secret_post + PKCE code_verifier)。瞬时 TLS/网络失败自动重试(见 OidcHttp)。
+        // ★ access_token 也要留下 —— 真实姓名只在 userinfo 拿得到(见 Userinfo 的类注释)。
         string? idToken;
+        string? accessToken;
         try
         {
             var fields = new Dictionary<string, string>
@@ -91,6 +93,7 @@ public sealed class AdminOidcFlow
             }
             using JsonDocument doc = JsonDocument.Parse(body);
             idToken = doc.RootElement.TryGetProperty("id_token", out JsonElement it) ? it.GetString() : null;
+            accessToken = doc.RootElement.TryGetProperty("access_token", out JsonElement at) ? at.GetString() : null;
         }
         catch (Exception ex)
         {
@@ -98,11 +101,18 @@ public sealed class AdminOidcFlow
             return new Result(false, "token_exchange_failed", null);
         }
         if (string.IsNullOrEmpty(idToken)) return new Result(false, "no_id_token", null);
+        if (string.IsNullOrEmpty(accessToken)) return new Result(false, "no_access_token", null);
 
-        // 离线验签(dashboard aud·nonce)→ claims
-        OidcClaims claims;
-        try { claims = _validator.Validate(idToken!, p.Nonce, now); }
+        // 离线验签(dashboard aud·nonce)→ 只得到 sub
+        OidcSubject subject;
+        try { subject = _validator.Validate(idToken!, p.Nonce, now); }
         catch (OidcValidationException ex) { _log.LogWarning("监考员 id_token 验证失败:{Msg}", ex.Message); return new Result(false, "invalid_id_token", null); }
+
+        // 取 userinfo 补齐真实姓名。★ 贝塔通的 id_token 里没有它 —— 少了这一步,看板与取证的
+        //   「监考员是谁」会恒为空,而登录本身照常成功(见 Userinfo 的类注释)。
+        OidcClaims claims;
+        try { claims = await Userinfo.FetchAsync(_http, _cfg.OidcUserinfoEndpoint!, accessToken!, subject, _log, ct); }
+        catch (OidcValidationException ex) { _log.LogWarning("监考员 userinfo 获取失败:{Msg}", ex.Message); return new Result(false, "userinfo_failed", null); }
 
         // ★★ **准入判据已上移到身份中心**(贝塔通 P83)。
         //

@@ -16,7 +16,11 @@ namespace Horus.Server.Identity;
 ///
 /// 验:①header.alg=PS256 且 kid 命中 JWKS ②RSA-PSS-SHA256 签名 over "header.payload" ③iss==配置 issuer
 ///     ④aud 含本 client_id ⑤exp 未过(含 60s 容差)⑥nonce==登录时下发(防重放)。
-/// 通过则返回 <see cref="OidcClaims"/>;任何不符抛 <see cref="OidcValidationException"/>。
+/// 通过则返回 <see cref="OidcSubject"/>;任何不符抛 <see cref="OidcValidationException"/>。
+///
+/// ★★ **它只给得出 `sub`,给不出姓名与用户名** —— 那两项在贝塔通只走 userinfo,
+///   见 <see cref="Userinfo"/> 的类注释。此前这里直接从 id_token 里取 `name` /
+///   `preferred_username` 并返回一个「完整」的 <see cref="OidcClaims"/>,对着贝塔通跑会**恒取到空串**。
 public sealed class OidcTokenValidator
 {
     /// 唯一接受的签名算法。贝塔通的密钥集只有它(其 P58),RP 侧还须在客户端元数据里
@@ -40,10 +44,10 @@ public sealed class OidcTokenValidator
             throw new OidcValidationException("JWKS 中无可用 RSA 公钥");
     }
 
-    public OidcClaims Validate(string idToken, string? expectedNonce, double nowUnix)
+    public OidcSubject Validate(string idToken, string? expectedNonce, double nowUnix)
     {
         JsonElement payload = ValidatePayload(idToken, expectedNonce, nowUnix);
-        return ToClaims(payload);
+        return new OidcSubject(Str(payload, "sub")!);   // ValidatePayload 已确认 sub 非空
     }
 
     /// 只验签与协议 claims,返回原始 payload。
@@ -98,18 +102,6 @@ public sealed class OidcTokenValidator
         return payload;
     }
 
-    private static OidcClaims ToClaims(JsonElement payload)
-    {
-        string sub = Str(payload, "sub")!;
-        return new OidcClaims(
-            Sub: sub,
-            // 真实姓名与用户名走标准 `profile` scope,贝塔通的 claims 出口里本来就有这两项。
-            Name: Str(payload, "name") ?? "",
-            // ★ 座位标识用它(见 ExamDispatch.SeatFrom)。贝塔通对**未设置用户名的账号直接省略这个 claim**
-            //   (不发空串),所以这里恒可能为空 —— SeatFrom 已有回退 sub 的分支,不要在这里编一个默认值。
-            Username: Str(payload, "preferred_username") ?? "");
-    }
-
     // ---- JWKS 解析 ----
     private static Dictionary<string, RSA> LoadRsaKeys(string jwksJson)
     {
@@ -159,15 +151,14 @@ public sealed class OidcTokenValidator
 
 }
 
-/// 验签通过后的身份。**只有 `sub`、真实姓名与用户名**,三项都出自标准 scope。
+/// id_token 验签通过后**能拿到的全部东西**:一个 `sub`。
 ///
-/// ★ 此前还带 `UserType` / `Nickname` / `DaoName` / `Avatar` / `Realm` / `RealmLevel` / `CombatPower`
-///   七项,全部来自 wentian 的自定义 scope `horus_profile`。贝塔通 **P81** 停发它们:
-///   那些是问天录的业务字段,身份中心只管「账号 × 平台 → 能否访问」。
-/// ★ `Username` 留下了,但换了来源:从 `horus_profile` 换成标准 `profile` 的 `preferred_username` ——
-///   它是**座位标识**的依据(<see cref="ExamDispatch.SeatFrom"/>),不是显示字段。
-/// ★★ 其中 `UserType` 不是显示字段而是**判据** —— 看板准入此前唯一靠它。
-///   现在改由贝塔通的 **`horus-admin` 平台开关**回答(**P83**),见 <see cref="AdminOidcFlow"/>。
-public sealed record OidcClaims(string Sub, string Name, string Username);
+/// ★★ **故意不含姓名与用户名。** 贝塔通把 `conformIdTokenClaims` 留在上游默认值 `true`,
+///   授权码流下 id_token 只带 `sub` 与协议 claims —— 身份 claims 一律只在 userinfo 出现
+///   (其 `docs/rp-contract.md`)。此前 <see cref="OidcTokenValidator"/> 直接从 id_token 取那两项、
+///   返回一个看起来完整的 <see cref="OidcClaims"/>,于是「忘了调 userinfo」**没有任何症状**:
+///   姓名与用户名恒为空串,座位号对每个人都静默回退成 `sub`。
+///   现在类型上就拿不到,要拿只能经 <see cref="Userinfo.FetchAsync"/>。
+public sealed record OidcSubject(string Sub);
 
 public sealed class OidcValidationException(string message) : Exception(message);

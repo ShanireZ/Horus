@@ -19,6 +19,7 @@
 > | 备用域 | 无 | `OidcEndpointBase` —— **端点整套换入口而 issuer 不变** | 贝塔通 P72 |
 > | scope | `openid horus_profile` | **`openid profile`**（`horus_profile` 永不登记） | 贝塔通 P81 |
 > | 身份字段 | 9 项富画像 | **3 项**：`sub` / `name` / `username` | 贝塔通 P81 |
+> | 身份字段**从哪取** | id_token（wentian 为此设了 `conformIdTokenClaims: false`） | ★★ **userinfo（`/me`）** —— 贝塔通的 id_token 里**只有 `sub`** | 贝塔通 `docs/rp-contract.md` |
 > | 看板准入 | `user_type == 'elder'`（本地判） | **贝塔通 `horus-admin` 平台开关**（本地不判） | 贝塔通 P83 |
 > | 撤权传播 | 无 | **`/internal/revoke`**（按 `jti` 幂等 · 按 `aud` 分别处置） | 贝塔通 P44 / P69 |
 >
@@ -31,13 +32,24 @@
 > 2. ★★ **D4 那套富画像不是「暂时没接」而是「永远不接」**。贝塔通 §1.1 只管
 >    「账号 × 平台 → 能否访问」，道号/境界/战力属问天录的业务字段。
 >    §10 整章的 `user_type` RBAC 更是被明确点名为**要清除的反面案例**。
-> 3. ★★ **D5「只认 ID Token」仍然成立，但算法变了**。RS256 与 PS256 用**同一把 RSA 公钥**
+> 3. ★★ **D5「只认 ID Token」的算法那一半仍成立**：RS256 与 PS256 用**同一把 RSA 公钥**
 >    都验得通 —— 所以「顺手放宽成两种都收」不是兼容性而是**安全问题**，
 >    贝塔通根本签不出 RS256，多出来那条路只服务于攻击者。
+> 4. ★★ **但 D5 的「身份从 ID Token 取」那一半已经不成立**（2026-08-07 修，见下）。
+>    wentian 是**专门为本项目**设了 `conformIdTokenClaims: false`（其 `server/oidc/provider.js`，
+>    注释写着「Horus Server 纯局域网靠离线验 id_token 拿富画像」）；**贝塔通没有这条豁免** ——
+>    它留在上游默认值 `true`，授权码流下 id_token 只带 `sub` 与协议 claims。
+>    照旧从 id_token 取的表现是：`Name` / `Username` **恒为空串** → `SeatFrom` 对每一个学生
+>    静默回退成 `sub`，看板与取证也没有姓名。**不报错、不抛异常、测试全绿**
+>    （测试的 id_token 是自己签的，手工塞了那两个 claim）。
+>    ★ 现在 `OidcTokenValidator.Validate` 只给得出 `OidcSubject`（一个 `sub`），
+>    姓名与用户名**只能**经 `Userinfo.FetchAsync` 拿 —— 把它变成类型上做不到的事，而不是靠注释提醒。
+>    ★ **多一次在线往返不破坏 R5 拓扑**：换 token 本来就是在线动作，离线的是**验签**不是取身份。
 >
 > ### 当前实现落点（读代码从这几处进）
 >
-> - `server/Identity/OidcTokenValidator.cs` —— PS256 离线验签 + `SigningAlg` 常量
+> - `server/Identity/OidcTokenValidator.cs` —— PS256 离线验签 + `SigningAlg` 常量；★ 产物只有 `OidcSubject`
+> - `server/Identity/Userinfo.cs` —— ★ **身份 claims 的唯一来源**（含 OIDC Core 5.3.2 的 `sub` 比对）
 > - `server/Identity/AdminOidcFlow.cs` —— 监考台登录；**准入判据已整个移除**，见其行内说明
 > - `server/Identity/BetapassRevokeEndpoint.cs` + `BetapassRevokeVerifier.cs` —— 撤权接收端
 > - `server/Config/ServerConfig.cs` —— 端点推导与 `OidcEndpointBase`（P72 双域）
