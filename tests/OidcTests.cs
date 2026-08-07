@@ -437,7 +437,7 @@ public class AdminOidcTests
         HttpResponseMessage resp = await http.GetAsync("/admin/login");
         Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
         string loc = resp.Headers.Location!.ToString();
-        Assert.Contains("oidc.test/oauth/authorize", loc);
+        Assert.Contains("oidc.test/auth", loc);   // ★ 贝塔通挂根路径,不是 /oauth/authorize
         Assert.Contains("client_id=horus-dashboard", loc);
         Assert.Contains("code_challenge=", loc);
         Assert.Contains("code_challenge_method=S256", loc);

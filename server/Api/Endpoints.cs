@@ -131,7 +131,8 @@ public static class Endpoints
             // 3) wentian issuer 可达性(fail-closed 关键:oidc 下不可达 = 当天登录/换 token 失败)
             if (cfg.OidcEnabled || cfg.DashboardOidcEnabled)
             {
-                string jwksUrl = cfg.OidcIssuer!.TrimEnd('/') + "/.well-known/jwks.json";
+                // ★ 贝塔通的 JWKS 挂在 `/jwks`(根命名空间),不是 `/.well-known/jwks.json`。
+                string jwksUrl = cfg.OidcJwksEndpoint!;
                 bool inlineJwks = !string.IsNullOrWhiteSpace(cfg.OidcJwksJson);
                 try
                 {

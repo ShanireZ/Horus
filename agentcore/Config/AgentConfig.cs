@@ -26,8 +26,15 @@ public sealed class AgentConfig
     // ---- M4 身份层:OIDC 登录(取代共享 PSK)----
     /// 采集鉴权:"oidc"(默认·经 wentian 登录换会话) | "psk"(legacy·须配 psk+examId+seatId)。both 由服务器侧决定。
     public string AuthMode { get; init; } = "oidc";
-    /// wentian OIDC issuer。内置默认 = 生产站(自建部署才需覆盖)。
-    public string? OidcIssuer { get; init; } = "https://betaoi.cc";
+    /// 贝塔通 OIDC issuer。★★ **它是标识符不是地址**(贝塔通 P72):`iss` 恒为它,
+    /// 走备用域 `.cc` 进来也不变 —— 换入口请改 <see cref="OidcEndpointBase"/>,**别改这一项**。
+    public string? OidcIssuer { get; init; } = "https://betaoi.cn";
+    /// 协议端点的取回地址前缀。留空 = 用 issuer。主域不可达时填 `https://betaoi.cc`(P72)。
+    public string? OidcEndpointBase { get; init; }
+
+    /// 授权端点。★ 贝塔通挂**根路径**(`/auth`),不是旧 wentian 的 `/oauth/authorize`。
+    public string OidcAuthorizeBase =>
+        (string.IsNullOrEmpty(OidcEndpointBase) ? OidcIssuer : OidcEndpointBase)!.TrimEnd('/') + "/auth";
     /// Horus 在 wentian 注册的 client_id(默认 horus-client)。
     public string OidcClientId { get; init; } = "horus-client";
     /// 请求的 scope。★ 贝塔通 P81:**不要请求 `horus_profile`** —— 那是 wentian 的自定义 scope,

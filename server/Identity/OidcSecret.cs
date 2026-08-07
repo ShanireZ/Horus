@@ -28,14 +28,14 @@ public static class OidcSecret
 }
 
 /// M4:wentian JWKS(RSA 公钥)加载。**内联 `oidcJwksJson` 优先**(局域网离线·免运行时拉取);
-/// 否则启动时从 `{issuer}/.well-known/jwks.json` 拉取并缓存到 dataDir,拉取失败回退缓存。
+/// 否则启动时从贝塔通的 `/jwks`(端点前缀见 ServerConfig.OidcEndpointBase·P72)拉取并缓存到 dataDir,拉取失败回退缓存。
 public static class OidcJwks
 {
     public static async Task<string> LoadAsync(ServerConfig cfg)
     {
         if (!string.IsNullOrWhiteSpace(cfg.OidcJwksJson)) return cfg.OidcJwksJson!;
 
-        string url = cfg.OidcIssuer!.TrimEnd('/') + "/.well-known/jwks.json";
+        string url = cfg.OidcJwksEndpoint!;
         string cachePath = Path.Combine(Path.GetFullPath(cfg.DataDir), "oidc-jwks-cache.json");
         try
         {

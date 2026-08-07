@@ -44,7 +44,7 @@ public static class OidcLoginFlow
 
         // 3) 构造 authorize URL,开系统浏览器(已登 wentian → near-无感)
         string authorizeUrl =
-            $"{cfg.OidcIssuer!.TrimEnd('/')}/oauth/authorize?response_type=code" +
+            $"{cfg.OidcAuthorizeBase}?response_type=code" +
             $"&client_id={Uri.EscapeDataString(cfg.OidcClientId)}" +
             $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
             $"&scope={Uri.EscapeDataString(cfg.OidcScope)}" +

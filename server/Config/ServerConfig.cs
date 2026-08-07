@@ -38,8 +38,17 @@ public sealed record ServerConfig
     // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
     /// 采集面鉴权模式:"psk"(默认·共享 PSK·M1-M3 原样) | "oidc"(仅 OIDC 会话) | "both"(共存·迁移期回退网)。
     public string AuthMode { get; init; } = "psk";
-    /// wentian OIDC issuer(如 https://betaoi.cc)。OIDC 模式必配。
+    /// 贝塔通 OIDC issuer(生产为 `https://betaoi.cn`)。OIDC 模式必配。
+    /// ★★ **issuer 是标识符不是地址**(贝塔通 P72):令牌里的 `iss` 恒为它,`iss` 校验也永远对它 ——
+    ///   即便走备用域 `.cc` 进来也不变。**不要**为了走备用域去改这一项,那会让所有令牌验不过。
+    ///   要换入口改 <see cref="OidcEndpointBase"/>。
     public string? OidcIssuer { get; init; }
+    /// 协议端点的**取回地址**前缀。留空 = 用 issuer。
+    /// ★ 贝塔通 P72:`.cc` 是**同一个 issuer 的第二条入口** —— 端点整套走 `.cc`,而 `iss` 仍是 `.cn`。
+    ///   主域不可达时把这一项填成 `https://betaoi.cc` 即可,issuer 一个字都不用动。
+    /// ★ **不要走 discovery 自动发现**:从 `.cc` 拉回的文档里 `issuer` 与取回地址不一致,
+    ///   合规的 OIDC 库会当场拒绝;本类是手写端点配置,正合这条口径。
+    public string? OidcEndpointBase { get; init; }
     /// Horus 在 wentian 注册的 client_id(默认 horus-client)。
     public string? OidcClientId { get; init; }
     /// client_secret 明文(仅联调;生产用 OidcClientSecretEnc 或 env HORUS_OIDC_SECRET)。Server-Broker:secret 只在服务器。
@@ -55,12 +64,26 @@ public sealed record ServerConfig
     public bool OidcEnabled => AuthMode is "oidc" or "both";
     [JsonIgnore]
     public bool PskAcceptedForIngest => AuthMode is "psk" or "both";
-    /// OIDC token 端点(从 issuer 拼,去尾斜杠 + /oauth/token)。
+    /// 端点取回地址的前缀:优先 <see cref="OidcEndpointBase"/>,留空则回落 issuer(P72)。
     [JsonIgnore]
-    public string? OidcTokenEndpoint => string.IsNullOrEmpty(OidcIssuer) ? null : OidcIssuer!.TrimEnd('/') + "/oauth/token";
+    private string? EndpointBase =>
+        (string.IsNullOrEmpty(OidcEndpointBase) ? OidcIssuer : OidcEndpointBase)?.TrimEnd('/');
+
+    // ★★ 贝塔通的协议端点**挂在根路径**(其 docs/oidc-mounting.md:`/auth` `/token` `/me` `/jwks`
+    //    `/session/end` `/request` 已占用根命名空间),**不是** 旧 wentian 的 `/oauth/*`。
+    //    照旧路径拼会得到 404,而表现是「token 端点非 200」—— 读起来像 IdP 挂了,不像路径拼错。
+    /// OIDC token 端点。
+    [JsonIgnore]
+    public string? OidcTokenEndpoint => EndpointBase is null ? null : EndpointBase + "/token";
     /// OIDC 授权端点(建监考员登录 URL 用)。
     [JsonIgnore]
-    public string? OidcAuthorizeEndpoint => string.IsNullOrEmpty(OidcIssuer) ? null : OidcIssuer!.TrimEnd('/') + "/oauth/authorize";
+    public string? OidcAuthorizeEndpoint => EndpointBase is null ? null : EndpointBase + "/auth";
+    /// JWKS 端点(未内联 OidcJwksJson 时启动拉取用)。
+    [JsonIgnore]
+    public string? OidcJwksEndpoint => EndpointBase is null ? null : EndpointBase + "/jwks";
+    /// RP-Initiated Logout 端点(贝塔通 P24:RP 退出连带退掉 IdP 会话)。
+    [JsonIgnore]
+    public string? OidcEndSessionEndpoint => EndpointBase is null ? null : EndpointBase + "/session/end";
 
     // ---- M4·RBAC:监考员看板 OIDC 登录(wentian dashboard web client·取代静态 adminToken·见 m4-identity-oidc.md §10)----
     /// 管理端鉴权模式:"token"(默认·静态 adminToken·M1-M3 原样) | "oidc"(仅 wentian 长老 OIDC 会话·R3 无令牌后门)。
