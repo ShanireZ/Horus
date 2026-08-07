@@ -4,22 +4,33 @@ using System.Text.Json;
 
 namespace Horus.Server.Identity;
 
-/// M4·S1:wentian OIDC **id_token 离线验签**(RS256 JWT)。**纯 BCL,无第三方 JWT 依赖**——
-/// 局域网服务器预置 wentian JWKS(RSA 公钥)后即可离线验,不必每次回调 wentian(见 docs/m4-identity-oidc.md §5 S1)。
+/// 贝塔通 OIDC **id_token 离线验签**(**PS256** JWT)。**纯 BCL,无第三方 JWT 依赖**——
+/// 局域网服务器预置贝塔通 JWKS(RSA 公钥)后即可离线验,不必每次回调 IdP(见 docs/m4-identity-oidc.md §5 S1)。
 ///
-/// 验:①header.alg=RS256 且 kid 命中 JWKS ②RSA-PKCS1-SHA256 签名 over "header.payload" ③iss==配置 issuer
+/// ★★ **算法固定为 PS256(RSA-PSS · SHA-256 · 盐长 = 摘要长 32B)**,这是**允许清单只有一项**,
+///   不是「优先 PS256」。判据有两条:
+///   ① 贝塔通的密钥集**只有 PS256**(其 P58),别的算法它一枚都签不出来;
+///   ② 允许清单越窄越好 —— 让令牌自己挑填充方案等于把选择权交给攻击者。
+///   ★ 此前这里写死 RS256(RSA-PKCS1),那是对着旧 wentian 的。指向贝塔通后**每一枚 id_token
+///   都会在 alg 那一行被拒**,而报错只说「alg 非 …」,很容易被当成令牌坏了去查 IdP。
+///
+/// 验:①header.alg=PS256 且 kid 命中 JWKS ②RSA-PSS-SHA256 签名 over "header.payload" ③iss==配置 issuer
 ///     ④aud 含本 client_id ⑤exp 未过(含 60s 容差)⑥nonce==登录时下发(防重放)。
 /// 通过则返回 <see cref="OidcClaims"/>;任何不符抛 <see cref="OidcValidationException"/>。
-/// ★ **TODO(第 4 步·接贝塔通)**:第 36 行只认 `RS256`,而贝塔通的密钥集**只有 PS256**(其 P58) ——
-///   指过去之后每一枚 id_token 都会在这一行被拒。换 IdP 时必须同批加 PS256(RSA-PSS·SHA-256·盐长 32)。
 public sealed class OidcTokenValidator
 {
+    /// 唯一接受的签名算法。贝塔通的密钥集只有它(其 P58),RP 侧还须在客户端元数据里
+    /// 显式声明 `id_token_signed_response_alg: 'PS256'` —— 不声明时上游按 OIDC Core 取默认值 RS256,
+    /// 会在**授权请求**那一步就 400 `invalid_client_metadata`,连交互都创建不出来。
+    public const string SigningAlg = "PS256";
+
     private readonly Dictionary<string, RSA> _keysByKid;
     private readonly string _issuer;
     private readonly string _audience;
     private const int ClockSkewSeconds = 60;
 
-    /// jwksJson:wentian `/.well-known/jwks.json` 的原文({keys:[{kty:RSA,n,e,kid,alg}]})。
+    /// jwksJson:贝塔通 `/jwks` 的原文({keys:[{kty:RSA,n,e,kid,alg:PS256,use:sig}]})。
+    /// ★ PS256 的 JWK `kty` 仍是 `RSA`(PSS 是填充方案不是密钥类型),所以下面按 kty 过滤照旧成立。
     public OidcTokenValidator(string jwksJson, string issuer, string audience)
     {
         _issuer = issuer;
@@ -35,15 +46,20 @@ public sealed class OidcTokenValidator
         if (parts.Length != 3) throw new OidcValidationException("id_token 结构非法(非 3 段 JWT)");
 
         JsonElement header = ParseSegment(parts[0], "header");
-        if (Str(header, "alg") != "RS256") throw new OidcValidationException("id_token alg 非 RS256");
+        // ★ 允许清单只有 PS256。**不要改成「RS256 或 PS256 都收」** —— 同一把 RSA 公钥两种填充都验得通,
+        //   放宽等于凭空多一条路,而贝塔通根本签不出 RS256(其 P58),多出来的那条只服务于攻击者。
+        if (Str(header, "alg") != SigningAlg)
+            throw new OidcValidationException($"id_token alg 非 {SigningAlg}(收到 {Str(header, "alg") ?? "null"});贝塔通只签 {SigningAlg}");
         string? kid = Str(header, "kid");
         if (kid is null || !_keysByKid.TryGetValue(kid, out RSA? rsa))
             throw new OidcValidationException($"id_token kid 未命中 JWKS(kid={kid ?? "null"});密钥可能已轮换,需同步新 JWKS");
 
-        // 验签:RSA-PKCS1-SHA256 over ASCII("header.payload")。
+        // 验签:RSA-PSS-SHA256 over ASCII("header.payload")。
+        // ★ .NET 的 RSASignaturePadding.Pss 盐长恒 = 摘要长(SHA-256 → 32B),与 JOSE 对 PS256 的规定一致,
+        //   因此这里不需要也无法另行指定盐长。
         byte[] signed = Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]);
         byte[] sig = Base64UrlDecode(parts[2]);
-        if (!rsa.VerifyData(signed, sig, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
+        if (!rsa.VerifyData(signed, sig, HashAlgorithmName.SHA256, RSASignaturePadding.Pss))
             throw new OidcValidationException("id_token 签名验证失败(疑伪造 / 密钥不符)");
 
         JsonElement payload = ParseSegment(parts[1], "payload");

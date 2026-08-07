@@ -71,6 +71,26 @@ public class OidcTokenValidatorTests
     }
 
     [Fact]
+    public void RS256签名的令牌_拒_不接受算法降级()
+    {
+        // ★ 同一把 RSA 公钥,PKCS1 与 PSS **两种填充都验得通** —— 所以「放宽成两种都收」
+        //   不是兼容性问题而是安全问题:贝塔通根本签不出 RS256(其 P58),
+        //   多出来的那条路只服务于攻击者。这里用**同一把真私钥**按 RS256 签一枚合法令牌,必须被拒。
+        using RSA rsa = RSA.Create(2048);
+        var v = new OidcTokenValidator(BuildJwks(rsa, Kid), Issuer, Audience);
+        string token = SignJwt(rsa, Kid, Payload(nonce: "n1"), alg: "RS256");
+        var ex = Assert.Throws<OidcValidationException>(() => v.Validate(token, "n1", Now()));
+        Assert.Contains("PS256", ex.Message);
+    }
+
+    [Fact]
+    public void 允许的签名算法只有PS256一项()
+    {
+        // 直接断言不变量本身,而不是守卫的镜像:有人日后改成 "RS256 or PS256" 时这条立刻红。
+        Assert.Equal("PS256", OidcTokenValidator.SigningAlg);
+    }
+
+    [Fact]
     public void nonce不符_拒()
     {
         using RSA rsa = RSA.Create(2048);
@@ -201,11 +221,15 @@ public class OidcTokenValidatorTests
         name = "叶锋", preferred_username = "ye_feng",
     });
 
-    private static string SignJwt(RSA rsa, string kid, string payloadJson)
+    /// 按贝塔通真实的形态签:**PS256**(RSA-PSS · SHA-256)。
+    /// ★ 替身的形状就是判据的一部分 —— 这里若仍按旧 wentian 的 RS256 签,
+    ///   整套用例会在一个**生产上根本不存在**的算法下全绿,而真接上贝塔通当场全红。
+    private static string SignJwt(RSA rsa, string kid, string payloadJson, string alg = "PS256")
     {
-        string header = JsonSerializer.Serialize(new { alg = "RS256", typ = "JWT", kid });
+        string header = JsonSerializer.Serialize(new { alg, typ = "JWT", kid });
         string signingInput = B64Url(Encoding.UTF8.GetBytes(header)) + "." + B64Url(Encoding.UTF8.GetBytes(payloadJson));
-        byte[] sig = rsa.SignData(Encoding.ASCII.GetBytes(signingInput), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        RSASignaturePadding padding = alg == "PS256" ? RSASignaturePadding.Pss : RSASignaturePadding.Pkcs1;
+        byte[] sig = rsa.SignData(Encoding.ASCII.GetBytes(signingInput), HashAlgorithmName.SHA256, padding);
         return signingInput + "." + B64Url(sig);
     }
 
