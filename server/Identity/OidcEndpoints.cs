@@ -52,11 +52,9 @@ public static class OidcEndpoints
                 expiresAt = s.ExpiresAt,
                 examId = s.ExamId,   // 服务端派发:Agent 采用此值填事件体(配置里已无 examId)
                 seatId = s.SeatId,   // OIDC 身份派生(username):Agent 采用此值填事件体(配置里已无 seatId)
-                profile = new
-                {
-                    sub = s.Sub, userType = s.UserType, username = s.Username, nickname = s.Nickname, daoName = s.DaoName,
-                    avatar = s.Avatar, realm = s.Realm, realmLevel = s.RealmLevel, combatPower = s.CombatPower,
-                },
+                // ★ 身份出口只剩三项(贝塔通 P81)。看板此前渲染的道号/境界/战力与
+                //   监考员/学员标注均已随之移除 —— 那些是问天录的业务字段,不由身份中心分发。
+                profile = new { sub = s.Sub, name = s.Name, username = s.Username },
             });
         });
 

@@ -160,25 +160,26 @@ CREATE TABLE IF NOT EXISTS oidc_sessions (
   seat_id      TEXT NOT NULL,
   agent_id     TEXT NOT NULL,
   machine_id   TEXT,
-  sub          TEXT NOT NULL,                          -- wentian 稳定身份(UUID)
-  user_type    TEXT,                                    -- M4·RBAC:'elder'(长老=监考员)| 'disciple'(参考学员=考生)
-  username     TEXT, nickname TEXT, dao_name TEXT, avatar TEXT, realm TEXT,
-  realm_level  INTEGER, combat_power INTEGER,
+  sub          TEXT NOT NULL,                          -- 贝塔通稳定身份(UUID)·永不变更
+  name         TEXT,                                    -- 真实姓名(标准 profile scope 的 name)
+  username     TEXT,                                    -- 用户名(标准 profile 的 preferred_username)·**座位标识的来源**
+  -- ★ 此前还有 user_type/nickname/dao_name/avatar/realm/realm_level/combat_power 七列,
+  --   全部来自 wentian 自定义 scope `horus_profile`。贝塔通 P81 停发,已移除。
+  --   既有 dev 库里那几列会留着(SQLite 不走 DROP COLUMN),无人读、无害。
   k_sess       TEXT NOT NULL,                          -- base64(32B) ECDH 派生会话密钥(HMAC 签名密钥)
   issued_at    REAL NOT NULL,
   expires_at   REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_oidc_sessions_agent ON oidc_sessions(exam_id, agent_id);
 
--- M4·RBAC:监考员看板管理会话(wentian dashboard OIDC 登录·取代静态 adminToken) ----
--- 监考员(长老)经 wentian 授权码流登录 → 服务器验 id_token(须 user_type='elder')→ 派发管理会话,
--- 种 HttpOnly cookie horus_admin=session_id;admin gate(AdminAuthMode=oidc)校验此表(elder·未过期)。弟子登录被拒(非 elder)。
+-- 监考员看板管理会话(贝塔通 dashboard OIDC 登录·取代静态 adminToken) ----
+-- ★★ 准入判据在**身份中心**:看板客户端归属平台 `horus-admin`,没有该平台权限的人
+--    在贝塔通的授权阶段就被拒、换不到 code(贝塔通 P83)。所以能走到建会话这一步的**就是监考员**,
+--    本表不再存任何角色字段。admin gate(AdminAuthMode=oidc)只校验「此会话在且未过期」。
 CREATE TABLE IF NOT EXISTS admin_sessions (
   session_id   TEXT PRIMARY KEY,
-  sub          TEXT NOT NULL,                          -- wentian 稳定身份(UUID)
-  user_type    TEXT NOT NULL,                          -- 'elder'(监考员);建会话时已强制,弟子不入表
-  username     TEXT, nickname TEXT, dao_name TEXT, avatar TEXT, realm TEXT,
-  realm_level  INTEGER, combat_power INTEGER,
+  sub          TEXT NOT NULL,                          -- 贝塔通稳定身份(UUID)·永不变更
+  name         TEXT,                                   -- 真实姓名(标准 profile scope 的 name)
   issued_at    REAL NOT NULL,
   expires_at   REAL NOT NULL
 );

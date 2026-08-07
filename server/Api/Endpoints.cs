@@ -314,7 +314,7 @@ public static class Endpoints
                         GROUP BY seat_id
                       ),
                       sess AS (
-                        SELECT exam_id, seat_id, sub, username, nickname, dao_name, avatar, realm, realm_level, combat_power, user_type,
+                        SELECT exam_id, seat_id, sub, name, username,
                                MAX(issued_at) AS mx
                         FROM oidc_sessions WHERE exam_id=@e GROUP BY exam_id, seat_id
                       )
@@ -323,7 +323,7 @@ public static class Endpoints
                            COALESCE(MAX(ev.max_agent_risk, ev.max_server_risk),0) AS max_risk,
                            COALESCE(ev.ev_count,0) AS ev_count,
                            COALESCE(sq.susp_count,0),
-                           sess.sub, sess.username, sess.nickname, sess.dao_name, sess.avatar, sess.realm, sess.realm_level, sess.combat_power, sess.user_type,
+                           sess.sub, sess.name, sess.username,
                            COALESCE(hlt.health_count,0)
                     FROM seats s
                     LEFT JOIN hb  ON hb.seat_id=s.seat_id
@@ -357,21 +357,17 @@ public static class Endpoints
                         eventCount = r.GetInt32(8),
                         suspiciousCount = r.GetInt32(9),
                         // OIDC 身份画像(未登录/PSK 模式为 null)
+                        // ★ 身份只剩三项(贝塔通 P81):sub / 真实姓名 / 用户名。
+                        //   道号 / 头像 / 境界 / 战力是问天录的业务字段,身份中心不分发;
+                        //   `userType` 更是随 P83 整个消失 —— 看板准入已由 `horus-admin` 平台开关回答。
                         identity = sub is null ? null : new
                         {
                             sub,
-                            username = NullStr(r, 11),
-                            nickname = NullStr(r, 12),
-                            daoName = NullStr(r, 13),
-                            avatar = NullStr(r, 14),
-                            realm = NullStr(r, 15),
-                            realmLevel = NullInt(r, 16),
-                            combatPower = NullInt(r, 17),
-                            // M4·RBAC:'elder'=监考员 / 'disciple'=考生(看板可据此标注/筛选身份)
-                            userType = NullStr(r, 18),
+                            name = NullStr(r, 11),
+                            username = NullStr(r, 12),
                         },
                         // M5 采集端硬化:该座位的健康告警数(异常重启/疑似挂起/遮屏/能力降级 事件计),看板据此标黄。
-                        healthAlerts = r.GetInt32(19),
+                        healthAlerts = r.GetInt32(13),
                     });
                 }
                 return Results.Json(list);

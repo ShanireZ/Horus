@@ -331,7 +331,9 @@ if (cfg.AdminAuthEnabled)
                 string sid = ctx.Request.Cookies["horus_admin"] ?? "";
                 double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
                 AdminSession? s = adminSessions.Get(sid, now);
-                ok = s is not null && s.IsElder;   // 弟子会话不存在(未建),此处双保险
+                // ★ 会话在且未过期即放行。「是不是监考员」由贝塔通在授权阶段回答(平台 `horus-admin`,
+                //   其 P83) —— 换不到 code 就建不了这个会话,所以本表里的每一行都是监考员。
+                ok = s is not null;
             }
             else
             {

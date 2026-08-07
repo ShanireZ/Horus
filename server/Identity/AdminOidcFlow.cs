@@ -8,7 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace Horus.Server.Identity;
 
 /// M4·RBAC·S8:监考员看板 **OIDC 登录**(wentian dashboard web client·标准服务器端授权码 + PKCE 流)。
-/// 与采集面 <see cref="OidcExchange"/> 的差异:用 dashboard client(aud 独立)、**要求 user_type='elder'**、建 <see cref="AdminSession"/>(无 ECDH/无 exam-seat 绑定)。
+/// 与采集面 <see cref="OidcExchange"/> 的差异:用 dashboard client(aud 独立、**归属 `horus-admin` 平台**)、建 <see cref="AdminSession"/>(无 ECDH/无 exam-seat 绑定)。
+/// ★ 准入不再由 claim 判据决定,而由身份中心的平台开关决定(贝塔通 P83),见 <see cref="CompleteAsync"/> 里的说明。
 /// 拓扑 R5:回调走 https(远端监考工作站可达),client_secret 只在服务器。见 docs/m4-identity-oidc.md §10.3。
 public sealed class AdminOidcFlow
 {
@@ -46,7 +47,9 @@ public sealed class AdminOidcFlow
             ["client_id"] = _cfg.OidcDashboardClientId!,
             ["redirect_uri"] = _cfg.OidcDashboardRedirectUri!,
             ["response_type"] = "code",
-            ["scope"] = "openid horus_profile",
+            // ★ P81:只要 openid + profile(真实姓名)。**不要请求 `horus_profile`** —— 那是 wentian 的自定义 scope,
+            //   贝塔通不登记它;请求了会被裁掉,而「请求成功但 claims 是空的」正是最难查的形态。
+            ["scope"] = "openid profile",
             ["code_challenge"] = challenge,
             ["code_challenge_method"] = "S256",
             ["state"] = state,
@@ -58,7 +61,8 @@ public sealed class AdminOidcFlow
 
     public sealed record Result(bool Ok, string? Error, AdminSession? Session);
 
-    /// 完成登录:校验 state → 换 token(dashboard secret + PKCE)→ 验 id_token(aud=dashboard·nonce)→ **须 elder** → 建管理会话。
+    /// 完成登录:校验 state → 换 token(dashboard secret + PKCE)→ 验 id_token(aud=dashboard·nonce)→ 建管理会话。
+    /// ★ 「是不是监考员」由身份中心在**授权阶段**回答(平台 `horus-admin`),走到这里就说明已经是了。
     public async Task<Result> CompleteAsync(string code, string state, double now, CancellationToken ct)
     {
         Prune(now);
@@ -100,15 +104,21 @@ public sealed class AdminOidcFlow
         try { claims = _validator.Validate(idToken!, p.Nonce, now); }
         catch (OidcValidationException ex) { _log.LogWarning("监考员 id_token 验证失败:{Msg}", ex.Message); return new Result(false, "invalid_id_token", null); }
 
-        // **RBAC 核心:仅长老(elder)可进管理端**;弟子(考生)登录被拒,不建会话。
-        if (!string.Equals(claims.UserType, "elder", StringComparison.Ordinal))
-        {
-            _log.LogWarning("非监考员尝试登录管理端:sub={Sub} user={User} type={Type} → 拒", claims.Sub, claims.Username, claims.UserType);
-            return new Result(false, "not_proctor", null);
-        }
-
+        // ★★ **准入判据已上移到身份中心**(贝塔通 P83)。
+        //
+        // 此前这里判 `claims.UserType == "elder"`,而那个 claim 来自 wentian 的自定义 scope
+        // `horus_profile` —— 贝塔通 P81 停发它之后,那条判据就不存在了。
+        //
+        // 现在:看板客户端 `horus-dashboard` 归属平台 **`horus-admin`**,采集端 `horus-client`
+        // 归属平台 `horus`。**没有 `horus-admin` 权限的人在贝塔通的授权阶段就被拒**
+        // (其 §3.2:未开通平台权限的账号在授权阶段拒,不是登录后再拒),因此**根本换不到 code**,
+        // 走不到这一行。判据只有一处、在身份中心,这正是把身份抽离出去的本意。
+        //
+        // ★ **这条改动与 IdP 侧的平台拆分是一个原子事实**:若把 IdP 换回「采集端与看板同属一个
+        //   平台」的形态(如旧 wentian),这里就没有任何东西拦着考生进看板 —— 考生为了跑采集端
+        //   本来就有那个平台的权限。**换 IdP 前先确认它按平台把关。**
         AdminSession s = _sessions.Create(claims, now, _cfg.AdminSessionMinutes);
-        _log.LogInformation("监考员登录成功 sub={Sub} user={User}", claims.Sub, claims.Username);
+        _log.LogInformation("监考员登录成功 sub={Sub}", claims.Sub);
         return new Result(true, null, s);
     }
 

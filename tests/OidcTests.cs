@@ -21,7 +21,7 @@ public class OidcTokenValidatorTests
     private const string Kid = "test-kid-1";
 
     [Fact]
-    public void 合法id_token_验签通过_取出富画像()
+    public void 合法id_token_验签通过_只取出标准claims()
     {
         using RSA rsa = RSA.Create(2048);
         string jwks = BuildJwks(rsa, Kid);
@@ -31,34 +31,43 @@ public class OidcTokenValidatorTests
         OidcClaims c = v.Validate(token, "n1", Now());
 
         Assert.Equal("sub-abc", c.Sub);
-        Assert.Equal("elder", c.UserType);   // M4·RBAC:user_type claim 提取
-        Assert.Equal("ye_feng", c.Username);
-        Assert.Equal("叶锋", c.Nickname);
-        Assert.Equal("问天", c.DaoName);
-        Assert.Equal("金丹", c.Realm);
-        Assert.Equal(3, c.RealmLevel);
-        Assert.Equal(12345, c.CombatPower);
+        Assert.Equal("叶锋", c.Name);             // profile.name = 真实姓名
+        Assert.Equal("ye_feng", c.Username);      // profile.preferred_username → 座位标识
     }
 
     [Fact]
-    public void 缺user_type_默认考生_不误授监考()
+    public void 未设用户名的账号_preferred_username缺失_取空串而不是编一个()
     {
+        // ★ 贝塔通对**未设置用户名的账号直接省略** `preferred_username`(不发空串,见其 rp-contract)。
+        //   这里必须取到空串,好让 ExamDispatch.SeatFrom 走它那条回退 sub 的分支 ——
+        //   在验证器里编一个默认值会让「没设用户名的人」共用同一个座位号。
         using RSA rsa = RSA.Create(2048);
         var v = new OidcTokenValidator(BuildJwks(rsa, Kid), Issuer, Audience);
-        // 手工造一枚**不含 user_type** claim 的合法 id_token(模拟旧 wentian / 未请求 horus_profile)。
         string payload = JsonSerializer.Serialize(new { iss = Issuer, aud = Audience, sub = "sub-x", exp = Now() + 3600, nonce = "n1" });
         OidcClaims c = v.Validate(SignJwt(rsa, Kid, payload), "n1", Now());
-        Assert.Equal("disciple", c.UserType);   // fail-safe:缺省绝不当监考员
+        Assert.Equal("", c.Username);
+        Assert.Equal("", c.Name);
+        Assert.Equal("sub-x", c.Sub);
     }
 
     [Fact]
-    public void 未知user_type值_归一化为考生()
+    public void 不再提取horus_profile那套业务字段()
     {
+        // 贝塔通 P81:即便令牌里混进了那些 claim(例如对着旧 IdP 跑),也一律不进 OidcClaims ——
+        // 判据是「出口只有三项」,而不是「我们没请求所以不会有」。
         using RSA rsa = RSA.Create(2048);
         var v = new OidcTokenValidator(BuildJwks(rsa, Kid), Issuer, Audience);
-        string payload = JsonSerializer.Serialize(new { iss = Issuer, aud = Audience, sub = "sub-y", exp = Now() + 3600, nonce = "n1", user_type = "ADMIN" });
+        string payload = JsonSerializer.Serialize(new
+        {
+            iss = Issuer, aud = Audience, sub = "sub-y", exp = Now() + 3600, nonce = "n1",
+            name = "叶锋", preferred_username = "ye_feng",
+            user_type = "elder", dao_name = "问天", realm = "金丹", realm_level = 3, combat_power = 12345,
+        });
         OidcClaims c = v.Validate(SignJwt(rsa, Kid, payload), "n1", Now());
-        Assert.Equal("disciple", c.UserType);   // 仅严格 "elder" 才是监考员
+        Assert.Equal(3, typeof(OidcClaims).GetProperties().Length);   // Sub / Name / Username,不多不少
+        Assert.Equal("sub-y", c.Sub);
+        Assert.Equal("叶锋", c.Name);
+        Assert.Equal("ye_feng", c.Username);
     }
 
     [Fact]
@@ -187,9 +196,9 @@ public class OidcTokenValidatorTests
     private static string Payload(string nonce, string sub = "sub-abc", double? exp = null) => JsonSerializer.Serialize(new
     {
         iss = Issuer, aud = Audience, sub, exp = exp ?? Now() + 3600, nonce,
-        user_type = "elder",
-        username = "ye_feng", nickname = "叶锋", dao_name = "问天", avatar = "a.png",
-        realm = "金丹", realm_level = 3, combat_power = 12345,
+        // ★ 只有标准 `profile` scope 的两项。贝塔通 P81 之后 `horus_profile` 那套
+        //   (user_type / nickname / dao_name / avatar / realm / realm_level / combat_power)不再存在。
+        name = "叶锋", preferred_username = "ye_feng",
     });
 
     private static string SignJwt(RSA rsa, string kid, string payloadJson)
@@ -214,7 +223,7 @@ public class OidcIngestAuthTests
     {
         var store = app.Services.GetRequiredService<SessionStore>();
         byte[] k = RandomNumberGenerator.GetBytes(32);
-        var claims = new OidcClaims("sub-" + agent, "disciple", "user_" + agent, "昵称", "道号", "a.png", "金丹", 3, 999);
+        var claims = new OidcClaims("sub-" + agent, "姓名", "user_" + agent);
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         HorusSession s = store.Create("E1", seat, agent, "PC", claims, k, now, 180);
         return (s.SessionId, k);
@@ -317,8 +326,7 @@ public class AdminOidcTests
 {
     private static double Now() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
 
-    private static OidcClaims Claims(string userType, string sub = "sub-1")
-        => new(sub, userType, "user", "昵称", "道号", "", "金丹", 3, 100);
+    private static OidcClaims Claims(string sub = "sub-1") => new(sub, "姓名", "user");
 
     private static HttpClient NoRedirect(TestApp app)
         => app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
@@ -342,14 +350,29 @@ public class AdminOidcTests
     }
 
     [Fact]
-    public async Task 弟子会话_拒管理端()
+    public async Task 建得出管理会话就放行_本地不再自己判角色()
     {
+        // ★★ 这条取代了原来的「弟子会话_拒管理端」。**不变量没变、位置变了**:
+        //   「学生进不了看板」现在由**身份中心**保证 —— 看板客户端归属平台 `horus-admin`,
+        //   没有该平台权限的人在贝塔通的授权阶段就被拒、换不到 code,于是**建不出这个会话**
+        //   (贝塔通 P83)。因此本地 gate 的正确语义就是「会话在且未过期即放行」。
+        // ★ 正面锁住它,是为了拦住日后「好心」把角色判据加回本地 —— 那会与身份中心分家,
+        //   变成同一个判据两个来源(本仓库与贝塔通都反复吃过这个亏)。
         using var app = new TestApp(adminOidc: true);
         HttpClient http = NoRedirect(app);
         var store = app.Services.GetRequiredService<AdminSessionStore>();
-        AdminSession disciple = store.Create(Claims("disciple"), Now(), 180);
-        HttpResponseMessage resp = await GetCookie(http, "/api/exams", disciple.SessionId);
-        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+        AdminSession s = store.Create(Claims(), Now(), 180);
+        HttpResponseMessage resp = await GetCookie(http, "/api/exams", s.SessionId);
+        Assert.NotEqual(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Fact]
+    public void 管理会话不得再带任何角色字段()
+    {
+        // 断言的是**不变量本身**而不是守卫的镜像:AdminSession 只该有会话标识 + 身份 + 时间,
+        // 一旦有人加回 UserType / IsElder / Role 之类,这条立刻红。
+        string[] props = [.. typeof(AdminSession).GetProperties().Select(p => p.Name)];
+        Assert.Equal(["SessionId", "Sub", "Name", "IssuedAt", "ExpiresAt"], props);
     }
 
     [Fact]

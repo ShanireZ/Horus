@@ -24,8 +24,8 @@
           placeholder="在此粘贴管理令牌" aria-label="管理令牌" autocomplete="off" />
         <button type="submit" class="btn btn--primary login-submit" id="tokenSubmit">进入</button>
       </form>
-      <!-- M4·RBAC：OIDC 模式下用 wentian 账号登录（仅长老/监考员可进），默认隐藏，authmode=oidc 时显示 -->
-      <a class="btn btn--primary login-submit" id="oidcLoginBtn" href="/admin/login" hidden>用 wentian 账号登录（监考员）</a>
+      <!-- OIDC 模式下用贝塔通账号登录（准入由其 `horus-admin` 平台开关把关，P83），默认隐藏，authmode=oidc 时显示 -->
+      <a class="btn btn--primary login-submit" id="oidcLoginBtn" href="/admin/login" hidden>用贝塔通账号登录（监考员）</a>
     </div>
   </div>
 

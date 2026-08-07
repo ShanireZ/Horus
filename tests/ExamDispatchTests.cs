@@ -24,7 +24,7 @@ public class ExamDispatchTests
     {
         var store = app.Services.GetRequiredService<SessionStore>();
         byte[] k = RandomNumberGenerator.GetBytes(32);
-        var claims = new OidcClaims("sub-" + agent, "disciple", "user_" + agent, "昵称", "道号", "a.png", "金丹", 3, 999);
+        var claims = new OidcClaims("sub-" + agent, "姓名", "user_" + agent);
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         HorusSession s = store.Create(exam, seat, agent, "PC", claims, k, now, 180);
         return (s.SessionId, k);
@@ -134,8 +134,7 @@ public class ExamDispatchTests
     [Fact]
     public void SeatFrom_username为权威_空或不安全回退sub()
     {
-        static OidcClaims C(string username, string sub = "sub-1")
-            => new(sub, "disciple", username, "昵", "道", "", "金丹", 1, 0);
+        static OidcClaims C(string username, string sub = "sub-1") => new(sub, "姓名", username);
 
         Assert.Equal("ye_feng", ExamDispatch.SeatFrom(C("ye_feng")));
         Assert.Equal("sub-1", ExamDispatch.SeatFrom(C("")));                  // 空 username → sub

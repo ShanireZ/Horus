@@ -30,8 +30,10 @@ public sealed class AgentConfig
     public string? OidcIssuer { get; init; } = "https://betaoi.cc";
     /// Horus 在 wentian 注册的 client_id(默认 horus-client)。
     public string OidcClientId { get; init; } = "horus-client";
-    /// 请求的 scope(默认 openid + horus_profile 富画像)。
-    public string OidcScope { get; init; } = "openid horus_profile";
+    /// 请求的 scope。★ 贝塔通 P81:**不要请求 `horus_profile`** —— 那是 wentian 的自定义 scope,
+    /// 贝塔通不登记它;请求了会被**裁掉而不是整体拒绝**,于是「请求成功但 claims 是空的」,
+    /// 症状会跑到业务代码里,最难查。`profile` 给的 `preferred_username` 就是座位标识的来源。
+    public string OidcScope { get; init; } = "openid profile";
 
     public bool OidcMode => string.Equals(AuthMode, "oidc", StringComparison.OrdinalIgnoreCase);
 

@@ -367,7 +367,7 @@
           if (btn) { btn.hidden = false; btn.href = j.loginUrl || "/admin/login"; }
           if (title) title.textContent = "监考员登录";
           if (hint && !hint.classList.contains("is-error"))
-            hint.textContent = "用 wentian 账号登录，仅长老（监考员）可进入监考看板。";
+            hint.textContent = "用贝塔通账号登录。未开通监考台权限的账号会在贝塔通那边被拒，不会进到这里。";
         } else {
           if (form) form.hidden = false;
           if (btn) btn.hidden = true;
@@ -1059,18 +1059,15 @@
     openDrawer("seat", "座位详情 · " + (s.seatId || ""));
     var body = $("#drawerBody");
 
-    // M4·RBAC：OIDC 登录的 wentian 身份画像（未登录/PSK 模式 s.identity 为 null，不渲染这些行）。
+    // 座位的登录身份（未登录/PSK 模式 s.identity 为 null，不渲染这些行）。
+    // ★ 只剩三项（贝塔通 P81）：sub / 真实姓名 / 账号。道号、境界、战力是问天录的业务字段，
+    //   身份中心不分发；「监考员/参考学员」那一行更是随 P83 整个消失 ——
+    //   看板上出现的**每个座位都是考生**，监考员根本不从这条链路进来。
     var id = s.identity;
     var idRows = id ? (
-        "<dt>身份</dt><dd>" + (id.userType === "elder"
-          ? "<span class='mono'>监考员（长老）</span>"
-          : "<span class='mono'>参考学员（弟子）</span>") + "</dd>" +
+        "<dt>姓名</dt><dd>" + esc(dash(id.name)) + "</dd>" +
         "<dt>账号</dt><dd>" + esc(dash(id.username)) + "</dd>" +
-        (id.nickname ? "<dt>昵称</dt><dd>" + esc(id.nickname) + "</dd>" : "") +
-        (id.daoName ? "<dt>道号</dt><dd>" + esc(id.daoName) + "</dd>" : "") +
-        (id.realm ? "<dt>境界</dt><dd>" + esc(id.realm) +
-          (id.realmLevel ? " · " + esc(String(id.realmLevel)) + " 层" : "") + "</dd>" : "") +
-        "<dt>战力</dt><dd class='mono'>" + dash(id.combatPower) + "</dd>"
+        "<dt>标识</dt><dd class='mono'>" + esc(dash(id.sub)) + "</dd>"
       ) : "";
 
     var canCapture = !!(s.online && s.agentId);

@@ -9,7 +9,9 @@ namespace Horus.Server.Identity;
 ///
 /// 验:①header.alg=RS256 且 kid 命中 JWKS ②RSA-PKCS1-SHA256 签名 over "header.payload" ③iss==配置 issuer
 ///     ④aud 含本 client_id ⑤exp 未过(含 60s 容差)⑥nonce==登录时下发(防重放)。
-/// 通过则返回 <see cref="OidcClaims"/>(sub + Horus 富画像);任何不符抛 <see cref="OidcValidationException"/>。
+/// 通过则返回 <see cref="OidcClaims"/>;任何不符抛 <see cref="OidcValidationException"/>。
+/// ★ **TODO(第 4 步·接贝塔通)**:第 36 行只认 `RS256`,而贝塔通的密钥集**只有 PS256**(其 P58) ——
+///   指过去之后每一枚 id_token 都会在这一行被拒。换 IdP 时必须同批加 PS256(RSA-PSS·SHA-256·盐长 32)。
 public sealed class OidcTokenValidator
 {
     private readonly Dictionary<string, RSA> _keysByKid;
@@ -70,16 +72,11 @@ public sealed class OidcTokenValidator
 
         return new OidcClaims(
             Sub: sub!,
-            // M4·RBAC:wentian horus_profile 的角色 claim。'elder'=长老=监考员(可进管理端),其余=参考学员(考生)。
-            // **缺省 fail-safe 到 'disciple'**:claim 缺失(旧 wentian / 未请求 horus_profile)时按最小权限当考生,绝不误授监考权。
-            UserType: NormalizeUserType(Str(payload, "user_type")),
-            Username: Str(payload, "username") ?? "",
-            Nickname: Str(payload, "nickname") ?? Str(payload, "name") ?? "",
-            DaoName: Str(payload, "dao_name") ?? "",
-            Avatar: Str(payload, "avatar") ?? "",
-            Realm: Str(payload, "realm") ?? "",
-            RealmLevel: Int(payload, "realm_level"),
-            CombatPower: Int(payload, "combat_power"));
+            // 真实姓名与用户名走标准 `profile` scope,贝塔通的 claims 出口里本来就有这两项。
+            Name: Str(payload, "name") ?? "",
+            // ★ 座位标识用它(见 ExamDispatch.SeatFrom)。贝塔通对**未设置用户名的账号直接省略这个 claim**
+            //   (不发空串),所以这里恒可能为空 —— SeatFrom 已有回退 sub 的分支,不要在这里编一个默认值。
+            Username: Str(payload, "preferred_username") ?? "");
     }
 
     // ---- JWKS 解析 ----
@@ -129,18 +126,17 @@ public sealed class OidcTokenValidator
         => o.ValueKind == JsonValueKind.Object && o.TryGetProperty(k, out JsonElement e) && e.ValueKind == JsonValueKind.String
             ? e.GetString() : null;
 
-    private static int Int(JsonElement o, string k)
-        => o.ValueKind == JsonValueKind.Object && o.TryGetProperty(k, out JsonElement e)
-           && e.ValueKind == JsonValueKind.Number && e.TryGetInt32(out int v) ? v : 0;
-
-    /// 归一化角色:仅 "elder" 认作监考员,其余(含 null/空/未知值)一律 "disciple"(最小权限·fail-safe)。
-    internal static string NormalizeUserType(string? raw)
-        => string.Equals(raw, "elder", StringComparison.Ordinal) ? "elder" : "disciple";
 }
 
-/// 验签通过后的 wentian 身份 + Horus 富画像(见 wentian claims horus_profile)。
-/// UserType:'elder'(长老=监考员)| 'disciple'(参考学员=考生),M4·RBAC 用。
-public sealed record OidcClaims(
-    string Sub, string UserType, string Username, string Nickname, string DaoName, string Avatar, string Realm, int RealmLevel, int CombatPower);
+/// 验签通过后的身份。**只有 `sub`、真实姓名与用户名**,三项都出自标准 scope。
+///
+/// ★ 此前还带 `UserType` / `Nickname` / `DaoName` / `Avatar` / `Realm` / `RealmLevel` / `CombatPower`
+///   七项,全部来自 wentian 的自定义 scope `horus_profile`。贝塔通 **P81** 停发它们:
+///   那些是问天录的业务字段,身份中心只管「账号 × 平台 → 能否访问」。
+/// ★ `Username` 留下了,但换了来源:从 `horus_profile` 换成标准 `profile` 的 `preferred_username` ——
+///   它是**座位标识**的依据(<see cref="ExamDispatch.SeatFrom"/>),不是显示字段。
+/// ★★ 其中 `UserType` 不是显示字段而是**判据** —— 看板准入此前唯一靠它。
+///   现在改由贝塔通的 **`horus-admin` 平台开关**回答(**P83**),见 <see cref="AdminOidcFlow"/>。
+public sealed record OidcClaims(string Sub, string Name, string Username);
 
 public sealed class OidcValidationException(string message) : Exception(message);
