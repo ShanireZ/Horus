@@ -164,6 +164,13 @@ public sealed record ServerConfig
     ///     `git -C ../BetaPass log -S healthProbeAudience -- src/`
     ///   —— **`git log -1` 告诉你的是 HEAD,不是磁盘上是什么**;并行会话下工作树常年是脏的,
     ///   直接读文件几乎必错(本轮同一天两个方向各错了一次)。
+    ///
+    /// ★★★ **但这两条命令回答的是「仓库里是什么」,而这个开关关心的是「线上跑的是什么」。**
+    ///   工作树 → 提交 → **部署**,三层各错一次都够呛,而**没有任何 git 命令答得出第三层**。
+    ///   ★ 所以真正的判据不在这两条命令上,而在**跑起来的行为**:看
+    ///   `GET /api/preflight` 的 `health_audience`(本机认哪些 `aud`)+ 贝塔通后台那条
+    ///   「端点异常 / HTTP 401」。★★ **两边都正常 = 口径对上了**;
+    ///   本机认专属值而对侧后台一直报 401 = 线上贝塔通还是旧版,**这才是该开逃生口的时刻**。
     public bool OidcHealthAudienceAcceptLegacy { get; init; }
 
     /// 登出回跳地址(RP-Initiated Logout 的 `post_logout_redirect_uri`)。
