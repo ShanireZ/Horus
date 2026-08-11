@@ -66,12 +66,14 @@
 > - ★★★ **撤权与探活的候选 `aud` 集拆开**（`BetapassRevokeVerifier._candidates` /
 >   `_probeCandidates`）。**这是全部要点** —— 共用一份的话，给探活加一个可接受的 `aud`
 >   会**连带放宽 `/internal/revoke`**，方向正好反了。回归 `探活专属aud的令牌打撤权端点_拒` 钉住。
-> - ✅ **对侧已于 2026-08-11 落地（其 P100）**：`healthProbeAudience()` 只发 `<client_id>#health`，
->   契约明写「`/internal/revoke` 只认裸 `client_id`、`/internal/health` **只认** `<client_id>#health`」。
->   本仓因此**默认只认专属值**（`oidcHealthAudienceAcceptLegacy` 默认 `false`；字面量走 `oidcHealthAudienceSuffix`）。
->   ⏳ 那个开关**降级为逃生口**：只在「代码已更新、线上跑的贝塔通还是 P100 之前的版本」那段窗口里置 `true`。
->   ★ 置错代价很小 —— 探活恒 401，而 401 **算在线**，只在对侧后台显示成「在线但 HTTP 401」，看得见、不静默。
->   `GET /api/preflight` 的 `health_audience` 会在逃生口开着时一直 warn。
+> - ⚠ **对侧已写好、但 2026-08-11 核实时**（`git log -S"healthProbeAudience"` 为空）**尚未提交**：
+>   贝塔通的 `healthProbeAudience()`（只发 `<client_id>#health`）、P100、契约改写，以及问天录的跟进，
+>   **都还在各自的工作树里等 owner**。★ 决策是 owner 拍的、代码也写好了，但**「线上跑的是哪一版」
+>   是另一回事** —— 读工作树就当「已落地」正是本仓一再吃亏的那种假状态。
+>   本仓因此**默认只认专属值**（`oidcHealthAudienceAcceptLegacy` 默认 `false`；字面量走 `oidcHealthAudienceSuffix`），
+>   把那个开关当**逃生口**：只在「Horus 已部署新版、而线上贝塔通还是旧版」那段窗口里置 `true`。
+>   ★ 两个方向的代价都很小 —— 不匹配时探活恒 401，而 401 **算在线**，只在对侧后台显示成
+>   「在线但 HTTP 401」，看得见、不静默。`GET /api/preflight` 的 `health_audience` 会在逃生口开着时一直 warn。
 > - ★ `/internal/revoke` 那条「令牌 `sub` == 报文 `sub`」**不撤**：它降为双保险，
 >   但**本身自洽、不依赖对侧保持任何字段** —— 而这次改动恰恰依赖对侧。两道都留着。
 >

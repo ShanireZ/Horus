@@ -140,11 +140,13 @@ public sealed record ServerConfig
 
     /// 探活是否**额外接受**旧口径(`aud` = client_id 本身)。默认 **false**(只认专属 `aud`)。
     ///
-    /// ★★ **2026-08-11 对侧已落地 P100**:其 `healthProbeAudience()` 现在发的就是
-    ///   `&lt;client_id&gt;#health`,契约也明写「`/internal/revoke` 只认裸 `client_id`、
-    ///   `/internal/health` **只认** `&lt;client_id&gt;#health`」。所以默认已从过渡期的
-    ///   **新旧都收**收窄成**只认专属值** —— 留着旧值就等于让「`aud` 拦不住撤权/探活这一对」
-    ///   的例外继续存在,而消灭它正是 P100 的全部目的。
+    /// ★★ **2026-08-11 对侧 P100**:其 `healthProbeAudience()` 发的是 `&lt;client_id&gt;#health`,
+    ///   契约也明写「`/internal/revoke` 只认裸 `client_id`、`/internal/health` **只认**
+    ///   `&lt;client_id&gt;#health`」。默认因此从过渡期的**新旧都收**收窄成**只认专属值** ——
+    ///   留着旧值就等于让「`aud` 拦不住撤权/探活这一对」的例外继续存在,而消灭它正是 P100 的目的。
+    ///   ★ **注意口径**:2026-08-11 核实时,贝塔通与问天录两侧的改动都还**只在工作树里、尚未提交**
+    ///   (`git log -S"healthProbeAudience"` 为空),**owner 尚未 push/部署**。
+    ///   决策本身是 owner 拍的、代码也写好了,但「线上跑的是哪一版」是另一回事 —— 逃生口就是为它留的。
     ///
     /// ★ 这一项因此**降级为逃生口**:只有在「代码已更新、但线上跑的贝塔通还是 P100 之前的版本」
     ///   那段窗口里才置 true。★ 置错的代价很小 —— 探活恒 401,而 401 **算在线**

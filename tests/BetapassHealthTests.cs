@@ -155,8 +155,10 @@ public class BetapassHealthTests
         // ★★★ **这条是 P100 到底有没有落成的判据。**
         //   裸 `client_id` 是 `/internal/revoke` 的值;探活端点收下它,
         //   「`aud` 拦不住撤权/探活这一对」的例外就还在 —— 而消灭它正是 P100 的全部目的。
-        // ★ 对侧 2026-08-11 已落地(其 `healthProbeAudience()` 只发 `<client_id>#health`,
-        //   契约明写「`/internal/health` **只认** `<client_id>#health`"),所以本仓默认就该是严格的。
+        // ★ 对侧 2026-08-11 已写好(其 `healthProbeAudience()` 只发 `<client_id>#health`,
+        //   契约明写「`/internal/health` **只认** `<client_id>#health`」),所以本仓默认就该是严格的。
+        //   ★ 核实时对侧那批改动还**只在工作树里、未提交**;决策已由 owner 拍板、代码已写好,
+        //   而「线上跑的是哪一版」由部署决定 —— 那段窗口靠逃生口,不靠把默认值放宽。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
         Assert.Equal(HttpStatusCode.Unauthorized,
