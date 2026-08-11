@@ -128,12 +128,34 @@ public sealed record ServerConfig
     public string? OidcDashboardClientSecretEnc { get; init; }
     /// dashboard 回调 URI(须与 wentian 注册的 OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致,如 https://<服务器>/cb)。
     public string? OidcDashboardRedirectUri { get; init; }
+    /// 登出回跳地址(RP-Initiated Logout 的 `post_logout_redirect_uri`)。
+    /// 留空则按 <see cref="OidcDashboardRedirectUri"/> **同源**推导 `/logout/done`。
+    ///
+    /// ★★ **必须在贝塔通后台的「登出回跳地址」一栏登记**,且与这里**精确一致** ——
+    ///   没登记时上游会忽略它,用户会停在贝塔通自己的「已退出」页,回不到 Horus。
+    ///   ★ 那**不算故障**:本地会话在跳走**之前**就已经清掉了(见 AdminOidcEndpoints 的
+    ///   `/admin/logout`),用户确实已经退出,只是少了一次回跳。
+    public string? OidcPostLogoutRedirectUri { get; init; }
     /// 管理会话的 **absolute** 门(分钟):监考员登录后凭证寿命。默认 **360(6 小时)**,同采集面。
     /// idle 与心跳两道门走共用的 <see cref="SessionIdleMinutes"/> / <see cref="SessionHeartbeatMinutes"/>。
     public int AdminSessionMinutes { get; init; } = 360;
 
     [JsonIgnore]
     public bool DashboardOidcEnabled => string.Equals(AdminAuthMode, "oidc", StringComparison.OrdinalIgnoreCase);
+
+    /// 实际使用的登出回跳地址:显式配置优先,否则按 dashboard 回调**同源**推导 `/logout/done`。
+    /// 两者都取不到时返回 null —— 那时登出仍然照走,只是不带 `post_logout_redirect_uri`。
+    [JsonIgnore]
+    public string? PostLogoutRedirectUriEffective
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(OidcPostLogoutRedirectUri)) return OidcPostLogoutRedirectUri;
+            if (string.IsNullOrWhiteSpace(OidcDashboardRedirectUri)) return null;
+            return Uri.TryCreate(OidcDashboardRedirectUri, UriKind.Absolute, out Uri? u)
+                ? new Uri(u, "/logout/done").ToString() : null;
+        }
+    }
 
     // ---- HTTPS(远端监考工作站 OIDC 回调须 https;自签证书启动生成/加载)----
     /// 自签证书 pfx 路径(相对 DataDir)。留空则在 DataDir 下自动生成 horus-https.pfx。仅当 Urls 含 https 时生效。

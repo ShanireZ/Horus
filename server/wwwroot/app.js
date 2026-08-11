@@ -197,6 +197,7 @@
     inflight: false,          // 防止轮询叠加
     drawerMode: null,         // "seat" | "suspicious"
     collectAuthMode: null,    // 采集面模式(psk/oidc/both):both 灰度期高亮 PSK 座位
+    adminAuthMode: null,      // 管理端模式(token/oidc):退出按钮据此决定走不走贝塔通登出
     imageSearchEnabled: false,// 按图搜图是否可用(嵌入器已配)
     lightboxImageId: null     // 当前灯箱图 id(按图搜图用)
   };
@@ -227,6 +228,7 @@
         if (!j) return;
         if (j.collectAuthMode) state.collectAuthMode = j.collectAuthMode;
         state.imageSearchEnabled = !!j.imageSearchEnabled;
+        state.adminAuthMode = j.mode || "token";   // 退出按钮据此决定纯本地登出还是走贝塔通
         // 只有 oidc 模式才有管理会话可续(token 模式没有三道门这回事)。
         // ★ 若此刻其实没登录,loadExams() 会先 401 并在 handleUnauthorized 里把心跳停掉。
         if (j.mode === "oidc") startHeartbeat();
@@ -251,11 +253,17 @@
       state.autoRefresh = e.target.checked;
       restartPolling();
     });
-    // 退出监考员登录：清 cookie → 停轮询/心跳 → 清屏 → 弹登录门
+    // 退出监考员登录。
+    // ★ oidc 模式走 **RP-Initiated Logout**（贝塔通 P85）：整页跳 /admin/logout，
+    //   那边先清本地会话、再把人送到贝塔通的「只退出本站 / 退出所有站点」二选一页。
+    //   ★★ 机房电脑轮流坐人（贝塔通 R9），「退出所有站点」是上一个人离开时唯一稳妥的收尾，
+    //   只清本地的话他在别的站点还登着。
+    // ★ token 模式没有 IdP 会话这回事，保持原来的纯本地登出。
     $("#logoutBtn").addEventListener("click", function () {
-      logout();
       stopPolling();
       stopHeartbeat();
+      if (state.adminAuthMode === "oidc") { window.location.href = "/admin/logout"; return; }
+      logout();
       clearCurrentData();
       showLoginGate("请重新登录");
     });

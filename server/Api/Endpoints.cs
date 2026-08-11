@@ -155,6 +155,14 @@ public static class Endpoints
                 if (!string.IsNullOrEmpty(cfg.OidcDashboardRedirectUri)
                     && !cfg.OidcDashboardRedirectUri!.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                     Add("admin_redirect_https", "warn", "回调 HTTPS", "oidcDashboardRedirectUri 非 https,远端工作站将无法回调(须自签 https)");
+                // 登出回跳(贝塔通 P85):★ 这一项**只能核到本地这一半** —— 「贝塔通后台登记了没有」
+                //   本地查不到。没登记的表现是上游忽略该参数、用户停在贝塔通自己的「已退出」页;
+                //   ★ 那不算故障(本地会话在跳走之前就清掉了),但监考员会以为没退成功,所以照实提示。
+                Add("post_logout", string.IsNullOrEmpty(cfg.PostLogoutRedirectUriEffective) ? "warn" : "ok",
+                    "登出回跳",
+                    string.IsNullOrEmpty(cfg.PostLogoutRedirectUriEffective)
+                        ? "推导不出回跳地址(oidcDashboardRedirectUri 也为空);登出仍会跳贝塔通,只是回不来"
+                        : "本地地址=" + cfg.PostLogoutRedirectUriEffective + " · 须在贝塔通后台「登出回跳地址」一栏登记同一条");
             }
             else Add("admin_auth", "ok", "管理端令牌", "adminAuthMode=token(静态令牌·非 OIDC)");
 
