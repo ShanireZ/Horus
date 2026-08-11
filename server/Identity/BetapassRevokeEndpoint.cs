@@ -33,6 +33,14 @@ public static class BetapassRevokeEndpoint
     /// 判成功的口径是 2xx。**404 / 405 与 5xx 一样会被贝塔通重投** ——
     /// 「RP 还没实现这个端点」正是最需要重投的情形,所以这个路由必须始终挂上:
     /// 未启用 OIDC 时也回 2xx 之外的明确状态,而不是让它落到 404 去被无限重投。
+    ///
+    /// ★★ **重投走完不再进终态**(贝塔通 P93,2026-08-10 取消 `dead`):阶梯是
+    ///   **5min ×3 → 15min → 30min → 1h,共 6 次重投**,走完转「等待探活」挂起,
+    ///   等 <see cref="BetapassHealthEndpoint"/> 探到本站回来之后**从头再投一遍,直至成功**。
+    ///   对本端的两条实际影响:
+    ///   ① 同一条通知会被重投**很多次** —— `jti` 幂等台账正好覆盖,**不要动它**;
+    ///   ② 本站长时间下线再回来时会**一次性收到一批积压的通知** ——
+    ///      ★ **不得因为「这条太旧了」而丢弃**,旧不代表已经处理过。
     public const string Path = "/internal/revoke";
 
     public sealed record Notice(string Jti, string Sub, string ClientId, string Reason);
@@ -47,7 +55,7 @@ public static class BetapassRevokeEndpoint
             if (!cfg.OidcEnabled && !cfg.DashboardOidcEnabled)
             {
                 // 两条链路都没开 OIDC:这台机器根本不该收到通知。回 410 而不是 404 ——
-                // 404 会被贝塔通当成「端点还没上线」而重投 12 次,410 是「别再投了」。
+                // 404 会被贝塔通当成「端点还没上线」而一路重投,410 是「别再投了」。
                 return Results.StatusCode(StatusCodes.Status410Gone);
             }
 

@@ -338,12 +338,16 @@ if (cfg.AdminAuthEnabled)
             bool ok;
             if (cfg.DashboardOidcEnabled)
             {
-                // M4·RBAC(R3):仅认 wentian **长老** OIDC 管理会话(HttpOnly cookie),**无静态令牌后门**。
+                // M4·RBAC(R3):仅认贝塔通 OIDC 管理会话(HttpOnly cookie),**无静态令牌后门**。
                 string sid = ctx.Request.Cookies["horus_admin"] ?? "";
                 double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
                 AdminSession? s = adminSessions.Get(sid, now);
-                // ★ 会话在且未过期即放行。「是不是监考员」由贝塔通在授权阶段回答(平台 `horus-admin`,
-                //   其 P83) —— 换不到 code 就建不了这个会话,所以本表里的每一行都是监考员。
+                // ★ 三道门(revoked → absolute → idle → heartbeat)都没到点才放行。
+                //   「是不是监考员」由贝塔通在授权阶段回答(平台 `horus-admin`,其 P83) ——
+                //   换不到 code 就建不了这个会话,所以本表里的每一行都是监考员。
+                // ★★ **这里只读不写。** 任何业务请求都不得续 idle(贝塔通 P92 翻案 P25):
+                //   看板是持续自动轮询的,在这里顺手 touch 一下时间戳,idle 那道门就**永远不会到点**,
+                //   监考机上开着看板等于永不登出。续期只发生在 `POST /api/heartbeat` 那一个入口。
                 ok = s is not null;
             }
             else
@@ -377,10 +381,15 @@ app.MapOidc();
 app.MapAdminOidc();
 
 // ---- 贝塔通撤权通知接收端(其 P44/P69·rp-contract)。非 /api,不受 admin gate ----
-// ★ **必须始终挂上**:贝塔通判成功的口径是 2xx,而 404/405 与 5xx 一样会被重投 12 次
+// ★ **必须始终挂上**:贝塔通判成功的口径是 2xx,而 404/405 与 5xx 一样会被重投
 //   (「RP 还没实现这个端点」正是最需要重投的情形)。未开 OIDC 时端点自己回 410「别再投了」,
 //   而不是让它落到 404 去被反复敲。
 Horus.Server.Identity.BetapassRevokeEndpoint.Map(app);
+
+// ---- 贝塔通存活探测接收端(其 P94·rp-contract「必办项」)。非 /api,不受 admin gate ----
+// ★★ 不实现它 = 贝塔通连续 3 次探不到即判 Horus 离线 = **撤权通知永远送不到本站**,
+//   而「权限撤了、人还在里面」没有任何症状。同样必须始终挂上(理由同上一条)。
+Horus.Server.Identity.BetapassHealthEndpoint.Map(app);
 
 // ---- 看板 / 管理 API ----
 app.MapApi();
