@@ -138,13 +138,18 @@ public sealed record ServerConfig
     /// ★ 做成配置是因为对侧尚未落地:字面量对不上时这是**改配置**而不是改代码。
     public string OidcHealthAudienceSuffix { get; init; } = "#health";
 
-    /// 过渡期:探活是否**仍然接受**旧口径(`aud` = client_id 本身)。默认 **true**。
+    /// 探活是否**额外接受**旧口径(`aud` = client_id 本身)。默认 **false**(只认专属 `aud`)。
     ///
-    /// ★★ **对侧落地之前必须保持 true** —— 贝塔通今天发的还是旧值,置 false 就是探活全灭。
-    /// ★★ **对侧落地之后要记得置 false**,否则这条过渡分支会永久留着,而
-    ///   「`aud` 拦不住这一对」的例外也就跟着永久留着 —— 那正是本次改动要消灭的东西。
-    ///   `GET /api/preflight` 的 `health_audience` 一项会一直提示它还开着。
-    public bool OidcHealthAudienceAcceptLegacy { get; init; } = true;
+    /// ★★ **2026-08-11 对侧已落地 P100**:其 `healthProbeAudience()` 现在发的就是
+    ///   `&lt;client_id&gt;#health`,契约也明写「`/internal/revoke` 只认裸 `client_id`、
+    ///   `/internal/health` **只认** `&lt;client_id&gt;#health`」。所以默认已从过渡期的
+    ///   **新旧都收**收窄成**只认专属值** —— 留着旧值就等于让「`aud` 拦不住撤权/探活这一对」
+    ///   的例外继续存在,而消灭它正是 P100 的全部目的。
+    ///
+    /// ★ 这一项因此**降级为逃生口**:只有在「代码已更新、但线上跑的贝塔通还是 P100 之前的版本」
+    ///   那段窗口里才置 true。★ 置错的代价很小 —— 探活恒 401,而 401 **算在线**
+    ///   (对侧任何 HTTP 应答都算活着),只在其后台显示成「在线但 HTTP 401」,看得见、不静默。
+    public bool OidcHealthAudienceAcceptLegacy { get; init; }
 
     /// 登出回跳地址(RP-Initiated Logout 的 `post_logout_redirect_uri`)。
     /// 留空则按 <see cref="OidcDashboardRedirectUri"/> **同源**推导 `/logout/done`。

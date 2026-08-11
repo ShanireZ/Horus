@@ -99,10 +99,10 @@ cfg = cfg with
     OidcDashboardClientId = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_CLIENT_ID") ?? cfg.OidcDashboardClientId,
     OidcDashboardClientSecret = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_SECRET") ?? cfg.OidcDashboardClientSecret,
     OidcDashboardRedirectUri = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_REDIRECT") ?? cfg.OidcDashboardRedirectUri,
-    // 探活 aud 过渡期开关:只认显式的 "false"(误拼当没设,不至于把探活悄悄关严)。
+    // 探活 aud 的旧口径逃生口:只认显式的 "true"(误拼当没设,不至于把旧口径悄悄放回来)。
     OidcHealthAudienceAcceptLegacy =
-        string.Equals(Environment.GetEnvironmentVariable("HORUS_OIDC_HEALTH_LEGACY_AUD"), "false", StringComparison.OrdinalIgnoreCase)
-            ? false : cfg.OidcHealthAudienceAcceptLegacy,
+        string.Equals(Environment.GetEnvironmentVariable("HORUS_OIDC_HEALTH_LEGACY_AUD"), "true", StringComparison.OrdinalIgnoreCase)
+            || cfg.OidcHealthAudienceAcceptLegacy,
     CloudflareWebAnalyticsToken = Environment.GetEnvironmentVariable("HORUS_CLOUDFLARE_WEB_ANALYTICS_TOKEN") ?? cfg.CloudflareWebAnalyticsToken,
 };
 

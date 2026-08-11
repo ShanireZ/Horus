@@ -63,7 +63,7 @@ public class BetapassHealthTests
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
 
-        HttpResponseMessage resp = await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client"));
+        HttpResponseMessage resp = await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client#health"));
 
         Assert.Equal(HttpStatusCode.NoContent, resp.StatusCode);
         Assert.Empty(await resp.Content.ReadAsByteArrayAsync());   // 无响应体
@@ -80,8 +80,8 @@ public class BetapassHealthTests
         using var app = new TestApp(authMode: "oidc", adminOidc: true, jwks: BuildJwks(rsa, Kid));
         HttpClient http = app.CreateClient();
 
-        Assert.Equal(HttpStatusCode.NoContent, (await ProbeAsync(http, SignProbe(rsa, "horus-client"))).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await ProbeAsync(http, SignProbe(rsa, "horus-dashboard"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await ProbeAsync(http, SignProbe(rsa, "horus-client#health"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await ProbeAsync(http, SignProbe(rsa, "horus-dashboard#health"))).StatusCode);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class BetapassHealthTests
         using RSA forged = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(real, Kid));
         Assert.Equal(HttpStatusCode.Unauthorized,
-            (await ProbeAsync(app.CreateClient(), SignProbe(forged, "horus-client"))).StatusCode);
+            (await ProbeAsync(app.CreateClient(), SignProbe(forged, "horus-client#health"))).StatusCode);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class BetapassHealthTests
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
         Assert.Equal(HttpStatusCode.Unauthorized,
-            (await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client", exp: Now() - 300))).StatusCode);
+            (await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client#health", exp: Now() - 300))).StatusCode);
     }
 
     [Fact]
@@ -150,26 +150,31 @@ public class BetapassHealthTests
     }
 
     [Fact]
-    public async Task 过渡期_旧口径的探活令牌仍被接受()
+    public async Task 默认只认专属aud_裸client_id被拒()
     {
-        // ★★ 贝塔通今天发的**还是旧值**。默认不收旧值的话就是探活全灭,
-        //   而那个失效几乎没有症状(对侧任何 HTTP 应答都算在线,401 也不例外)。
+        // ★★★ **这条是 P100 到底有没有落成的判据。**
+        //   裸 `client_id` 是 `/internal/revoke` 的值;探活端点收下它,
+        //   「`aud` 拦不住撤权/探活这一对」的例外就还在 —— 而消灭它正是 P100 的全部目的。
+        // ★ 对侧 2026-08-11 已落地(其 `healthProbeAudience()` 只发 `<client_id>#health`,
+        //   契约明写「`/internal/health` **只认** `<client_id>#health`"),所以本仓默认就该是严格的。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
-        Assert.Equal(HttpStatusCode.NoContent,
+        Assert.Equal(HttpStatusCode.Unauthorized,
             (await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client"))).StatusCode);
     }
 
     [Fact]
-    public async Task 关掉过渡期后_旧口径被拒()
+    public async Task 逃生口打开时_旧口径也收()
     {
-        // ★ 过渡期开关必须**真的关得掉** —— 否则它就是个装饰品,而「aud 拦不住这一对」
-        //   的例外会跟着永久留着。这条钉住「关了就真的只收专属 aud」。
+        // ⏳ 只为「代码已更新、线上跑的贝塔通还是 P100 之前的版本」那段窗口留的。
+        // ★ 逃生口必须**真的开得起来**,否则它就是个装饰品:那段窗口里探活会恒 401,
+        //   而 401 **算在线**(对侧任何 HTTP 应答都算活着),失效几乎没有症状。
+        // ★★ 但它默认是关的 —— 开关的默认值站在「例外已消灭」那一侧,而不是「先兼容着」。
         using RSA rsa = RSA.Create(2048);
-        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid), healthLegacyAud: false);
+        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid), healthLegacyAud: true);
         HttpClient http = app.CreateClient();
 
-        Assert.Equal(HttpStatusCode.Unauthorized,
+        Assert.Equal(HttpStatusCode.NoContent,
             (await ProbeAsync(http, SignProbe(rsa, "horus-client"))).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent,
             (await ProbeAsync(http, SignProbe(rsa, "horus-client#health"))).StatusCode);
@@ -213,7 +218,7 @@ public class BetapassHealthTests
         AdminSession admin = adminSessions.Create(claims, Now(), 180);
 
         Assert.Equal(HttpStatusCode.NoContent,
-            (await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client"))).StatusCode);
+            (await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client#health"))).StatusCode);
 
         Assert.NotNull(sessions.Get(collect.SessionId, Now()));
         Assert.NotNull(adminSessions.Get(admin.SessionId, Now()));

@@ -222,10 +222,11 @@ public static class Endpoints
                 string auds = verifier is null ? "(未构造)" : string.Join(" / ", verifier.ProbeAudiences);
                 if (cfg.OidcHealthAudienceAcceptLegacy)
                     Add("health_audience", "warn", "探活 aud 口径",
-                        "过渡期:新旧都收(" + auds + ")。★ 贝塔通侧落地专属 aud 之后,"
-                        + "把 oidcHealthAudienceAcceptLegacy 置 false —— 不收掉这条过渡分支就永久留着");
+                        "逃生口开着,连裸 client_id 也收(" + auds + ")。★ 它只为「线上贝塔通还是 P100 之前的版本」"
+                        + "那段窗口而留 —— 窗口过了就把 oidcHealthAudienceAcceptLegacy 关掉,"
+                        + "否则「aud 拦不住撤权/探活这一对」的例外就一直留着");
                 else
-                    Add("health_audience", "ok", "探活 aud 口径", "只收专属 aud(" + auds + ")");
+                    Add("health_audience", "ok", "探活 aud 口径", "只认专属 aud(" + auds + ")");
             }
 
             // 3.5) 开考预检:**监考员自己这次登录**还剩多久,够不够撑完一场考试(贝塔通 P91)。
