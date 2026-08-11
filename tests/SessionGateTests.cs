@@ -144,7 +144,7 @@ public class SessionGateTests
         var store = app.Services.GetRequiredService<SessionStore>();
         HorusSession s = NewCollect(store);
 
-        store.RevokeBySub("sub-1");
+        store.RevokeBySub("sub-1", "password_changed", T0);
 
         (HorusSession? session, SessionGate gate) = store.GetWithGate(s.SessionId, T0);
         Assert.Null(session);

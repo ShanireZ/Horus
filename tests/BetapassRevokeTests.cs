@@ -138,6 +138,64 @@ public class BetapassRevokeTests
         Assert.NotNull(sessions.Get(collect.SessionId, Now()));       // ★ 采集会话仍在
     }
 
+    [Theory]
+    [InlineData("user_logout", "退出所有站点")]
+    [InlineData("platform_access_revoked", "权限已关闭")]
+    [InlineData("password_changed", "密码已变更")]
+    [InlineData("mfa_factor_changed", "二次验证")]
+    public async Task 每种reason都给出对应的一句人话(string reason, string expectFragment)
+    {
+        // ★ 契约明写四种 reason「**处置完全相同,区分只服务提示语**」——
+        //   提示语正是这里。撤权是删行,不留痕的话被踢的人只看得到一句笼统的「登录已失效」。
+        // ★★ 「平台权限被关掉」这一种尤其要紧:取消 SSO(贝塔通 P84)之后,
+        //   无权限的人**每点一次登录都要完整输一遍密码**才被拒(其 P98,owner 明确不做缓解)。
+        //   不告诉他真实原因,他会一遍遍白输。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", adminOidc: true, jwks: BuildJwks(rsa, Kid));
+        HttpClient http = app.CreateClient();
+        var adminSessions = app.Services.GetRequiredService<AdminSessionStore>();
+        AdminSession s = adminSessions.Create(Claims(), Now(), 360);
+
+        string jti = "j-" + reason;
+        string token = SignNotice(rsa, "horus-dashboard", jti, "sub-1", reason);
+        await PostAsync(http, token, jti, "sub-1", "horus-dashboard", reason);
+
+        // 用那条已被删掉的会话 id 再打一次 /api/* → 401 的响应体带着「为什么」
+        var req = new HttpRequestMessage(HttpMethod.Get, "/api/exams");
+        req.Headers.Add("Cookie", "horus_admin=" + s.SessionId);
+        HttpResponseMessage resp = await http.SendAsync(req);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+        JsonElement body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(reason, body.GetProperty("reason").GetString());
+        Assert.Contains(expectFragment, body.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task 认不出的reason_照清且兜底提示语不为空()
+    {
+        // ★★ 贝塔通那边加一种 reason 时本端一行代码都不用改(处置本就与 reason 无关),
+        //   但**提示语不能因此变成空白或「未知错误」** —— 兜底那句必须自己站得住。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", adminOidc: true, jwks: BuildJwks(rsa, Kid));
+        HttpClient http = app.CreateClient();
+        var adminSessions = app.Services.GetRequiredService<AdminSessionStore>();
+        AdminSession s = adminSessions.Create(Claims(), Now(), 360);
+
+        const string jti = "j-future", reason = "something_new_in_2027";
+        string token = SignNotice(rsa, "horus-dashboard", jti, "sub-1", reason);
+        HttpResponseMessage revoke = await PostAsync(http, token, jti, "sub-1", "horus-dashboard", reason);
+        Assert.Equal(1, (await ReadAsync(revoke)).Revoked);   // 照清
+
+        var req = new HttpRequestMessage(HttpMethod.Get, "/api/exams");
+        req.Headers.Add("Cookie", "horus_admin=" + s.SessionId);
+        JsonElement body = await (await http.SendAsync(req)).Content.ReadFromJsonAsync<JsonElement>();
+
+        string msg = body.GetProperty("message").GetString()!;
+        Assert.False(string.IsNullOrWhiteSpace(msg));
+        Assert.Contains("重新登录", msg);
+    }
+
     [Fact]
     public async Task 无令牌_拒()
     {

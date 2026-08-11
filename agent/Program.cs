@@ -114,7 +114,23 @@ internal static class Program
                     + "请监考员把服务器的 oidcSessionMinutes 调大后重启服务器,再让学员重新登录。");
             }
 
-            // ★ 「当前登录:XXX」—— 机房电脑轮流坐人,让下一个人立刻看见这不是自己的号(贝塔通 R9)。
+            // ---- 「当前登录:XXX + 一键退出」(贝塔通 R9)----
+            //
+            // ★★ 机房电脑**无还原卡**、浏览器混装国产内核因而组策略不现实、共享 PC 模式也不现实。
+            //   上一个人不点退出就走时,下一个人可以直接用他的会话 —— **身份层关不掉这个窗口**,
+            //   唯一能真正生效的缓解就是让下一个人**立刻看见这不是自己的号**。
+            //   ★ 对考场尤其直接:学生轮流坐同一台机器正是常态。
+            // ★ 采集端是**控制台程序**,没有可以放一个按钮的界面 —— 所以这里是一整块醒目的
+            //   横幅而不是一行日志,并明写退出方式(Ctrl+C)。这是本形态下能做到的等价物,
+            //   如实记下来,免得下一个人以为「一键退出按钮」漏做了。
+            string who = DisplayName(session.ProfileJson, cfg.SeatId);
+            Console.WriteLine();
+            Console.WriteLine("  ┌────────────────────────────────────────────────┐");
+            Console.WriteLine($"  │ 当前登录：{who}");
+            Console.WriteLine($"  │ 座位 {cfg.SeatId} · 考试 {cfg.ExamId}");
+            Console.WriteLine("  │ 不是你本人？按 Ctrl+C 退出，再用自己的账号登录。");
+            Console.WriteLine("  └────────────────────────────────────────────────┘");
+            Console.WriteLine();
             Console.WriteLine($"[horus-agent] OIDC 登录成功 exam={cfg.ExamId} seat={cfg.SeatId},开始采集。");
             RunCollectionSession(cfg, cfgPath, selfExe, new IngestCredential(session.KSess, session.SessionId), http, cts.Token);
 
@@ -122,6 +138,26 @@ internal static class Program
             Console.WriteLine("[horus-agent] 本场结束,回待命(等待下一场考试)…");
         }
         return 0;
+    }
+
+    /// 从 `/oidc/exchange` 回的 profile 里取一个给人看的名字。
+    /// ★ 身份出口只有 `sub` / `name` / `username` 三项(贝塔通 P81)。
+    ///   `name`(真实姓名)最适合给「这是不是我」这个判断;取不到就退回用户名,
+    ///   再取不到才用座位号 —— **不能退成空白**,那就等于这块横幅没写。
+    private static string DisplayName(string profileJson, string fallback)
+    {
+        try
+        {
+            using JsonDocument d = JsonDocument.Parse(profileJson);
+            JsonElement p = d.RootElement;
+            string? name = p.TryGetProperty("name", out JsonElement n) ? n.GetString() : null;
+            string? user = p.TryGetProperty("username", out JsonElement u) ? u.GetString() : null;
+            if (!string.IsNullOrWhiteSpace(name))
+                return string.IsNullOrWhiteSpace(user) ? name! : $"{name}（{user}）";
+            if (!string.IsNullOrWhiteSpace(user)) return user!;
+        }
+        catch (JsonException) { /* profile 不是合法 JSON:退回下面的兜底 */ }
+        return fallback;
     }
 
     /// 待命轮询:每 5s 查一次 /oidc/active-exam,直到出现活跃考试(true)或取消(false)。不采集、不抓屏、不连 WS。

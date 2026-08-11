@@ -59,6 +59,19 @@ public class SchemaDriftTests
     }
 
     [Fact]
+    public void 撤权原因留痕表只有原因_没有任何凭据()
+    {
+        using var app = new TestApp();
+        var db = app.Services.GetRequiredService<Db>();
+        // ★★ 这条断言的是**这张表的性质**:它只存一句给用户看的原因。
+        //   一旦有人往里加 sub / k_sess / 任何身份或密钥字段,它就从「留痕」变成了
+        //   「一份已撤销会话的副本」—— 而那正是当初选「删行 + 侧表」而不是软删除要避开的东西。
+        Assert.Equal(
+            ["reason", "revoked_at", "session_id"],
+            Columns(db, "revoked_session_notices"));
+    }
+
+    [Fact]
     public void 撤权幂等台账的列集合()
     {
         using var app = new TestApp();

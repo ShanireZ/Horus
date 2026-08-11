@@ -77,21 +77,34 @@ public sealed class SessionStore(Db db, ServerConfig cfg)
 
     /// 按考试吊销全部采集会话(监考员远程登出全场)。吊销后 Get 查无此会话 → 重连/上报一律 401,Agent 须重登。
     /// 返回吊销条数。
-    public int RevokeByExam(string examId)
-        => db.Write(conn =>
-        {
-            using SqliteCommand c = conn.Cmd("DELETE FROM oidc_sessions WHERE exam_id=@e", ("@e", examId));
-            return c.ExecuteNonQuery();
-        });
+    public int RevokeByExam(string examId, double now)
+        => Revoke(conn => conn.Cmd("SELECT session_id FROM oidc_sessions WHERE exam_id=@e", ("@e", examId)),
+                  conn => conn.Cmd("DELETE FROM oidc_sessions WHERE exam_id=@e", ("@e", examId)),
+                  RevocationNotices.ExamLogout, now);
 
     /// 按 `sub` 吊销该人的全部采集会话(贝塔通撤权通知·rp-contract)。返回吊销条数。
     /// ★ 与 <see cref="RevokeByExam"/> 的区别:那条是监考员主动清全场,这条是身份中心告知
     ///   「这个人的凭据失效了」—— 跨考试、只针对一个人。
-    public int RevokeBySub(string sub)
+    /// ★ `reason` 只用来**留一句给用户的话**,**绝不参与「要不要清」的判断**。
+    public int RevokeBySub(string sub, string reason, double now)
+        => Revoke(conn => conn.Cmd("SELECT session_id FROM oidc_sessions WHERE sub=@s", ("@s", sub)),
+                  conn => conn.Cmd("DELETE FROM oidc_sessions WHERE sub=@s", ("@s", sub)),
+                  reason, now);
+
+    /// 先取出要删的 session_id、再删、再留痕 —— 顺序不能倒(删完就查不到 id 了)。
+    private int Revoke(Func<SqliteConnection, SqliteCommand> select, Func<SqliteConnection, SqliteCommand> delete,
+        string reason, double now)
         => db.Write(conn =>
         {
-            using SqliteCommand c = conn.Cmd("DELETE FROM oidc_sessions WHERE sub=@s", ("@s", sub));
-            return c.ExecuteNonQuery();
+            var ids = new List<string>();
+            using (SqliteCommand q = select(conn))
+            using (SqliteDataReader r = q.ExecuteReader())
+                while (r.Read()) ids.Add(r.GetString(0));
+
+            using SqliteCommand c = delete(conn);
+            int n = c.ExecuteNonQuery();
+            RevocationNotices.Record(conn, ids, reason, now);
+            return n;
         });
 
     /// 按 sessionId 取会话;不存在或**三道门任一到点**返回 null(即拒,Agent 须重登)。

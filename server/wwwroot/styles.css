@@ -306,6 +306,21 @@ body {
   text-align: right;
 }
 
+/* 「当前登录：XXX」——★ 不是装饰：机房电脑轮流坐人，上一个人不点退出就走时，
+   让下一个人立刻看见这不是自己的号，是身份层唯一能真正生效的缓解（贝塔通 R9）。
+   所以它要足够显眼（不是 fg-2 那种弱色），但不能抢走操作按钮的注意力。 */
+.topbar__whoami {
+  font-size: 12px;
+  color: var(--fg-1);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* 考试管理按钮与刷新控件之间的竖分隔线 */
 .topbar__divider {
   width: 1px;

@@ -360,8 +360,21 @@ if (cfg.AdminAuthEnabled)
             }
             if (!ok)
             {
+                // ★ 401 顺带告诉前端**为什么** —— 撤权是删行,原因不留痕就永远只能显示
+                //   一句笼统的「登录已失效」。「平台权限被关掉」尤其要说清楚:取消 SSO 后
+                //   每点一次登录都要完整输一遍密码才被拒(贝塔通 P98),不说真话他会一遍遍白输。
+                //   ★ 查不到留痕(自然过期 / 三道门到点)时 message 为 null,前端退回原来那句。
+                string? why = cfg.DashboardOidcEnabled
+                    ? Horus.Server.Identity.RevocationNotices.Lookup(
+                        app.Services.GetRequiredService<Db>(), ctx.Request.Cookies["horus_admin"] ?? "")
+                    : null;
                 ctx.Response.StatusCode = 401;
-                await ctx.Response.WriteAsJsonAsync(new { error = "unauthorized" });
+                await ctx.Response.WriteAsJsonAsync(new
+                {
+                    error = "unauthorized",
+                    reason = why,
+                    message = why is null ? null : Horus.Server.Identity.RevocationNotices.Message(why),
+                });
                 return;
             }
         }

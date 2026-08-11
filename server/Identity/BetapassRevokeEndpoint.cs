@@ -90,10 +90,12 @@ public static class BetapassRevokeEndpoint
                 return Results.Ok(new { duplicate = true, revoked_sessions = prior.Value });
 
             // ③ 清会话。★ 按 aud 分别处置(见类注释):撤监考台不动采集面,反之亦然。
-            //    ★ 不看 reason —— 三种处置相同,认不出的新值也照清。
+            //    ★★ **`reason` 只被带下去当提示语,不参与「要不要清」的判断** ——
+            //    四种处置完全相同,**认不出的新值也照清**。这两件事在这一行里是分开的:
+            //    分支只看 `ClientId`,`Reason` 只往 RevokeBySub 的留痕里走。
             int revoked = string.Equals(notice.ClientId, cfg.OidcDashboardClientId, StringComparison.Ordinal)
-                ? adminSessions.RevokeBySub(notice.Sub)
-                : sessions.RevokeBySub(notice.Sub);
+                ? adminSessions.RevokeBySub(notice.Sub, notice.Reason, now)
+                : sessions.RevokeBySub(notice.Sub, notice.Reason, now);
 
             Record(db, notice, now, revoked);
             log.LogInformation("撤权通知已处理 sub={Sub} client={Client} reason={Reason} 清会话={N}",

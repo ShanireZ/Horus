@@ -193,6 +193,19 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
 );
 CREATE INDEX IF NOT EXISTS ix_admin_sessions_sub ON admin_sessions(sub);
 
+-- 会话「为什么没了」的留痕(供 401 时给用户一句真话) ------------------
+-- ★★ 撤权的处置是**删行** —— 删掉才不会被任何一条忘了加过滤条件的裸 SQL 意外复活
+--    (本仓反复吃过这个亏,见 SchemaDriftTests 的类注释)。代价是「为什么没了」随之消失,
+--    于是被踢的人只能看到一句笼统的「登录已失效」。
+-- ★ 这张表就补这一口:**只存一句给用户看的原因,不含任何凭据**,所以它复活不了任何东西。
+-- ★ 它尤其重要的场合是「平台权限被关掉」:取消 SSO(贝塔通 P84/P98)之后,
+--    每点一次登录都要**完整输一遍密码**才被拒 —— 不告诉他真实原因,他会一遍遍白输。
+CREATE TABLE IF NOT EXISTS revoked_session_notices (
+  session_id   TEXT PRIMARY KEY,                      -- 已被删掉的那条会话的 id(cookie/凭证里还留着)
+  reason       TEXT NOT NULL,                         -- 贝塔通的 reason,或本地口径(exam_logout 等)
+  revoked_at   REAL NOT NULL
+);
+
 -- 贝塔通撤权通知的幂等台账(其 P44/P69·rp-contract「/internal/revoke」) ----
 -- 贝塔通判成功的口径是 **2xx**,超时只有 5 秒 —— 处理成功但花了 6 秒的一发会被判失败并重投,
 -- 于是同一个 `jti` 必然会来第二次。「反正只会来一次」是错的,幂等不是可选项。

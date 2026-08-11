@@ -67,6 +67,26 @@ public static class Endpoints
             imageSearchEnabled = embedService.Enabled,
         }));
 
+        // ---- 当前登录是谁(admin 门内)----
+        //
+        // ★★ **这不是体验优化,是贝塔通 R9 唯一稳定生效的缓解。**
+        //   机房电脑**无还原卡**、浏览器混装国产内核因而组策略不现实、Windows 共享 PC 模式
+        //   也不现实 —— 上一个人不点退出就走时,最长 15 分钟(关了浏览器)或 30 分钟
+        //   (页面还开着)内,下一个人可以直接用他的会话。**身份层关不掉这个窗口。**
+        //   让下一个人**立刻看见这不是自己的号**,是能真正生效的那一条。
+        //   ★ 对考场尤其直接:学生轮流坐同一台机器正是常态。
+        //
+        // ★ 只回姓名与 sub —— 身份出口本来就只有三项(贝塔通 P81),这里不多给一个字段。
+        app.MapGet("/api/me", (HttpContext ctx) =>
+        {
+            if (!cfg.DashboardOidcEnabled) return Results.Json(new { oidc = false });
+            AdminSession? s = adminSessions.Get(ctx.Request.Cookies["horus_admin"] ?? "", Now());
+            // 走得到这里说明 gate 已放行;取不到只可能是 token 模式或极窄的竞态。
+            return s is null
+                ? Results.Json(new { oidc = true })
+                : Results.Json(new { oidc = true, sub = s.Sub, name = s.Name, expiresAt = s.ExpiresAt });
+        });
+
         // ---- 存活心跳:三道门的**唯一写入口**(贝塔通 P88–P92·rp-contract「三道门与存活心跳」) ----
         //
         // 报文 `{ active: boolean }`,回 **204 无响应体**。**不查用户表、不查权限、不做重活。**
@@ -720,7 +740,7 @@ public static class Endpoints
         app.MapPost("/api/exams/{examId}/logout", async (string examId, HttpContext ctx) =>
         {
             if (!IsSafeId(examId)) return Results.BadRequest(new { error = "bad_examId" });
-            int revoked = sessions.RevokeByExam(examId);
+            int revoked = sessions.RevokeByExam(examId, Now());
             int notified = await hub.PushSessionRevokedAsync(examId, ctx.RequestAborted);
             return Results.Json(new { ok = true, examId, revoked, notified });
         });

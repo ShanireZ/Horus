@@ -132,11 +132,14 @@
   /* ---------- 统一 fetch 封装：自动加令牌头 + 401 → 登录门 ---------- */
   // 401 处理：清空数据、停止轮询、弹登录门、给中文提示，绝不静默失败或白屏。
   // 抛出的错误带 .isAuth 标记，调用方的 .catch 只需照常 showToast（已弹门）。
-  function handleUnauthorized() {
+  // msg：服务器给的真实原因（撤权留痕）。★ 取不到时才退回那句笼统的。
+  //   ★★ 「你的监考台权限已关闭」这一种尤其要说清楚：取消 SSO 后（贝塔通 P84/P98）
+  //   每点一次登录都要**完整输一遍密码**才被拒，不告诉他真实原因，他会一遍遍白输。
+  function handleUnauthorized(msg) {
     stopPolling();
     stopHeartbeat();   // 会话已死：再发心跳既救不活它，401 还会再弹一次门
     clearCurrentData();
-    showLoginGate("登录已失效或过期，请重新登录");
+    showLoginGate(msg || "登录已失效或过期，请重新登录");
   }
 
   function api(path, options) {
@@ -161,10 +164,13 @@
       body: opts.body
     }).then(function (r) {
       if (r.status === 401) {
-        handleUnauthorized();
-        var authErr = new Error("未授权（401）");
-        authErr.isAuth = true;
-        throw authErr;
+        // 401 的响应体带着「为什么」（撤权留痕）；读不出就退回笼统提示。
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          handleUnauthorized(j && j.message);
+          var authErr = new Error("未授权（401）");
+          authErr.isAuth = true;
+          throw authErr;
+        });
       }
       if (!r.ok) throw new Error("HTTP " + r.status + " · " + path);
       return r.json();
@@ -231,7 +237,7 @@
         state.adminAuthMode = j.mode || "token";   // 退出按钮据此决定纯本地登出还是走贝塔通
         // 只有 oidc 模式才有管理会话可续(token 模式没有三道门这回事)。
         // ★ 若此刻其实没登录,loadExams() 会先 401 并在 handleUnauthorized 里把心跳停掉。
-        if (j.mode === "oidc") startHeartbeat();
+        if (j.mode === "oidc") { startHeartbeat(); loadWhoami(); }
       }).catch(function () {});
     loadExams();
   }
@@ -352,6 +358,28 @@
   }
 
   /* ============================================================
+     「当前登录：XXX」
+     ------------------------------------------------------------
+     ★★ 这不是体验优化。机房电脑**无还原卡**、浏览器混装国产内核因而组策略不现实、
+     Windows 共享 PC 模式也不现实（贝塔通 R9）—— 上一个人不点退出就走时，最长
+     15 分钟（关了浏览器）或 30 分钟（页面还开着）内，下一个人可以直接用他的会话。
+     **身份层关不掉这个窗口**，唯一能真正生效的缓解就是让下一个人立刻看见这不是自己的号。
+     ★ 对考场尤其直接：学生轮流坐同一台机器正是常态。
+     ============================================================ */
+  function loadWhoami() {
+    var el = $("#whoami");
+    if (!el) return;
+    fetch("/api/me", { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.oidc || !j.name) { el.hidden = true; return; }
+        el.textContent = "当前登录：" + j.name;
+        el.hidden = false;
+      })
+      .catch(function () { /* 取不到就不显示——不为一个提示条把看板搞崩 */ });
+  }
+
+  /* ============================================================
      存活心跳（三道门的第三道 · 贝塔通 P88–P92 · rp-contract「三道门与存活心跳」）
      ------------------------------------------------------------
      它挡的是「关页面 / 关浏览器走人」，与 idle 挡的「页面开着但人走了」是两件事。
@@ -419,7 +447,9 @@
       body: JSON.stringify({ active: hbAnyActive() })
     }).then(function (r) {
       // 401 = 三道门里某一道已经到点（或被贝塔通撤权）。弹门，别让一个已死的会话被自己的心跳救活。
-      if (r.status === 401) handleUnauthorized();
+      if (r.status !== 401) return;
+      return r.json().catch(function () { return {}; })
+        .then(function (j) { handleUnauthorized(j && j.message); });
     }).catch(function () { /* 网络抖动：下一发再说，15 分钟窗口容得下 3 次 */ });
   }
 
@@ -486,6 +516,8 @@
       hint.classList.toggle("is-error", /无效|过期/.test(msg));
     }
     $("#loginGate").hidden = false;
+    var whoami = $("#whoami");
+    if (whoami) whoami.hidden = true;   // 已经不是「当前登录」了，别把上一个人的名字留在屏幕上
     var input = $("#tokenInput");
     input.value = "";
     // M4·RBAC：据后端鉴权方式切换令牌输入 / wentian OIDC 登录按钮；token 模式才聚焦输入框。

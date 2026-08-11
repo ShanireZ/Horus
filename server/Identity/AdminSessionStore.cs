@@ -80,11 +80,20 @@ public sealed class AdminSessionStore(Db db, ServerConfig cfg)
     }
 
     /// 按 `sub` 吊销该人的全部管理会话(贝塔通撤权通知·rp-contract)。返回吊销条数。
-    public int RevokeBySub(string sub)
+    /// ★ `reason` 只用来**留一句给用户的话**(见 <see cref="RevocationNotices"/>),
+    ///   **绝不参与「要不要清」的判断** —— 四种 reason 处置完全相同,认不出的新值也照清。
+    public int RevokeBySub(string sub, string reason, double now)
         => db.Write(conn =>
         {
+            var ids = new List<string>();
+            using (SqliteCommand q = conn.Cmd("SELECT session_id FROM admin_sessions WHERE sub=@s", ("@s", sub)))
+            using (SqliteDataReader r = q.ExecuteReader())
+                while (r.Read()) ids.Add(r.GetString(0));
+
             using SqliteCommand c = conn.Cmd("DELETE FROM admin_sessions WHERE sub=@s", ("@s", sub));
-            return c.ExecuteNonQuery();
+            int n = c.ExecuteNonQuery();
+            RevocationNotices.Record(conn, ids, reason, now);
+            return n;
         });
 
     /// 登出:删会话(幂等)。
