@@ -256,8 +256,37 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
             }
         });
 
+        // ---- 三道门的采集面写入口(贝塔通 P88–P92)----
+        // ★ **复用既有上行通道**:Agent 本来就在持续上传事件流,不必另开一个心跳端点
+        //   (其 rp-contract 对桌面客户端明写可以复用)。
+        // ★★ `active` **由 Agent 自己定义**(采集机上有无用户活动),不是浏览器那套 —— 它更准。
+        //   ★ **缺 `active` 字段时按 false 算**:那说明采集端版本比服务器旧,是部署事故。
+        //   按 true 算能让它继续跑,但代价是 idle 那道门对那批机器**静默失效**,
+        //   而失效这件事没有任何症状。宁可让它以「学生 30 分钟后被踢」的形态暴露出来。
+        // ★ 放在写事务**之外**:Heartbeat 自己要取写锁,套在里面就是重入。
+        if (typeStr == "heartbeat" && session is not null)
+            sessions.Heartbeat(session.SessionId, TryGetPayloadBool(payloadRaw, "active") ?? false, Now());
+
         // 逐条 ack 本条 seq(不用范围 upto):即使 seq 空间有空洞,也不会误删从未送达的低 seq 事件
         await link.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "ack", seq }), ct);
+    }
+
+    /// 从 payload 原文里取一个布尔;不存在 / 类型不符返回 null(由调用方决定缺省语义)。
+    private static bool? TryGetPayloadBool(string payloadRaw, string key)
+    {
+        try
+        {
+            using JsonDocument d = JsonDocument.Parse(payloadRaw);
+            if (d.RootElement.ValueKind == JsonValueKind.Object && d.RootElement.TryGetProperty(key, out JsonElement v))
+                return v.ValueKind switch
+                {
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    _ => null,
+                };
+        }
+        catch (JsonException) { /* payload 非法 JSON:当作没这个字段 */ }
+        return null;
     }
 
     /// 抓不到 URL 的降级信号 = 强制人工复核(无视风险阈值),否则该兜底链断在最后一步。

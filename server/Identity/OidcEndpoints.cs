@@ -18,6 +18,7 @@ public static class OidcEndpoints
         OidcExchange? exchange = app.Services.GetService(typeof(OidcExchange)) as OidcExchange;
         Db db = app.Services.GetRequiredService<Db>();
         SessionStore sessions = app.Services.GetRequiredService<SessionStore>();
+        Horus.Server.Config.ServerConfig cfg = app.Services.GetRequiredService<Horus.Server.Config.ServerConfig>();
 
         app.MapPost("/oidc/exchange", async (HttpContext ctx) =>
         {
@@ -50,6 +51,10 @@ public static class OidcEndpoints
                 sessionId = s.SessionId,
                 serverEcdhPub = res.ServerEcdhPub,
                 expiresAt = s.ExpiresAt,
+                // 开考预检(贝塔通 P91):把「一场考试预计多久」下发给 Agent,让它自己拿
+                // expiresAt 算够不够。★ 原设计是靠 IdP 下发「你的会话还剩多久」的 claim,
+                //   取消 SSO 后作废 —— 判据改由 Horus 自己给,两个数都在自己手里。
+                expectedExamMinutes = cfg.ExpectedExamMinutes,
                 examId = s.ExamId,   // 服务端派发:Agent 采用此值填事件体(配置里已无 examId)
                 seatId = s.SeatId,   // OIDC 身份派生(username):Agent 采用此值填事件体(配置里已无 seatId)
                 // ★ 身份出口只剩三项(贝塔通 P81)。看板此前渲染的道号/境界/战力与

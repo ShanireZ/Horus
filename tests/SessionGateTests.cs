@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using Horus.Server.Config;
 using Horus.Server.Data;
@@ -283,6 +284,84 @@ public class SessionGateTests
         }
 
         Assert.Equal((now, now), Stamps(db, "admin_sessions", s.SessionId));   // ★ 一个都没被推动
+    }
+
+    // ---- 采集端心跳:复用既有 WS 上行通道 ----
+
+    private static async Task<System.Net.WebSockets.WebSocket> ConnectWithSessionAsync(
+        TestApp app, string sid, byte[] kSess)
+    {
+        Microsoft.AspNetCore.TestHost.WebSocketClient client = app.Server.CreateWebSocketClient();
+        client.ConfigureRequest = req =>
+        {
+            req.Headers["X-Horus-Session"] = sid;
+            req.Headers["X-Horus-Auth"] = Horus.Contracts.Auth.Handshake(kSess, "E1", "A07", "ag-A07");
+        };
+        return await client.ConnectAsync(
+            new Uri("ws://localhost/ingest/events?examId=E1&seatId=A07&agentId=ag-A07"), CancellationToken.None);
+    }
+
+    /// 起一场考试 + 一条采集会话,发一条带指定 payload 的心跳,回两个时间戳。
+    private static async Task<(double Hb, double Seen, double Created)> AgentHeartbeatAsync(
+        TestApp app, Dictionary<string, object?> payload)
+    {
+        HttpClient http = app.CreateClient();
+        (await http.PostAsJsonAsync("/api/exams",
+            new { examId = "E1", name = "T", seats = new[] { new { seatId = "A07" } } })).EnsureSuccessStatusCode();
+
+        var store = app.Services.GetRequiredService<SessionStore>();
+        var db = app.Services.GetRequiredService<Db>();
+        byte[] k = RandomNumberGenerator.GetBytes(32);
+        // ★ 建会话的时刻往前挪 10 分钟:否则「刚建好」就落在 150 秒节流窗口内,
+        //   心跳写不进去,用例测的就成了节流而不是这条链路。
+        double created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 - 600;
+        HorusSession s = store.Create("E1", "A07", "ag-A07", "PC", Claims(), k, created, 360);
+
+        using System.Net.WebSockets.WebSocket ws = await ConnectWithSessionAsync(app, s.SessionId, k);
+        await Ws.SendAsync(ws, Ws.SignedEventTs("E1", "A07", "ag-A07", "PC",
+            Horus.Contracts.SignalType.Heartbeat, payload, 0, 1,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0, psk: k));
+        await Ws.ReceiveAsync(ws);   // 等 ack,确保服务端已处理完
+
+        (double hb, double seen) = Stamps(db, "oidc_sessions", s.SessionId);
+        return (hb, seen, created);
+    }
+
+    [Fact]
+    public async Task 采集端心跳带active_true_两道门都续()
+    {
+        // ★ Agent **复用既有上行通道**发心跳,不另开端点 —— 它本来就在持续上传事件流。
+        using var app = new TestApp(authMode: "both");
+        (double hb, double seen, double created) =
+            await AgentHeartbeatAsync(app, new() { ["status"] = "alive", ["active"] = true });
+
+        Assert.True(hb > created);
+        Assert.True(seen > created);
+    }
+
+    [Fact]
+    public async Task 采集端心跳带active_false_只续心跳门()
+    {
+        using var app = new TestApp(authMode: "both");
+        (double hb, double seen, double created) =
+            await AgentHeartbeatAsync(app, new() { ["status"] = "alive", ["active"] = false });
+
+        Assert.True(hb > created);
+        Assert.Equal(created, seen);   // ★ 「人还在」没被这一发推动
+    }
+
+    [Fact]
+    public async Task 采集端心跳缺active字段_按false算()
+    {
+        // ★ 缺字段说明采集端版本比服务器旧,是部署事故。按 true 算能让它继续跑,
+        //   但代价是 idle 那道门对那批机器**静默失效** —— 而失效这件事没有任何症状。
+        //   宁可让它以「学生 30 分钟后被踢」的形态暴露出来。
+        using var app = new TestApp(authMode: "both");
+        (double hb, double seen, double created) =
+            await AgentHeartbeatAsync(app, new() { ["status"] = "alive" });
+
+        Assert.True(hb > created);
+        Assert.Equal(created, seen);
     }
 
     // ---- 配置默认值(口径本身也要被钉住) ----

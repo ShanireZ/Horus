@@ -15,7 +15,24 @@ public sealed record IngestCredential(byte[] Key, string? SessionId);
 
 /// OIDC 登录换会话结果(Agent 侧)。ExamId/SeatId 为**服务端派发值**(当前活跃考试 + username 派生座位),
 /// Agent 采用它们填事件体/握手 —— 配置文件里已无这两项。
-public sealed record OidcSession(string SessionId, byte[] KSess, double ExpiresAt, string ProfileJson, string ExamId, string SeatId);
+/// <param name="ExpectedExamMinutes">服务器给的「一场考试预计多久」,供开考预检用(贝塔通 P91)。</param>
+public sealed record OidcSession(string SessionId, byte[] KSess, double ExpiresAt, string ProfileJson,
+    string ExamId, string SeatId, int ExpectedExamMinutes = 0)
+{
+    /// 开考预检:这次登录的剩余寿命够不够撑完一场考试(贝塔通 P91)。
+    ///
+    /// ★★ 原设计是**靠 IdP 下发一个 claim** 告诉 RP「你的会话还剩多久」——
+    ///   **取消 SSO(其 P84)之后那条作废**,改为 Horus 拿自己的 absolute 自己算。
+    /// ★ 采集端每场考试都是**新登录**,所以正常情况下剩余恒为满;
+    ///   这个检查真正能逮到的是**服务器把 `oidcSessionMinutes` 配短了** ——
+    ///   而那件事的自然表现是「考到一半整场学生一起掉线」,到那时才发现就太晚了。
+    ///   ★ 因此这里的处置是**开考前一声大的**,不是自动重登:刚登录完再登一次只会死循环,
+    ///     真正的修法在服务器配置上。
+    public double RemainingMinutes(double nowUnix) => (ExpiresAt - nowUnix) / 60.0;
+
+    public bool CoversExam(double nowUnix) =>
+        ExpectedExamMinutes <= 0 || RemainingMinutes(nowUnix) >= ExpectedExamMinutes;
+}
 
 /// M4·A1:Agent 登录流(拓扑 A·Server-Broker)。系统浏览器走 wentian 授权码 + PKCE,回调落本机 loopback,
 /// 拿 code + PKCE verifier + 自己的 ECDH 公钥 POST 到 **Horus Server /oidc/exchange**(Server 持 secret 换 token+验签),
@@ -78,10 +95,12 @@ public static class OidcLoginFlow
         string profileJson = root.TryGetProperty("profile", out JsonElement p) ? p.GetRawText() : "{}";
         string examId = root.GetProperty("examId").GetString()!;   // 服务端派发,缺失即协议不符 → 抛错
         string seatId = root.GetProperty("seatId").GetString()!;
+        int expectedExamMinutes = root.TryGetProperty("expectedExamMinutes", out JsonElement em)
+            && em.TryGetInt32(out int emv) ? emv : 0;   // 老服务器不发这一项 → 0 = 不做开考预检
 
         // 6) 本地派生 K_sess(与 Server 一致;私钥全程不过网)
         byte[] kSess = SessionCrypto.DeriveKey(agentKey, serverPub);
-        return new OidcSession(sessionId, kSess, expiresAt, profileJson, examId, seatId);
+        return new OidcSession(sessionId, kSess, expiresAt, profileJson, examId, seatId, expectedExamMinutes);
     }
 
     private static async Task<string> AwaitCodeAsync(HttpListener listener, string expectedState, CancellationToken ct)

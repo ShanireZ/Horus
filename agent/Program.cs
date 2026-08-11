@@ -101,6 +101,20 @@ internal static class Program
 
             cfg.ExamId = session.ExamId;   // 服务端派发的当前考试
             cfg.SeatId = session.SeatId;   // OIDC 身份派生(username)
+
+            // ---- 开考预检:这次登录撑不撑得完一场考试(贝塔通 P91)----
+            // ★ 不自动重登:刚登录完再登一次是死循环,真正的修法在服务器的 oidcSessionMinutes 上。
+            //   所以这里是**开考前一声大的**,让监考员当场看见,而不是考到一半整场一起掉线。
+            double nowUnix = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+            if (!session.CoversExam(nowUnix))
+            {
+                Console.Error.WriteLine(
+                    $"[horus-agent] ⚠ 开考预检不通过:本次登录只剩 {session.RemainingMinutes(nowUnix):F0} 分钟,"
+                    + $"而一场考试预计 {session.ExpectedExamMinutes} 分钟。考到一半会被服务器判过期并掉线。"
+                    + "请监考员把服务器的 oidcSessionMinutes 调大后重启服务器,再让学员重新登录。");
+            }
+
+            // ★ 「当前登录:XXX」—— 机房电脑轮流坐人,让下一个人立刻看见这不是自己的号(贝塔通 R9)。
             Console.WriteLine($"[horus-agent] OIDC 登录成功 exam={cfg.ExamId} seat={cfg.SeatId},开始采集。");
             RunCollectionSession(cfg, cfgPath, selfExe, new IngestCredential(session.KSess, session.SessionId), http, cts.Token);
 
@@ -348,11 +362,23 @@ internal static class Program
         }
     }
 
+    /// 心跳:既是看板的「座位在线」指示,**也是三道门里心跳与 idle 两道的续期**(贝塔通 P88–P92)。
+    ///
+    /// ★ **复用既有上行通道,不另开心跳端点** —— Agent 本来就在持续上传事件流,
+    ///   再加一条 HTTP 心跳只是把同一件事做两遍(其 rp-contract 对采集端明写可以复用)。
+    /// ★★ `active` **由 Agent 自己定义**(机器上有无用户活动),不是浏览器那套
+    ///   `visibilityState` + `mousemove` —— 见 <see cref="Horus.Agent.Signals.UserActivity"/>。
+    /// ★ 30 秒一发远密于契约给网页的 5 分钟,而服务端有 150 秒节流,所以既不会压垮写入,
+    ///   也让「心跳 15 分钟」那道门有 30 次容错而不是 3 次。
     private static async Task HeartbeatLoop(Action<RawSignal> emit, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
-            emit(new RawSignal(SignalType.Heartbeat, new() { ["status"] = "alive" }));
+            emit(new RawSignal(SignalType.Heartbeat, new()
+            {
+                ["status"] = "alive",
+                ["active"] = Horus.Agent.Signals.UserActivity.IsActive(),
+            }));
             try { await Task.Delay(TimeSpan.FromSeconds(30), ct); }
             catch (TaskCanceledException) { break; }
         }

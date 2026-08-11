@@ -78,6 +78,17 @@ public sealed record ServerConfig
     /// 挡的是**关页面 / 关浏览器走人**;与 idle 挡的是两件事,**不要合并**。
     public int SessionHeartbeatMinutes { get; init; } = 15;
 
+    /// **开考预检**用的预计考试时长(分钟),默认 180。★ 它**不参与任何鉴权判定**,
+    /// 只用来回答一个问题:「你这次登录的剩余寿命够不够撑完一场考试」(贝塔通 P91)。
+    ///
+    /// ★★ 原设计是**靠 IdP 下发一个 claim** 告诉 RP「你的会话还剩多久」,
+    ///   **取消 SSO(其 P84)之后那条已作废** —— 改为 Horus 按自己的 absolute 自己算。
+    /// ★ 两个客户端上它的意义不同,见 `docs/m4-identity-oidc.md`:
+    ///   采集端每场考试都是**新登录**,所以剩余恒为满,这个检查真正能逮到的是
+    ///   **`oidcSessionMinutes` 配短了**;监考看板那边监考员可能几小时前就登录了,
+    ///   剩余不足是会真实发生的。
+    public int ExpectedExamMinutes { get; init; } = 180;
+
     [JsonIgnore]
     public bool OidcEnabled => AuthMode is "oidc" or "both";
     [JsonIgnore]

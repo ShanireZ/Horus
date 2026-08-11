@@ -183,6 +183,31 @@ public static class Endpoints
                 }
             }
 
+            // 3.5) 开考预检:**监考员自己这次登录**还剩多久,够不够撑完一场考试(贝塔通 P91)。
+            //
+            // ★★ 原设计是靠 IdP 下发一个 claim 告诉 RP「你的会话还剩多久」——
+            //   **取消 SSO(其 P84)之后那条作废**,改为 Horus 拿自己的 absolute 自己算。
+            // ★ 这一条在看板上比在采集端上更有用:采集端每场都是新登录、剩余恒为满,
+            //   而监考员很可能几小时前就登录了 —— absolute **任何活动都推不动它**,
+            //   于是「考到一半看板自己掉了」是会真实发生的。
+            if (cfg.DashboardOidcEnabled)
+            {
+                AdminSession? me = adminSessions.Get(ctx.Request.Cookies["horus_admin"] ?? "", Now());
+                if (me is null)
+                    Add("session_lifetime", "warn", "本次登录时长", "取不到当前管理会话(令牌模式或刚过期?)");
+                else
+                {
+                    double leftMin = (me.ExpiresAt - Now()) / 60.0;
+                    if (leftMin >= cfg.ExpectedExamMinutes)
+                        Add("session_lifetime", "ok", "本次登录时长",
+                            $"还剩 {leftMin:F0} 分钟 ≥ 预计考试 {cfg.ExpectedExamMinutes} 分钟");
+                    else
+                        Add("session_lifetime", "warn", "本次登录时长",
+                            $"只剩 {leftMin:F0} 分钟,不足预计考试 {cfg.ExpectedExamMinutes} 分钟 —— "
+                            + "absolute 那道门任何活动都推不动,建议开考前先退出重新登录一次");
+                }
+            }
+
             // 4) 视觉分析 key
             if (cfg.VisionEnabled)
             {
