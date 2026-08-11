@@ -149,8 +149,21 @@ public sealed record ServerConfig
     ///   决策本身是 owner 拍的、代码也写好了,但「线上跑的是哪一版」是另一回事 —— 逃生口就是为它留的。
     ///
     /// ★ 这一项因此**降级为逃生口**:只有在「代码已更新、但线上跑的贝塔通还是 P100 之前的版本」
-    ///   那段窗口里才置 true。★ 置错的代价很小 —— 探活恒 401,而 401 **算在线**
-    ///   (对侧任何 HTTP 应答都算活着),只在其后台显示成「在线但 HTTP 401」,看得见、不静默。
+    ///   那段窗口里才置 true。
+    ///
+    /// ★★★ **把这个默认值的依赖链写死在这里,因为它跨仓库**:
+    ///   「默认只认专属值」**依赖对侧真的发专属值**。那份改动 2026-08-11 时还只在对侧工作树里 ——
+    ///   owner 若始终没推,本仓的探活会**恒 401**。
+    ///   ★ **而那件事的代价确实很小,理由本身是核过的、不是猜的**:对侧
+    ///   `git show HEAD:src/identity/health/probe.ts` 第 81 行是
+    ///   `res.ok ? {online:true} : {online:true, error:...}` —— **非 2xx 也算在线**
+    ///   (`5bb16b6`,已确认是其 HEAD 的祖先,不是工作树)。所以恒 401 的后果只是
+    ///   「在其后台显示成**在线但 HTTP 401**」,**不会**挂起撤权重投。
+    ///   ★★ **接手要复核就跑这两条**,别读文件:
+    ///     `git -C ../BetaPass show HEAD:src/identity/health/probe.ts | grep res.ok`
+    ///     `git -C ../BetaPass log -S healthProbeAudience -- src/`
+    ///   —— **`git log -1` 告诉你的是 HEAD,不是磁盘上是什么**;并行会话下工作树常年是脏的,
+    ///   直接读文件几乎必错(本轮同一天两个方向各错了一次)。
     public bool OidcHealthAudienceAcceptLegacy { get; init; }
 
     /// 登出回跳地址(RP-Initiated Logout 的 `post_logout_redirect_uri`)。
