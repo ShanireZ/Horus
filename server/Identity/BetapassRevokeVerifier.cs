@@ -27,14 +27,32 @@ namespace Horus.Server.Identity;
 ///   `/internal/revoke`,还得过报文比对那一关(`sub` 得是 client_id,清的是查无此人的会话)。
 public sealed class BetapassRevokeVerifier
 {
-    /// 候选:(client_id, 绑定该 aud 的验证器)。顺序无所谓,全部试完才算失败。
+    /// **撤权**候选:(client_id, 绑定该 aud 的验证器)。顺序无所谓,全部试完才算失败。
     private readonly (string ClientId, OidcTokenValidator Validator)[] _candidates;
+
+    /// **探活**候选。★★ **与撤权候选分开是这次改动的全部要点** ——
+    ///   共用一份的话,给探活加一个可接受的 `aud` 会**连带放宽 `/internal/revoke`**,
+    ///   方向正好反了。回归 `探活专属aud的令牌打撤权端点_拒` 钉住这条。
+    private readonly (string ClientId, OidcTokenValidator Validator)[] _probeCandidates;
+
+    /// 探活当前接受哪些 `aud`(给预检显示用,判断过渡期能不能收掉)。
+    public IReadOnlyList<string> ProbeAudiences { get; }
 
     public BetapassRevokeVerifier(string jwksJson, ServerConfig cfg)
     {
         string[] clientIds = [.. new[] { cfg.OidcClientId, cfg.OidcDashboardClientId }
             .Where(one => !string.IsNullOrEmpty(one)).Select(one => one!).Distinct(StringComparer.Ordinal)];
         _candidates = [.. clientIds.Select(id => (id, new OidcTokenValidator(jwksJson, cfg.OidcIssuer!, id)))];
+
+        // 探活:新口径 `<client_id><后缀>`;过渡期同时接受旧口径 `<client_id>` 本身。
+        // ★ 元组第一项仍是**归属的 client_id**(不是那个 aud 字面量),因为调用方要的是
+        //   「这一发探的是哪个客户端」—— 新旧两种 aud 对这个答案没有影响。
+        var probe = clientIds
+            .Select(id => (id, Aud: id + cfg.OidcHealthAudienceSuffix)).ToList();
+        if (cfg.OidcHealthAudienceAcceptLegacy)
+            probe.AddRange(clientIds.Select(id => (id, Aud: id)));
+        _probeCandidates = [.. probe.Select(p => (p.id, new OidcTokenValidator(jwksJson, cfg.OidcIssuer!, p.Aud)))];
+        ProbeAudiences = [.. probe.Select(p => p.Aud)];
     }
 
     /// 本机登记了几个可接收撤权通知的客户端。0 表示这台机器根本收不了通知。
@@ -48,7 +66,7 @@ public sealed class BetapassRevokeVerifier
     ///   `alg`(PS256)/ 签名 / `iss` / `aud` / `exp` **五项一个不少**。
     public BetapassRevokeEndpoint.Notice Verify(string token)
     {
-        (string clientId, JsonElement payload) = VerifyCore(token, "撤权");
+        (string clientId, JsonElement payload) = VerifyCore(token, "撤权", _candidates);
 
         string jti = BetapassRevokeEndpoint.Opt(payload, "jti")
             ?? throw new OidcValidationException("撤权令牌缺 jti");
@@ -66,34 +84,35 @@ public sealed class BetapassRevokeVerifier
     ///   也没有要处置的对象。**签名 / `alg` / `iss` / `aud` / `exp` 五项一个不少**,
     ///   因为「验不验签」就是「这份接入拓扑是不是白送给任何能打到这个地址的人」的全部差别(其 P94)。
     ///
-    /// ★★ **探活令牌的 `aud` 与撤权令牌完全相同**(2026-08-11 核过对侧 `src/main.ts` 的 `signToken`),
-    ///   所以两者共用 <see cref="_candidates"/>。**「aud 拦不住这一对」是已知的、写进契约的例外**
-    ///   (其 rp-contract「例外:撤权与探活的 `aud` 是同一个值」),
-    ///   真正的防线在 `/internal/revoke` 那条**「令牌的 `sub` == 报文的 `sub`」**
-    ///   (见 <see cref="BetapassRevokeEndpoint.BodyMatches"/>,回归
-    ///   `拿探活令牌打撤权端点_踢不掉任何人` 钉住)。
+    /// ★★ **探活令牌走的是自己的候选集** <see cref="_probeCandidates"/>,与撤权分开。
+    ///   owner 2026-08-11 拍板:由贝塔通给探活令牌一个**专属 `aud`**(`&lt;client_id&gt;#health`),
+    ///   把契约里「多个入站端点唯一的区分是 `aud`」从一条带例外的规则恢复成**真不变量**。
     ///
-    /// ⏳ **对侧留了个待拍板项**:可能给探活令牌一个专属 `aud`(如 `&lt;client_id&gt;#health`)
-    ///   或一个 `purpose: 'health'`。其契约把**两者都标注为非必需**,因为上面那条 RP 侧判据已经够。
-    ///   ★★ **别提前改成 `#health`** —— 对侧一天没落地,改了就是探活恒验不过,
-    ///   而那个失效**几乎没有症状**(对侧任何 HTTP 应答都算在线,401 也不例外)。
-    ///   真落地时只动这一处的候选来源即可。
-    /// ★ **有意不做「过渡期同时接受新旧两个 `aud`」**(betai 侧走了那条路):本类的候选集
-    ///   被 <see cref="Verify"/> 与 <see cref="VerifyProbe"/> **共用**,直接加进去等于把
-    ///   `/internal/revoke` 的可接受 `aud` 也一起放宽 —— 要避开就得先把两个候选集拆开,
-    ///   那是为一个**尚未拍板、且契约标注为非必需**的改动预先做结构改造。
-    ///   ★★ 更要紧的是:那条新路**没有任何门会去验它**(对侧一天不发那个值,
-    ///   兼容分支就一天跑不到),正是「配置化做成装饰品」的形状。等真落地了改一行更实在。
-    public string VerifyProbe(string token) => VerifyCore(token, "探活").ClientId;
+    /// ★★★ **拆候选集是这次改动的全部要点**:两者共用一份的话,给探活加一个可接受的 `aud`
+    ///   会**连带放宽 `/internal/revoke`** —— 方向正好反了。回归
+    ///   `探活专属aud的令牌打撤权端点_拒` 正是钉这条。
+    ///
+    /// ⏳ **过渡期**:贝塔通尚未落地,今天发的仍是旧口径(`aud` = client_id 本身)。
+    ///   故默认**新旧都收**(`OidcHealthAudienceAcceptLegacy`)。★★ 对侧落地后要记得置 false ——
+    ///   不收掉的话「`aud` 拦不住这一对」的例外就永久留着,而那正是本次要消灭的东西。
+    ///   `GET /api/preflight` 的 `health_audience` 一项会一直提示它还开着。
+    ///
+    /// ★ **`/internal/revoke` 那条「令牌 `sub` == 报文 `sub`」不因此撤掉**(见
+    ///   <see cref="BetapassRevokeEndpoint.BodyMatches"/>):它降级为双保险,但**本身是自洽的
+    ///   语义约束**、不依赖对侧保持任何字段 —— 而这次改动恰恰依赖对侧。两道都留着。
+    public string VerifyProbe(string token) => VerifyCore(token, "探活", _probeCandidates).ClientId;
 
     /// 共用的验签内核:逐个候选 `aud` 试,全部试完仍不过才算失败。
     /// ★ `expectedNonce: null` —— 这两类令牌都不是登录流程,本就没有 nonce。
-    private (string ClientId, JsonElement Payload) VerifyCore(string token, string what)
+    /// ★★ **候选集由调用方传入**,不再读某个字段 —— 「撤权用哪一份、探活用哪一份」
+    ///   因此是**调用点上看得见的事实**,而不是要去读构造函数才知道的约定。
+    private (string ClientId, JsonElement Payload) VerifyCore(
+        string token, string what, (string ClientId, OidcTokenValidator Validator)[] candidates)
     {
-        if (_candidates.Length == 0) throw new OidcValidationException("本机没有登记任何 client_id");
+        if (candidates.Length == 0) throw new OidcValidationException("本机没有登记任何 client_id");
 
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
-        foreach ((string clientId, OidcTokenValidator validator) in _candidates)
+        foreach ((string clientId, OidcTokenValidator validator) in candidates)
         {
             try
             {

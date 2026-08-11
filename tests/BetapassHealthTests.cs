@@ -136,6 +136,67 @@ public class BetapassHealthTests
         Assert.Equal(HttpStatusCode.Gone, (await ProbeAsync(app.CreateClient(), null)).StatusCode);
     }
 
+    // ---- 专属 `aud`(owner 2026-08-11 拍板) ----
+
+    [Fact]
+    public async Task 专属aud的探活令牌_被接受()
+    {
+        // owner 拍板由贝塔通给探活令牌一个专属 `aud`(`<client_id>#health`),
+        // 把契约里「多个入站端点唯一的区分是 `aud`」从一条带例外的规则恢复成**真不变量**。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client#health"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task 过渡期_旧口径的探活令牌仍被接受()
+    {
+        // ★★ 贝塔通今天发的**还是旧值**。默认不收旧值的话就是探活全灭,
+        //   而那个失效几乎没有症状(对侧任何 HTTP 应答都算在线,401 也不例外)。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task 关掉过渡期后_旧口径被拒()
+    {
+        // ★ 过渡期开关必须**真的关得掉** —— 否则它就是个装饰品,而「aud 拦不住这一对」
+        //   的例外会跟着永久留着。这条钉住「关了就真的只收专属 aud」。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid), healthLegacyAud: false);
+        HttpClient http = app.CreateClient();
+
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await ProbeAsync(http, SignProbe(rsa, "horus-client"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await ProbeAsync(http, SignProbe(rsa, "horus-client#health"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task 探活专属aud的令牌打撤权端点_拒()
+    {
+        // ★★★ **这条是拆开撤权/探活两份候选集的全部意义。**
+        //   两者共用一份的话,给探活加一个可接受的 `aud` 会**连带放宽 `/internal/revoke`** ——
+        //   方向正好反了:本次改动是要让 `aud` 重新能区分这两个端点,
+        //   而共用候选集会让它连原来那点区分力都不剩。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
+
+        string token = SignProbe(rsa, "horus-client#health");
+        var req = new HttpRequestMessage(HttpMethod.Post, BetapassRevokeEndpoint.Path)
+        {
+            Content = new StringContent(
+                "{\"jti\":\"j1\",\"sub\":\"someone\",\"platform\":\"horus\",\"client_id\":\"horus-client\",\"reason\":\"password_changed\"}",
+                System.Text.Encoding.UTF8, "application/json"),
+        };
+        req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + token);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await app.CreateClient().SendAsync(req)).StatusCode);
+    }
+
     [Fact]
     public async Task 探活不清任何会话()
     {

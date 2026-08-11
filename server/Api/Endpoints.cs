@@ -211,6 +211,23 @@ public static class Endpoints
                 }
             }
 
+            // 3.4) 探活令牌的 `aud` 口径(owner 2026-08-11 拍板给探活一个专属 aud)。
+            //
+            // ★★ **这一项存在的全部理由是「别让过渡期变成永久」**:兼容分支不会自己消失,
+            //   而只要它还开着,「`aud` 拦不住撤权/探活这一对」的例外就还在 —— 那正是本次要消灭的。
+            //   把它摆在监考员每次开考都会看的那一屏上,是唯一会被真的看见的位置。
+            if (cfg.OidcEnabled || cfg.DashboardOidcEnabled)
+            {
+                var verifier = ctx.RequestServices.GetService(typeof(BetapassRevokeVerifier)) as BetapassRevokeVerifier;
+                string auds = verifier is null ? "(未构造)" : string.Join(" / ", verifier.ProbeAudiences);
+                if (cfg.OidcHealthAudienceAcceptLegacy)
+                    Add("health_audience", "warn", "探活 aud 口径",
+                        "过渡期:新旧都收(" + auds + ")。★ 贝塔通侧落地专属 aud 之后,"
+                        + "把 oidcHealthAudienceAcceptLegacy 置 false —— 不收掉这条过渡分支就永久留着");
+                else
+                    Add("health_audience", "ok", "探活 aud 口径", "只收专属 aud(" + auds + ")");
+            }
+
             // 3.5) 开考预检:**监考员自己这次登录**还剩多久,够不够撑完一场考试(贝塔通 P91)。
             //
             // ★★ 原设计是靠 IdP 下发一个 claim 告诉 RP「你的会话还剩多久」——

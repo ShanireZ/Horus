@@ -128,6 +128,24 @@ public sealed record ServerConfig
     public string? OidcDashboardClientSecretEnc { get; init; }
     /// dashboard 回调 URI(须与 wentian 注册的 OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致,如 https://<服务器>/cb)。
     public string? OidcDashboardRedirectUri { get; init; }
+    // ---- 探活令牌的专属 `aud`(owner 2026-08-11 拍板) ----
+    // ★★ **背景**:`/internal/revoke` 与 `GET /internal/health` 的令牌此前 `aud` **完全相同**
+    //   (都是本机 client_id),于是契约里「多个入站端点唯一的区分是 `aud`」对这一对**不成立**。
+    //   owner 拍板由贝塔通给探活令牌一个专属 `aud`,把那句话恢复成**真不变量**。
+    // ★ **为什么值得改,尽管现有三家 RP 恰好都安全**:漏做「令牌 `sub` == 报文 `sub`」是**零症状**的,
+    //   把安全性押在「每一家 RP 都读懂并正确实现了契约」上不划算 —— 成均与将来的 RP 还没写。
+    /// 探活令牌 `aud` 在 client_id 之后的后缀。**必须与贝塔通签发时用的字面量一致**。
+    /// ★ 做成配置是因为对侧尚未落地:字面量对不上时这是**改配置**而不是改代码。
+    public string OidcHealthAudienceSuffix { get; init; } = "#health";
+
+    /// 过渡期:探活是否**仍然接受**旧口径(`aud` = client_id 本身)。默认 **true**。
+    ///
+    /// ★★ **对侧落地之前必须保持 true** —— 贝塔通今天发的还是旧值,置 false 就是探活全灭。
+    /// ★★ **对侧落地之后要记得置 false**,否则这条过渡分支会永久留着,而
+    ///   「`aud` 拦不住这一对」的例外也就跟着永久留着 —— 那正是本次改动要消灭的东西。
+    ///   `GET /api/preflight` 的 `health_audience` 一项会一直提示它还开着。
+    public bool OidcHealthAudienceAcceptLegacy { get; init; } = true;
+
     /// 登出回跳地址(RP-Initiated Logout 的 `post_logout_redirect_uri`)。
     /// 留空则按 <see cref="OidcDashboardRedirectUri"/> **同源**推导 `/logout/done`。
     ///

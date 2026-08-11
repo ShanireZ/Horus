@@ -27,7 +27,9 @@ public sealed class TestApp : WebApplicationFactory<Program>
 
     /// ★ `jwks`:注入一份**真能验签**的 JWKS —— 撤权通知那类用例要用真私钥签令牌打进来。
     /// 留空则用 <see cref="DummyJwks"/>,它只保证「能构造出验证器」,签不出也验不过任何真令牌。
-    public TestApp(bool adminAuth = false, bool keystrokeAuth = false, bool visionMock = false, string? authMode = null, bool adminOidc = false, bool embedMock = false, string? jwks = null)
+    /// ★ `healthLegacyAud`:探活是否仍收旧口径(`aud` = client_id 本身)。默认 true = 过渡期,
+    ///   与生产默认一致;传 false 用来验「关得掉」。
+    public TestApp(bool adminAuth = false, bool keystrokeAuth = false, bool visionMock = false, string? authMode = null, bool adminOidc = false, bool embedMock = false, string? jwks = null, bool healthLegacyAud = true)
     {
         _dataDir = Path.Combine(Path.GetTempPath(), "horus-test-" + Guid.NewGuid().ToString("N")[..12]);
         Directory.CreateDirectory(_dataDir);
@@ -50,6 +52,8 @@ public sealed class TestApp : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("HORUS_OIDC_DASHBOARD_CLIENT_ID", adminOidc ? "horus-dashboard" : null);
         Environment.SetEnvironmentVariable("HORUS_OIDC_DASHBOARD_SECRET", adminOidc ? "dash-secret" : null);
         Environment.SetEnvironmentVariable("HORUS_OIDC_DASHBOARD_REDIRECT", adminOidc ? "https://horus.test/cb" : null);
+        // 探活 aud 过渡期开关(owner 2026-08-11 拍板给探活专属 aud)。null 清除 → 用生产默认 true。
+        Environment.SetEnvironmentVariable("HORUS_OIDC_HEALTH_LEGACY_AUD", healthLegacyAud ? null : "false");
     }
 
     /// 连接事件 WS,附带合法握手头。

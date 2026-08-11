@@ -51,6 +51,28 @@
 > | `GET /admin/logout` | RP-Initiated Logout：★ **先清本地，再跳**贝塔通的退出范围二选一页 |
 > | `GET /logout/done` | 回跳落点。★★ **在这里再清一次本地会话** —— 「只退出本站」上游只撤 grant，碰不到你的本地会话 |
 >
+> ### ★★ 探活令牌的专属 `aud`（owner 2026-08-11 拍板）
+>
+> `/internal/revoke` 与 `/internal/health` 的令牌此前 **`aud` 完全相同**（都是本机 client_id），
+> 于是契约里「多个入站端点唯一的区分是 `aud`」对这一对**不成立**。
+> owner 拍板：由贝塔通给探活令牌一个**专属 `aud` = `<client_id>#health`**，把那句话恢复成**真不变量**。
+>
+> ★ **为什么值得改，尽管已实现的三家 RP 恰好都安全**（问天录 / betai / Horus 的 `sub` 都从令牌取）：
+> 漏做「令牌 `sub` == 报文 `sub`」是**零症状**的，把安全性押在「每一家都读懂并正确实现了契约」上
+> 不划算 —— 成均与将来的 RP 还没写。
+>
+> **Horus 侧的落法**：
+>
+> - ★★★ **撤权与探活的候选 `aud` 集拆开**（`BetapassRevokeVerifier._candidates` /
+>   `_probeCandidates`）。**这是全部要点** —— 共用一份的话，给探活加一个可接受的 `aud`
+>   会**连带放宽 `/internal/revoke`**，方向正好反了。回归 `探活专属aud的令牌打撤权端点_拒` 钉住。
+> - ⏳ **过渡期**：贝塔通尚未落地，今天发的仍是旧值，故默认**新旧都收**
+>   （`oidcHealthAudienceAcceptLegacy`，默认 `true`；字面量走 `oidcHealthAudienceSuffix`）。
+>   ★★ **对侧落地后要置 `false`** —— 不收掉这条过渡分支就永久留着，而「`aud` 拦不住这一对」
+>   的例外也就跟着永久留着。`GET /api/preflight` 的 `health_audience` 一项会一直提示它还开着。
+> - ★ `/internal/revoke` 那条「令牌 `sub` == 报文 `sub`」**不撤**：它降为双保险，
+>   但**本身自洽、不依赖对侧保持任何字段** —— 而这次改动恰恰依赖对侧。两道都留着。
+>
 > ### ★★ 一处与跨项目通知**不一致**的地方（已拍板，别再改回去）
 >
 > 那份通知的第三节写「收到 revoke 时**两套会话都要按 `sub` 清**」。**本仓不这么做**，
