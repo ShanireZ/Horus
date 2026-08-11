@@ -45,7 +45,7 @@
 >
 > | 端点 | 干什么 |
 > |---|---|
-> | `GET /internal/health` | 贝塔通每 5 分钟探活（其 P94）。**必须验签**（与 `/internal/revoke` 同一套）。★★ 不实现 = 贝塔通永远认为 Horus 离线 = **撤权通知永远送不到**，且没有任何症状 |
+> | `GET /internal/health` | 贝塔通每 5 分钟探活（其 P94）。**必须验签**（与 `/internal/revoke` 同一套）。★★ **「不实现 = 撤权通知永远送不到」那条旧理由已不成立**（对侧 `5bb16b6` 之后任何 HTTP 应答都算在线，包括没实现时框架回的 404）；仍要实现的三条理由见 `BetapassHealthEndpoint` 类注释 |
 > | `POST /api/heartbeat` | 看板心跳，收 `{ active }` 回 204 |
 > | `GET /api/me` | 「当前登录：XXX」用 |
 > | `GET /admin/logout` | RP-Initiated Logout：★ **先清本地，再跳**贝塔通的退出范围二选一页 |

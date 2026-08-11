@@ -400,8 +400,9 @@ app.MapAdminOidc();
 Horus.Server.Identity.BetapassRevokeEndpoint.Map(app);
 
 // ---- 贝塔通存活探测接收端(其 P94·rp-contract「必办项」)。非 /api,不受 admin gate ----
-// ★★ 不实现它 = 贝塔通连续 3 次探不到即判 Horus 离线 = **撤权通知永远送不到本站**,
-//   而「权限撤了、人还在里面」没有任何症状。同样必须始终挂上(理由同上一条)。
+// ★ 为什么实现它:契约列为必办项 + 对侧判据改回去的那一刻没实现的站会立刻失效且无症状。
+//   ★★ **「不实现 = 撤权通知永远送不到」那条旧理由已不成立**,见 BetapassHealthEndpoint 类注释。
+// 同样必须始终挂上(理由同上一条)。
 Horus.Server.Identity.BetapassHealthEndpoint.Map(app);
 
 // ---- 看板 / 管理 API ----

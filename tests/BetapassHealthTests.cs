@@ -10,9 +10,10 @@ namespace Horus.Server.Tests;
 
 /// 贝塔通存活探测端点(`GET /internal/health`)的契约回归(其 P94)。
 ///
-/// ★★ **为什么这几条必须有测试**:这个端点没有任何用户可见行为 —— 它坏掉的表现是
-///   「贝塔通那边把 Horus 判成离线、撤权通知一直投不过来」,**本站零症状**。
-///   没有测试的规则就是没人执行的规则。
+/// ★★ **为什么这几条必须有测试**:这个端点没有任何用户可见行为 —— 它坏掉时**本站零症状**,
+///   要到「某人权限撤了却还在里面」被人追查时才发现。没有测试的规则就是没人执行的规则。
+///   ★ 注意:**「不实现它就会被判离线」那条旧说法已不成立**(对侧 `5bb16b6` 之后
+///   任何 HTTP 应答都算在线),仍然要实现的理由见 `BetapassHealthEndpoint` 的类注释。
 ///
 /// 判据逐条来自 BetaPass `docs/rp-contract.md`「`GET /internal/health`:必办项」:
 /// 必须验签(含 `aud` 是不是自己)、任意 2xx 即算在线、不查库。
@@ -72,8 +73,9 @@ public class BetapassHealthTests
     public async Task 监考台的client_id也认()
     {
         // ★ 两个客户端**各登记一个回调地址,因此探活也是两条**(采集面 `horus-client` /
-        //   监考台 `horus-dashboard`)。只认其中一个的话,另一个平台会被判离线、
-        //   它的撤权重投随之被挂起 —— 而那一半没有任何症状。
+        //   监考台 `horus-dashboard`)。只认其中一个的话,另一条探活恒验不过 ——
+        //   ★ 今天它不会导致判离线(对侧任何 HTTP 应答都算在线),但会在其后台留下一条
+        //   永久的 `HTTP 401`,且对侧判据一改回去那一半立刻失效。两边都要认。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", adminOidc: true, jwks: BuildJwks(rsa, Kid));
         HttpClient http = app.CreateClient();
@@ -127,8 +129,9 @@ public class BetapassHealthTests
     public async Task 未开OIDC时回410而不是404()
     {
         // 与 `/internal/revoke` 同口径:路由**始终挂上**,由端点自己回一个明确状态。
-        // ★ 410 是非 2xx,贝塔通会据此把本站判离线并挂起队列 —— 而那正是如实的:
-        //   本机没有 OIDC 会话可清,挂起不损失任何东西。
+        // ★ 410 **不会**让对侧把本站判离线(其 `5bb16b6` 之后任何 HTTP 应答都算在线),
+        //   而是被如实记成一条 `HTTP 410` 摆在其后台 —— 这正是要的:
+        //   「这台机器不是接入方」应该有人看见,而不是安静地当作一切正常。
         using var app = new TestApp();   // 默认 psk,两条 OIDC 链路都没开
         Assert.Equal(HttpStatusCode.Gone, (await ProbeAsync(app.CreateClient(), null)).StatusCode);
     }
