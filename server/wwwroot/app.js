@@ -134,6 +134,7 @@
   // 抛出的错误带 .isAuth 标记，调用方的 .catch 只需照常 showToast（已弹门）。
   function handleUnauthorized() {
     stopPolling();
+    stopHeartbeat();   // 会话已死：再发心跳既救不活它，401 还会再弹一次门
     clearCurrentData();
     showLoginGate("登录已失效或过期，请重新登录");
   }
@@ -222,7 +223,14 @@
     hideLoginGate();
     // 取一次采集面模式(both 灰度期看板要高亮 PSK 座位);失败静默(默认不高亮)。
     fetch("/api/authmode", { credentials: "same-origin" }).then(function (r) { return r.json(); })
-      .then(function (j) { if (j) { if (j.collectAuthMode) state.collectAuthMode = j.collectAuthMode; state.imageSearchEnabled = !!j.imageSearchEnabled; } }).catch(function () {});
+      .then(function (j) {
+        if (!j) return;
+        if (j.collectAuthMode) state.collectAuthMode = j.collectAuthMode;
+        state.imageSearchEnabled = !!j.imageSearchEnabled;
+        // 只有 oidc 模式才有管理会话可续(token 模式没有三道门这回事)。
+        // ★ 若此刻其实没登录,loadExams() 会先 401 并在 handleUnauthorized 里把心跳停掉。
+        if (j.mode === "oidc") startHeartbeat();
+      }).catch(function () {});
     loadExams();
   }
 
@@ -243,10 +251,11 @@
       state.autoRefresh = e.target.checked;
       restartPolling();
     });
-    // 退出监考员登录：清 cookie → 停轮询 → 清屏 → 弹登录门
+    // 退出监考员登录：清 cookie → 停轮询/心跳 → 清屏 → 弹登录门
     $("#logoutBtn").addEventListener("click", function () {
       logout();
       stopPolling();
+      stopHeartbeat();
       clearCurrentData();
       showLoginGate("请重新登录");
     });
@@ -332,6 +341,130 @@
         if (err && err.isAuth) return;
         showToast("全场登出失败：" + err.message);
       });
+  }
+
+  /* ============================================================
+     存活心跳（三道门的第三道 · 贝塔通 P88–P92 · rp-contract「三道门与存活心跳」）
+     ------------------------------------------------------------
+     它挡的是「关页面 / 关浏览器走人」，与 idle 挡的「页面开着但人走了」是两件事。
+     机房电脑无还原卡、组策略不可行（贝塔通 R9），所以这一层是身份侧唯一的抓手。
+
+     报文 { active }：**任何**心跳续「心跳」那道门；**只有 active:true** 才额外续 idle。
+       · active = 页面可见 && 最近 5 分钟内有过 mousemove / keydown / click / scroll。
+
+     ★★ 心跳是 idle 的**唯一**续期入口。**看板的自动轮询绝不能续 idle** ——
+        看板本来就每 5 秒轮询一次，轮询算作活动的话 idle 那道门永远不会到点，
+        监考机上开着看板就等于永不登出。服务端 admin gate 因此只读不写。
+
+     ★ 跨标签选主：只有 leader 发心跳。leader 判据 = 存活对等体里 id 最小的那个；
+       对等体每 5 秒广播一次，**15 秒**没广播即视为已走（必须远小于 5 分钟的心跳间隔，
+       否则 leader 一关就漏掉整个心跳周期）。
+
+     ★ 「只剩一个标签且它被浏览器冻结 → 无心跳 → 15 分钟后登出」**是预期行为，不要去修**：
+       页面被冻结本来就说明没人在用。上线前要对监考员说清楚，否则会被当 bug 报。
+     ============================================================ */
+  var HEARTBEAT_MS = 5 * 60 * 1000;    // 心跳间隔
+  var ACTIVITY_WINDOW_MS = 5 * 60 * 1000; // 「最近有过输入」的窗口
+  var PEER_TTL_MS = 15 * 1000;         // leader 广播超时
+  var PEER_PING_MS = 5 * 1000;         // 对等体广播间隔
+
+  var hb = {
+    on: false, id: null, chan: null, peers: {},
+    lastInputAt: 0, timer: null, pingTimer: null, wasLeader: false, bound: false
+  };
+
+  // 本标签自己「人还在」吗
+  function hbSelfActive() {
+    return document.visibilityState === "visible"
+        && (Date.now() - hb.lastInputAt) < ACTIVITY_WINDOW_MS;
+  }
+
+  // 上报用的 active：**本标签或任一存活对等体活跃即为 true**。
+  // ★ 契约给的算法只看本标签，但 leader 未必是用户正在看的那个标签 ——
+  //   照字面实现的话，「在 B 标签里干活、A 标签当 leader」会被判成人不在，
+  //   30 分钟后无声登出。判据本来要回答的是「这个人还在不在」，不是「哪个标签在前台」。
+  function hbAnyActive() {
+    if (hbSelfActive()) return true;
+    var now = Date.now(), ids = Object.keys(hb.peers);
+    for (var i = 0; i < ids.length; i++) {
+      var p = hb.peers[ids[i]];
+      if (p.active && (now - p.at) < PEER_TTL_MS) return true;
+    }
+    return false;
+  }
+
+  // leader = 存活对等体（含自己）里 id 最小的那个。纯函数、无需协商，任一标签消失都自愈。
+  function hbIsLeader() {
+    var now = Date.now(), min = hb.id, ids = Object.keys(hb.peers);
+    for (var i = 0; i < ids.length; i++) {
+      if ((now - hb.peers[ids[i]].at) < PEER_TTL_MS && ids[i] < min) min = ids[i];
+    }
+    return min === hb.id;
+  }
+
+  function hbSend() {
+    if (!hb.on) return;
+    fetch("/api/heartbeat", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: hbAnyActive() })
+    }).then(function (r) {
+      // 401 = 三道门里某一道已经到点（或被贝塔通撤权）。弹门，别让一个已死的会话被自己的心跳救活。
+      if (r.status === 401) handleUnauthorized();
+    }).catch(function () { /* 网络抖动：下一发再说，15 分钟窗口容得下 3 次 */ });
+  }
+
+  function hbPing() {
+    if (!hb.on) return;
+    var now = Date.now();
+    // 清掉已走的对等体
+    Object.keys(hb.peers).forEach(function (id) {
+      if ((now - hb.peers[id].at) >= PEER_TTL_MS) delete hb.peers[id];
+    });
+    if (hb.chan) {
+      try { hb.chan.postMessage({ id: hb.id, active: hbSelfActive() }); } catch (e) {}
+    }
+    var leader = hbIsLeader();
+    // ★ 刚接手就补一发：新 leader 自己那个 5 分钟定时器的相位是随机的，
+    //   不补的话最坏要再等一整个周期，而上一任已经不发了。
+    //   服务端 150 秒节流正好吸收掉这类补发（这也是窗口取 150 秒而非贴近 5 分钟的原因之一）。
+    if (leader && !hb.wasLeader) hbSend();
+    hb.wasLeader = leader;
+  }
+
+  function startHeartbeat() {
+    if (hb.on) return;
+    hb.on = true;
+    hb.id = String(Date.now() % 1e6) + "-" + Math.random().toString(36).slice(2, 10);
+    hb.lastInputAt = Date.now();   // 刚登录进来，人显然在
+    try {
+      hb.chan = new BroadcastChannel("horus-admin-heartbeat");
+      hb.chan.onmessage = function (ev) {
+        var m = ev && ev.data;
+        if (m && m.id && m.id !== hb.id) hb.peers[m.id] = { at: Date.now(), active: !!m.active };
+      };
+    } catch (e) {
+      hb.chan = null;   // 浏览器不支持 BroadcastChannel → 本标签独自当 leader，功能不降级
+    }
+    if (!hb.bound) {
+      ["mousemove", "keydown", "click", "scroll"].forEach(function (t) {
+        window.addEventListener(t, function () { hb.lastInputAt = Date.now(); }, { passive: true });
+      });
+      hb.bound = true;   // 监听器只挂一次（stop/start 会反复调用）
+    }
+    hb.wasLeader = hbIsLeader();   // 起步时不发：会话刚建，两个时间戳本就是 now
+    hb.pingTimer = setInterval(hbPing, PEER_PING_MS);
+    hb.timer = setInterval(function () { if (hbIsLeader()) hbSend(); }, HEARTBEAT_MS);
+  }
+
+  function stopHeartbeat() {
+    hb.on = false;
+    if (hb.timer) { clearInterval(hb.timer); hb.timer = null; }
+    if (hb.pingTimer) { clearInterval(hb.pingTimer); hb.pingTimer = null; }
+    if (hb.chan) { try { hb.chan.close(); } catch (e) {} hb.chan = null; }
+    hb.peers = {};
+    hb.wasLeader = false;
   }
 
   /* ============================================================

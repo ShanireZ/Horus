@@ -67,6 +67,36 @@ public static class Endpoints
             imageSearchEnabled = embedService.Enabled,
         }));
 
+        // ---- 存活心跳:三道门的**唯一写入口**(贝塔通 P88–P92·rp-contract「三道门与存活心跳」) ----
+        //
+        // 报文 `{ active: boolean }`,回 **204 无响应体**。**不查用户表、不查权限、不做重活。**
+        //
+        // ★★ **它不是业务请求,而反过来也写死:任何业务请求都不得续 idle。**
+        //   这一条对监考看板尤其致命 —— 看板是**持续自动轮询**的,把轮询算作活动的话
+        //   idle 那道门**永远不会到点**,监考机上开着看板就等于永不登出。
+        //   落法:admin gate(`Program.cs`)只**读**会话不写时间戳,续期只发生在这一个端点里。
+        //   ★ 这正是贝塔通 P25 被翻案(P92)的直接原因。
+        //
+        // ★ 它**走 admin gate**(不在豁免名单里):要续谁的会话总得先知道是谁。
+        //   于是会话已被三道门中任一道判掉时,这里返回的是 gate 的 401 —— 前端据此弹登录门,
+        //   而不是让一个死会话被自己的心跳救活。
+        //
+        // ★ `token` 模式(静态 adminToken·无管理会话)下是 no-op:照回 204,免得前端刷一屏 404。
+        app.MapPost("/api/heartbeat", async (HttpContext ctx) =>
+        {
+            bool active;
+            try
+            {
+                JsonNode? body = await JsonNode.ParseAsync(ctx.Request.Body);
+                active = (bool?)body?["active"] ?? false;
+            }
+            catch (JsonException) { return Results.Json(new { ok = false, error = "bad_json" }, statusCode: 400); }
+
+            if (cfg.DashboardOidcEnabled)
+                adminSessions.Heartbeat(ctx.Request.Cookies["horus_admin"] ?? "", active, Now());
+            return Results.NoContent();
+        });
+
         // ---- 按图搜图(M3·admin 门内):以一张证据图为查询,在本场已嵌入图里暴力余弦捞相似帧 ----
         app.MapPost("/api/exams/{examId}/search-image", async (string examId, HttpContext ctx) =>
         {
