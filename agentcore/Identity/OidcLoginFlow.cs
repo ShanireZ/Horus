@@ -59,7 +59,13 @@ public static class OidcLoginFlow
         listener.Prefixes.Add($"http://127.0.0.1:{port}/cb/");   // HttpListener 前缀需尾斜杠
         listener.Start();
 
-        // 3) 构造 authorize URL,开系统浏览器(已登 wentian → near-无感)
+        // 3) 构造 authorize URL,开系统浏览器。
+        // ★★ **不再是「已登过就近乎无感」了**(贝塔通 P84 取消 SSO,2026-08-10):
+        //   每一次授权请求都强制重新认证 —— 学员**每场考试都要完整输一遍密码**
+        //   (过 MFA 的还要再过一次)。回调流程本身一个字没变,但**用时变长了**,
+        //   开考引导要按这个安排(见 agent/Program.cs 里那句提示)。
+        //   ★ 这里**不设等回调的超时**:学生输密码 + 过 MFA 可能要好几分钟,
+        //   卡个短超时的表现是「快输完了却被判失败,还得从头再来一遍」。
         string authorizeUrl =
             $"{cfg.OidcAuthorizeBase}?response_type=code" +
             $"&client_id={Uri.EscapeDataString(cfg.OidcClientId)}" +

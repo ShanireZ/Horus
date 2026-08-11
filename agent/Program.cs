@@ -87,7 +87,9 @@ internal static class Program
             OidcSession session;
             try
             {
-                Console.WriteLine("[horus-agent] 检测到活跃考试:即将打开系统浏览器完成 wentian 授权…");
+                // ★ 如实告诉学员「要输密码」:取消 SSO 后(贝塔通 P84)每场考试都要完整认证一次,
+                //   不再有「刚在别处登过所以秒进」。不说清楚的表现是学生盯着浏览器等它自己跳过去。
+                Console.WriteLine("[horus-agent] 检测到活跃考试:即将打开系统浏览器,请用**贝塔通账号**登录(需输入密码,开了二次验证的还要再过一次)。");
                 using var loginHttp = new HttpClient();
                 session = OidcLoginFlow.LoginAsync(cfg, loginHttp, ct: cts.Token).GetAwaiter().GetResult();
             }

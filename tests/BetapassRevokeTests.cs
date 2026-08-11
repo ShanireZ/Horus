@@ -172,6 +172,33 @@ public class BetapassRevokeTests
     }
 
     [Fact]
+    public async Task 同一条通知被重投很多次_每次都回2xx且不重复清()
+    {
+        // ★★ 贝塔通 P93 起**重投走完不进终态**:阶梯是 5min×3 → 15min → 30min → 1h,
+        //   走完转「等待探活」挂起,探到本站回来后**从头再投一遍,直至成功**。
+        //   于是同一条通知会被投很多次,且**本站长时间下线再回来时会一次性收到一批积压的**。
+        // ★ 处置办法就是 `jti` 幂等台账 —— **不要动它**,也**不要因为「这条太旧了」而丢弃**
+        //   (旧不代表已经处理过)。这条锁住「投多少次都稳」。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
+        HttpClient http = app.CreateClient();
+        var store = app.Services.GetRequiredService<SessionStore>();
+        store.Create("E1", "seat1", "agentA", "PC", Claims(), RandomNumberGenerator.GetBytes(32), Now(), 180);
+
+        const string jti = "j-storm";
+        string token = SignNotice(rsa, "horus-client", jti, "sub-1", "password_changed");
+
+        for (int i = 0; i < 8; i++)   // 首投 + 7 次重投(阶梯共 6 次,多打两下也得稳)
+        {
+            HttpResponseMessage resp = await PostAsync(http, token, jti, "sub-1", "horus-client", "password_changed");
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            (bool dup, int revoked) = await ReadAsync(resp);
+            Assert.Equal(i > 0, dup);
+            Assert.Equal(1, revoked);   // 恒回第一次的答案,不是每次都「又清了 0 条」
+        }
+    }
+
+    [Fact]
     public async Task 认不出的reason_照清且兜底提示语不为空()
     {
         // ★★ 贝塔通那边加一种 reason 时本端一行代码都不用改(处置本就与 reason 无关),

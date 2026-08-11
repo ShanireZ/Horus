@@ -1,6 +1,93 @@
 # M4 身份层 —— OIDC 接入 · 取代共享 PSK（设计与任务计划）
 
-> ## ★★ 2026-08-07 现状订正 —— 先读这一段，再读下文
+> ## ★★★ 2026-08-11 会话模型订正 —— 这一段最新，先读它
+>
+> 贝塔通**取消了 SSO**、会话判定从单一超时改成**三道门**、撤权重投改成**永不放弃**
+> （其 P84–P99）。本仓已按新口径实现完毕，**345 测试全绿**。
+> 跨项目通知原文：[`2026-08-10-跨项目-BetaPass会话模型重设计.md`](2026-08-10-跨项目-BetaPass会话模型重设计.md)；
+> 权威在对侧 `BetaPass/docs/rp-contract.md`。
+>
+> ### ★★ 两个客户端**不是同一套**，别照抄
+>
+> 下文（以及 §3.1 的时序图）把 `horus-client` 与 `horus-dashboard` 当同一套 OIDC 接入描述。
+> **在协议那一层它们确实一样；在心跳这一层它们完全不同。** 混写下去一定有人照抄错。
+>
+> | | `horus-client`（采集端 Agent） | `horus-dashboard`（监考看板） |
+> |---|---|---|
+> | 形态 | **原生桌面 exe**（控制台程序） | 网页 |
+> | 平台（贝塔通 P83） | `horus` | `horus-admin` |
+> | 心跳通道 | ★ **复用既有 WS 事件上行**，不另开端点 | `POST /api/heartbeat` |
+> | 心跳间隔 | 30 秒（沿用既有心跳） | 5 分钟 |
+> | `active` 从哪来 | ★★ **机器用户活动**（Win32 `GetLastInputInfo`，`agent/Signals/UserActivity.cs`） | `visibilityState` + 最近 5 分钟内的 `mousemove`/`keydown`/`click`/`scroll` |
+> | 跨标签选主 | **不适用**（没有 `BroadcastChannel`） | `BroadcastChannel`，leader 广播超时 15 秒 |
+> | 「当前登录 + 一键退出」 | 开考横幅 + `Ctrl+C`（控制台没有能放按钮的界面） | 顶栏胶囊 + 退出按钮 |
+>
+> ★★ **照抄浏览器那套到 Agent 上的后果**：一段永远走不到的死代码，或者一个**恒为 `false` 的
+> `active`** —— 后者的表现是**每个学生考到 30 分钟就被 idle 踢掉**，而且看起来像网络问题。
+>
+> ### 三道门（P88–P92）
+>
+> | 门 | 字段 | 本仓默认 | 挡什么 |
+> |---|---|---|---|
+> | 心跳 | `last_heartbeat_at` | 15 分钟（`sessionHeartbeatMinutes`） | 关页面 / 关浏览器走人 |
+> | idle | `last_seen_at` | 30 分钟（`sessionIdleMinutes`） | **页面开着但人走了** |
+> | absolute | `expires_at` | **6 小时**（`oidcSessionMinutes` / `adminSessionMinutes`，原 3 小时） | 前两道被绕过时的最后一道；★ **任何活动都推不动它** |
+>
+> - 判定顺序 **revoked → absolute → idle → heartbeat**；`revoked` 不在枚举里，因为撤权是**删行**。
+> - **被动判定**：过期发生在下一次请求进来时，**没有定时任务、没有轮询**。
+> - ★★ **`last_seen_at` 的写入口只有心跳。任何业务请求都不得续 idle。**
+>   看板每 5 秒轮询一次，轮询若算作活动，idle 那道门**永远不会到点** ——
+>   监考机上开着看板就等于永不登出。落法：admin gate **只读不写**。
+> - ★ 服务端节流 150 秒，**判据按字段分开**（心跳够旧 **或**（本次 active **且** idle 时间戳也够旧））。
+>   整个落在 SQL 的 WHERE + 两个独立 CASE 上，**故意不另写 C# 副本** —— 那是同一判据两个来源。
+>
+> ### 新增端点
+>
+> | 端点 | 干什么 |
+> |---|---|
+> | `GET /internal/health` | 贝塔通每 5 分钟探活（其 P94）。**必须验签**（与 `/internal/revoke` 同一套）。★★ 不实现 = 贝塔通永远认为 Horus 离线 = **撤权通知永远送不到**，且没有任何症状 |
+> | `POST /api/heartbeat` | 看板心跳，收 `{ active }` 回 204 |
+> | `GET /api/me` | 「当前登录：XXX」用 |
+> | `GET /admin/logout` | RP-Initiated Logout：★ **先清本地，再跳**贝塔通的退出范围二选一页 |
+> | `GET /logout/done` | 回跳落点。★★ **在这里再清一次本地会话** —— 「只退出本站」上游只撤 grant，碰不到你的本地会话 |
+>
+> ### ★★ 一处与跨项目通知**不一致**的地方（已拍板，别再改回去）
+>
+> 那份通知的第三节写「收到 revoke 时**两套会话都要按 `sub` 清**」。**本仓不这么做**，
+> 维持 `BetapassRevokeEndpoint` 既有的**按令牌 `aud` 分别处置**。
+>
+> - **判据**：核过对侧 `src/identity/revocation/repo.ts` 的 `enqueueForCredentialChange` ——
+>   它是**按 client 逐条入队**的，所以同时持有两个平台权限的监考员会收到**两发**通知
+>   （`aud` 各一），按 `aud` 分派本身就能清干净。
+> - **两套一起清的代价**：撤销某人的监考员资格会**连带掐断他正在考试的采集会话** ——
+>   而「撤监考台不动采集面」正是 §10 里记着的「拆平台换来的连带好处」。
+> - ⏳ **前提**：两个客户端**都要**在贝塔通后台登记回调地址，少登一个就半边失效。
+>   `GET /api/preflight` 的 `post_logout` 一项只能核到本地那一半，**「对侧登记了没有」本地查不到**。
+> - owner 2026-08-11 拍板保持 aud 分派。
+>
+> ### 取消 SSO 的连带（P84 / P98）
+>
+> - **每次授权都要重新认证**：监考员进看板、学生启动采集端，**每次都要完整输一遍密码**
+>   （过 MFA 的还要再过一次）。loopback 回调流程一个字没变，但**用时变长了** ——
+>   `agentcore/Identity/OidcLoginFlow.cs` 因此**不设等回调的超时**（学生输密码可能要好几分钟）。
+> - ★ **无权限页不放「重新登录」**：再点一次要再白输一遍密码才被同样拒掉。
+>   但「协议/网络出错」那一屏**仍然留着**重试链接 —— 那种情形重试确实可能成功。
+> - ★ §3.1 时序图第 4 步那句「浏览器已登 wentian → 免账密」**已不成立**，
+>   下文保留原文只为记住当时的判据。
+>
+> ### 落点（读代码从这几处进）
+>
+> - `server/Identity/SessionGates.cs` —— 三道门的判定内核（纯函数，无后台作业）
+> - `server/Identity/SessionStore.cs` / `AdminSessionStore.cs` —— `Heartbeat()` 与 `GetWithGate()`
+> - `server/Identity/BetapassHealthEndpoint.cs` —— 探活接收端
+> - `server/Identity/RevocationNotices.cs` —— 「你为什么被踢」的留痕与那句人话
+> - `server/Identity/AdminOidcEndpoints.cs` —— `/admin/logout` 与 `/logout/done`
+> - `agent/Signals/UserActivity.cs` —— ★ 采集端自己定义的 `active`
+> - `tests/{SessionGateTests,BetapassHealthTests,AdminLogoutTests}.cs` —— 回归
+>
+> ---
+
+> ## ★★ 2026-08-07 现状订正 —— 上面那段之后再读这一段
 >
 > **本文其余部分停在 2026-07-03，写的是「接入 wentian（问天录）」那一版。**
 > 问天录已降级为普通业务系统、不再是身份提供方，Horus 现在接的是**贝塔通 BetaPass**。

@@ -198,13 +198,13 @@ public static class Endpoints
                     using HttpResponseMessage resp = await http.GetAsync(jwksUrl, ctx.RequestAborted);
                     string body = await resp.Content.ReadAsStringAsync(ctx.RequestAborted);
                     if (resp.IsSuccessStatusCode && body.Contains("\"keys\""))
-                        Add("issuer_reachable", "ok", "wentian 可达", "JWKS 拉取成功(" + jwksUrl + ")");
+                        Add("issuer_reachable", "ok", "贝塔通可达", "JWKS 拉取成功(" + jwksUrl + ")");
                     else
-                        Add("issuer_reachable", "warn", "wentian 可达性", $"JWKS 端点响应异常({(int)resp.StatusCode})");
+                        Add("issuer_reachable", "warn", "贝塔通可达性", $"JWKS 端点响应异常({(int)resp.StatusCode})");
                 }
                 catch (Exception ex)
                 {
-                    Add("issuer_reachable", inlineJwks ? "warn" : "fail", "wentian 可达性",
+                    Add("issuer_reachable", inlineJwks ? "warn" : "fail", "贝塔通可达性",
                         "无法拉取 JWKS:" + ex.Message + (inlineJwks
                             ? "(已配内联 JWKS 可离线验签,但授权/换 token 仍需 issuer 可达)"
                             : "(且未配内联 oidcJwksJson,验签也无兜底)"));

@@ -279,7 +279,7 @@
      考试管理：开始 / 结束 / 全场登出（后端端点已存在，此处只连 UI）
      ------------------------------------------------------------
        · 开始考试：建一个 active 考试（POST /api/exams）。学员机 Agent 每 5s 轮询
-         /oidc/active-exam，检测到即弹 wentian 登录、开始采集。
+         /oidc/active-exam，检测到即弹贝塔通登录、开始采集。
        · 结束考试：POST .../end → 通知在线 Agent 停采、排空缓冲后回待命。
        · 全场登出：POST .../logout → 吊销该考试全部采集会话 + 强断连接（学员须重登）。
      结束 / 全场登出仅当当前考试为「进行中」时可点。
@@ -520,7 +520,7 @@
     if (whoami) whoami.hidden = true;   // 已经不是「当前登录」了，别把上一个人的名字留在屏幕上
     var input = $("#tokenInput");
     input.value = "";
-    // M4·RBAC：据后端鉴权方式切换令牌输入 / wentian OIDC 登录按钮；token 模式才聚焦输入框。
+    // M4·RBAC：据后端鉴权方式切换令牌输入 / 贝塔通 OIDC 登录按钮；token 模式才聚焦输入框。
     applyAuthMode().then(function (oidc) {
       if (!oidc) setTimeout(function () { try { input.focus(); } catch (e) {} }, 0);
     });
