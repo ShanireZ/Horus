@@ -256,6 +256,49 @@ public class BetapassRevokeTests
     }
 
     [Fact]
+    public async Task 拿探活令牌打撤权端点_踢不掉任何人()
+    {
+        // ★★★ **这是 `aud` 拦不住的那一对**(其 rp-contract「例外:撤权与探活的 aud 是同一个值」,
+        //   2026-08-11 由 betai 侧推出)。撤权令牌与探活令牌**同 aud、同签名密钥、同 iss** ——
+        //   「唯一的区分是 aud」那句对这一对**不成立**,照它字面实现的 RP 会在这里收下探活令牌。
+        //   ★ 可利用性是实的:探活令牌每 5 分钟往本站打一次,反代日志 / CDN / 任何能读到那个
+        //   请求头的位置都拿得到,两分钟有效期内拿来打这个端点即可。
+        //
+        // ★★ 契约给的落法是「**校验令牌的 `sub` 与报文的 `sub` 相同**」——
+        //   探活令牌的 `sub` 是 `client_id` 自己,永远不等于某个用户的 subject。
+        //   本端**本来就这么做**(`BodyMatches`),而且更进一步:`RevokeBySub` 用的是**令牌里的
+        //   `sub`**、不是报文里的,所以两道各自独立成立。这条用例把这个性质本身钉住 ——
+        //   ★ 否则日后有人「简化」`BodyMatches`、或把 `RevokeBySub` 改成读报文,就静默开了这个洞。
+        //
+        // ★ **不要改判成「要求令牌带 purpose」** —— 那依赖契约没承诺过的实现细节,
+        //   对侧哪天给探活令牌也加个 purpose,判据就悄悄失效且没有任何症状。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
+        HttpClient http = app.CreateClient();
+        var store = app.Services.GetRequiredService<SessionStore>();
+        HorusSession victim = store.Create("E1", "seat1", "agentA", "PC", Claims("victim-sub"),
+            RandomNumberGenerator.GetBytes(32), Now(), 180);
+
+        // 一枚**真的探活令牌**:aud = 本机 client_id、sub = client_id 自己、**没有 purpose**
+        // (核对 BetaPass `src/main.ts` 的 signToken)。
+        string header = JsonSerializer.Serialize(new { alg = OidcTokenValidator.SigningAlg, typ = "JWT", kid = Kid });
+        string payload = JsonSerializer.Serialize(new
+        {
+            iss = Issuer, aud = "horus-client", sub = "horus-client",
+            jti = Guid.NewGuid().ToString("N"), exp = Now() + 120,
+        });
+        string input = B64Url(Encoding.UTF8.GetBytes(header)) + "." + B64Url(Encoding.UTF8.GetBytes(payload));
+        string probeToken = input + "." + B64Url(rsa.SignData(Encoding.ASCII.GetBytes(input),
+            HashAlgorithmName.SHA256, RSASignaturePadding.Pss));
+
+        // 攻击者拿它去撤别人的权:报文里塞受害者的 sub
+        HttpResponseMessage resp = await PostAsync(http, probeToken, "whatever", "victim-sub", "horus-client", "password_changed");
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);      // 报文与令牌对不上 → 拒
+        Assert.NotNull(store.Get(victim.SessionId, Now()));            // ★ 受害者还在
+    }
+
+    [Fact]
     public async Task 报文与令牌对不上_拒()
     {
         // 令牌是权威,报文只是便于阅读的副本。对不上说明有人拿一枚合法令牌套了别人的报文。

@@ -65,6 +65,18 @@ public sealed class BetapassRevokeVerifier
     ///   `iss` / `aud` / `sub`(= client_id 自己)/ `jti` / `iat` / `exp`,没有 `purpose`,
     ///   也没有要处置的对象。**签名 / `alg` / `iss` / `aud` / `exp` 五项一个不少**,
     ///   因为「验不验签」就是「这份接入拓扑是不是白送给任何能打到这个地址的人」的全部差别(其 P94)。
+    ///
+    /// ★★ **探活令牌的 `aud` 与撤权令牌完全相同**(2026-08-11 核过对侧 `src/main.ts` 的 `signToken`),
+    ///   所以两者共用 <see cref="_candidates"/>。**「aud 拦不住这一对」是已知的、写进契约的例外**
+    ///   (其 rp-contract「例外:撤权与探活的 `aud` 是同一个值」),
+    ///   真正的防线在 `/internal/revoke` 那条**「令牌的 `sub` == 报文的 `sub`」**
+    ///   (见 <see cref="BetapassRevokeEndpoint.BodyMatches"/>,回归
+    ///   `拿探活令牌打撤权端点_踢不掉任何人` 钉住)。
+    ///
+    /// ⏳ **对侧留了个待拍板项**:可能给探活令牌一个专属 `aud`(如 `&lt;client_id&gt;#health`)
+    ///   或一个 `purpose: 'health'`。其契约把**两者都标注为非必需**,因为上面那条 RP 侧判据已经够。
+    ///   ★★ **别提前改成 `#health`** —— 对侧一天没落地,改了就是探活恒验不过,
+    ///   而那个失效**几乎没有症状**(非 2xx 已不再判离线)。真落地时只动这一处的候选来源即可。
     public string VerifyProbe(string token) => VerifyCore(token, "探活").ClientId;
 
     /// 共用的验签内核:逐个候选 `aud` 试,全部试完仍不过才算失败。
