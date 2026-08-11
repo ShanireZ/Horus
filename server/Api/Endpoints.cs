@@ -220,13 +220,31 @@ public static class Endpoints
             {
                 var verifier = ctx.RequestServices.GetService(typeof(BetapassRevokeVerifier)) as BetapassRevokeVerifier;
                 string auds = verifier is null ? "(未构造)" : string.Join(" / ", verifier.ProbeAudiences);
-                if (cfg.OidcHealthAudienceAcceptLegacy)
-                    Add("health_audience", "warn", "探活 aud 口径",
-                        "逃生口开着,连裸 client_id 也收(" + auds + ")。★ 它只为「线上贝塔通还是 P100 之前的版本」"
-                        + "那段窗口而留 —— 窗口过了就把 oidcHealthAudienceAcceptLegacy 关掉,"
-                        + "否则「aud 拦不住撤权/探活这一对」的例外就一直留着");
+                string legacy = cfg.OidcHealthAudienceAcceptLegacy ? " · ⚠ 逃生口开着(连裸 client_id 也收)" : "";
+
+                // ★★★ **这一项报的是「探活实际发生了什么」,不是「配置成什么」。**
+                //   只报配置的话它永远绿 —— 哪怕对侧一次都没探到过、或者每一发都被拒。
+                //   本仓自己反复写着「配置化最容易做成装饰品,断言必须落在**行为**上」,
+                //   而它此前恰恰就是那个装饰品。
+                (double? okAt, double? rejAt, string? why) =
+                    ctx.RequestServices.GetRequiredService<BetapassProbeState>().Snapshot();
+                string Ago(double t) => $"{(Now() - t) / 60.0:F0} 分钟前";
+
+                if (rejAt is not null && (okAt is null || rejAt > okAt))
+                    // 口径对不上。最常见是线上贝塔通还是 P100 之前的版本,还在发裸 client_id。
+                    Add("health_audience", "fail", "贝塔通探活",
+                        $"最近一次探活**被拒**({Ago(rejAt.Value)}):{why}。本机在等 {auds}{legacy}"
+                        + " —— 对侧后台只看得到一个 401,那边不会有人替你发现");
+                else if (okAt is not null)
+                    Add("health_audience", "ok", "贝塔通探活",
+                        $"最近一次探活通过({Ago(okAt.Value)}) · 本机认 {auds}{legacy}");
                 else
-                    Add("health_audience", "ok", "探活 aud 口径", "只认专属 aud(" + auds + ")");
+                    // ★ 从未探过:贝塔通每 5 分钟就该来一次。服务器刚起来那几分钟属正常,
+                    //   一直没有则多半是**后台没登记撤权回调** —— 探活地址按它同源推导,
+                    //   所以那一条登记同时决定探活与撤权两件事。
+                    Add("health_audience", "warn", "贝塔通探活",
+                        $"**从未收到过探活**(它每 5 分钟应来一次)。服务器刚启动属正常;"
+                        + $"否则多半是贝塔通后台**没登记本机的撤权回调**(探活地址按它同源推导)。本机认 {auds}{legacy}");
             }
 
             // 3.5) 开考预检:**监考员自己这次登录**还剩多久,够不够撑完一场考试(贝塔通 P91)。

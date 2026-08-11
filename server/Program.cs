@@ -248,6 +248,9 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<Horus.Server.Analy
 
 // ---- M4 身份层:OIDC 采集会话(取代共享 PSK)。AuthMode=oidc/both 时启用 ----
 builder.Services.AddSingleton<Horus.Server.Identity.SessionStore>();   // both/oidc 下 ingest 会查会话
+// 探活的**实际结果**(不是配置):预检据此报「探活来过没有 / 通过没有」。
+// ★ 无条件注册 —— 预检在两条 OIDC 链路都没开时也会读它,而那时它如实报「从未探过」。
+builder.Services.AddSingleton<Horus.Server.Identity.BetapassProbeState>();
 
 // 撤权通知的验签器:要按**两个** client_id 分别试 aud(采集面 / 监考台),而 OidcTokenValidator
 // 构造时绑死单一 aud,故按候选各备一个。★ **单例** —— 每次请求现 new 等于每一发通知都重新

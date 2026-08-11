@@ -59,24 +59,46 @@ public static class BetapassHealthEndpoint
             if (!cfg.OidcEnabled && !cfg.DashboardOidcEnabled)
                 return Results.StatusCode(StatusCodes.Status410Gone);
 
-            string? bearer = ReadBearer(ctx.Request.Headers.Authorization.ToString());
-            if (bearer is null) return Results.Unauthorized();
+            var probeState = ctx.RequestServices.GetRequiredService<BetapassProbeState>();
+            double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
 
-            try
+            string? bearer = ReadBearer(ctx.Request.Headers.Authorization.ToString());
+            if (bearer is null)
             {
-                ctx.RequestServices.GetRequiredService<BetapassRevokeVerifier>().VerifyProbe(bearer);
-            }
-            catch (OidcValidationException ex)
-            {
-                // ★ 只 Debug 级:它每 5 分钟来一次,验不过时按 Warning 记会把日志淹掉,
-                //   而真正需要被看见的是**探不通**(那一端在贝塔通的后台里有状态),不是这里。
-                ctx.RequestServices.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("BetapassHealth").LogDebug("探活令牌验签失败:{Msg}", ex.Message);
+                Reject(ctx, probeState, now, "无 Bearer 令牌");
                 return Results.Unauthorized();
             }
 
+            var verifier = ctx.RequestServices.GetRequiredService<BetapassRevokeVerifier>();
+            try
+            {
+                verifier.VerifyProbe(bearer);
+            }
+            catch (OidcValidationException ex)
+            {
+                Reject(ctx, probeState, now, ex.Message);
+                return Results.Unauthorized();
+            }
+
+            // ★ 成功**不记日志**:它每 5 分钟来一次,一条正常日志就会把上面那条告警淹掉 ——
+            //   「告警被正常日志埋掉」与「压根没告警」在实际使用中是同一回事。
+            //   要看「上一次通过是什么时候」去 `GET /api/preflight` 的 `health_audience`。
+            probeState.RecordOk(now);
             return Results.NoContent();   // 204·无响应体
         });
+    }
+
+    /// 记下这一发被拒,并**按分钟节流**地叫一声。
+    ///
+    /// ★ 告警里带上**本机在等哪些 `aud`** —— 排查「探活为什么恒 401」时第一个要问的就是这个,
+    ///   而它只有服务器自己知道(对侧后台只看得到一个 401)。
+    private static void Reject(HttpContext ctx, BetapassProbeState state, double now, string reason)
+    {
+        if (!state.RecordRejected(now, reason)) return;
+        var verifier = ctx.RequestServices.GetService(typeof(BetapassRevokeVerifier)) as BetapassRevokeVerifier;
+        ctx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("BetapassHealth")
+            .LogWarning("贝塔通探活被拒:{Reason}。本机在等的 aud={Expected}(60 秒内不再重复此告警)",
+                reason, verifier is null ? "(未构造)" : string.Join(" / ", verifier.ProbeAudiences));
     }
 
     private static string? ReadBearer(string header)

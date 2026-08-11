@@ -204,6 +204,79 @@ public class BetapassHealthTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await app.CreateClient().SendAsync(req)).StatusCode);
     }
 
+    // ---- 探活的**实际结果**要被记下来(不是只报配置) ----
+
+    [Fact]
+    public async Task 探活结果被记下来_通过与被拒都是()
+    {
+        // ★★★ 预检此前只报「本机认哪些 `aud`」—— 那是**配置读数**,它永远绿,
+        //   哪怕对侧一次都没探到过、或者每一发都被拒。本仓自己反复写着
+        //   「配置化最容易做成装饰品,**断言必须落在行为上**」,而那一项恰恰就是装饰品。
+        //   这条钉住「跑起来的事实真的被记下来了」。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
+        HttpClient http = app.CreateClient();
+        var state = app.Services.GetRequiredService<BetapassProbeState>();
+
+        // ① 起步:从未探过 —— 一直是这个状态多半意味着**贝塔通后台没登记撤权回调**
+        //    (探活地址按它同源推导),而那件事在别处没有任何症状。
+        Assert.Equal((null, null, null), state.Snapshot());
+
+        // ② 被拒
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await ProbeAsync(http, SignProbe(rsa, "horus-client"))).StatusCode);   // 裸 client_id:口径不对
+        (double? ok1, double? rej1, string? why1) = state.Snapshot();
+        Assert.Null(ok1);
+        Assert.NotNull(rej1);
+        Assert.False(string.IsNullOrWhiteSpace(why1));
+
+        // ③ 通过
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await ProbeAsync(http, SignProbe(rsa, "horus-client#health"))).StatusCode);
+        (double? ok2, double? rej2, _) = state.Snapshot();
+        Assert.NotNull(ok2);
+        Assert.NotNull(rej2);          // 被拒那次仍留着
+        Assert.True(ok2 > rej2);       // 而预检按「谁更晚」判当前状态
+    }
+
+    [Fact]
+    public void 被拒告警按分钟节流_但状态每次都更新()
+    {
+        // ★ 口径对不上时探活会**每 5 分钟失败一次、永远失败** —— 照记就是一条永不停止的告警流;
+        //   完全不记(此前记的是 Debug)又等于没有任何主动信号。所以按分钟节流。
+        // ★★ 节流的是**告警**,不是**状态** —— 状态每次都要更新,否则预检读到的是过期的事实。
+        var state = new BetapassProbeState();
+        Assert.True(state.RecordRejected(1000, "第一次"));
+        Assert.False(state.RecordRejected(1030, "30 秒后"));    // 节流窗口内不再叫
+        Assert.True(state.RecordRejected(1061, "61 秒后"));     // 窗口外再叫
+
+        Assert.Equal("61 秒后", state.Snapshot().Reason);        // ★ 但每一次都更新了状态
+    }
+
+    [Fact]
+    public void 通过不记录任何告警状态()
+    {
+        // ★★ 成功**不叫** —— 它每 5 分钟来一次,一条正常日志就会把被拒那条告警淹掉。
+        //   「告警被正常日志埋掉」与「压根没告警」在实际使用中是同一回事。
+        var state = new BetapassProbeState();
+        state.RecordOk(1000);
+        (double? ok, double? rej, string? why) = state.Snapshot();
+        Assert.Equal(1000, ok);
+        Assert.Null(rej);
+        Assert.Null(why);
+    }
+
+    [Fact]
+    public async Task 无令牌也算一次被拒()
+    {
+        // ★ 「谁都没带令牌来打」与「带了但验不过」对预检是同一件事:口径没对上。
+        //   漏记的话,预检会一直显示「从未收到过探活」,把人往「后台没登记回调」那个方向带偏。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await ProbeAsync(app.CreateClient(), null)).StatusCode);
+        Assert.NotNull(app.Services.GetRequiredService<BetapassProbeState>().Snapshot().RejectedAt);
+    }
+
     [Fact]
     public async Task 探活不清任何会话()
     {
