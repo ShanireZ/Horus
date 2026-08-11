@@ -168,7 +168,11 @@ CREATE TABLE IF NOT EXISTS oidc_sessions (
   --   既有 dev 库里那几列会留着(SQLite 不走 DROP COLUMN),无人读、无害。
   k_sess       TEXT NOT NULL,                          -- base64(32B) ECDH 派生会话密钥(HMAC 签名密钥)
   issued_at    REAL NOT NULL,
-  expires_at   REAL NOT NULL
+  -- ★ 三道门(贝塔通 P88–P92):expires_at = absolute(任何活动都推不动它),
+  --   另两道靠下面两列。判定顺序 revoked → absolute → idle → heartbeat,见 SessionGates。
+  expires_at   REAL NOT NULL,
+  last_heartbeat_at REAL NOT NULL,                     -- 心跳门:最后一次收到心跳的时刻(任何心跳都续)
+  last_seen_at      REAL NOT NULL                      -- idle 门:最后一次「人还在」·★ 只由 active:true 的心跳续
 );
 CREATE INDEX IF NOT EXISTS ix_oidc_sessions_agent ON oidc_sessions(exam_id, agent_id);
 
@@ -181,7 +185,11 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
   sub          TEXT NOT NULL,                          -- 贝塔通稳定身份(UUID)·永不变更
   name         TEXT,                                   -- 真实姓名(标准 profile scope 的 name)
   issued_at    REAL NOT NULL,
-  expires_at   REAL NOT NULL
+  -- 三道门同 oidc_sessions。★ 看板是**持续自动轮询**的,所以「任何业务请求都不得续 idle」
+  --   这条对它尤其致命 —— 轮询算作活动的话,监考机上开着看板就等于永不登出。
+  expires_at   REAL NOT NULL,
+  last_heartbeat_at REAL NOT NULL,
+  last_seen_at      REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_admin_sessions_sub ON admin_sessions(sub);
 

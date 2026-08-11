@@ -1,3 +1,4 @@
+using Horus.Server.Config;
 using Horus.Server.Data;
 using Microsoft.Data.Sqlite;
 
@@ -11,9 +12,9 @@ namespace Horus.Server.Identity;
 public sealed record AdminSession(
     string SessionId, string Sub, string Name, double IssuedAt, double ExpiresAt);
 
-public sealed class AdminSessionStore(Db db)
+public sealed class AdminSessionStore(Db db, ServerConfig cfg)
 {
-    /// 建管理会话并落库。
+    /// 建管理会话并落库。两个心跳时间戳以 `now` 起步(理由同采集会话)。
     public AdminSession Create(OidcClaims claims, double now, int sessionMinutes)
     {
         string sessionId = "asess_" + Guid.NewGuid().ToString("N");
@@ -21,8 +22,8 @@ public sealed class AdminSessionStore(Db db)
         db.Write(conn =>
         {
             using SqliteCommand c = conn.Cmd(
-                @"INSERT INTO admin_sessions (session_id,sub,name,issued_at,expires_at)
-                  VALUES (@sid,@sub,@n,@iss,@exp)",
+                @"INSERT INTO admin_sessions (session_id,sub,name,issued_at,expires_at,last_heartbeat_at,last_seen_at)
+                  VALUES (@sid,@sub,@n,@iss,@exp,@iss,@iss)",
                 ("@sid", sessionId), ("@sub", claims.Sub), ("@n", claims.Name),
                 ("@iss", now), ("@exp", expiresAt));
             c.ExecuteNonQuery();
@@ -30,20 +31,51 @@ public sealed class AdminSessionStore(Db db)
         return new AdminSession(sessionId, claims.Sub, claims.Name, now, expiresAt);
     }
 
-    /// 按 sessionId 取管理会话;不存在或**已过期**返回 null(gate 据此拒)。
-    public AdminSession? Get(string sessionId, double now)
+    /// 看板心跳:续「心跳」那道门;★ **只有 `active: true` 才额外续 idle**。
+    /// 节流与「按字段分开」的落法与采集面完全一致,见 <see cref="SessionStore.Heartbeat"/>。
+    ///
+    /// ★★ **这是 `last_seen_at` 在管理面的唯一写入口**。看板是持续自动轮询的,
+    ///   任何业务请求若也续 idle,那道门就永远不会到点 —— 监考机上开着看板等于永不登出。
+    ///   admin gate(<c>Program.cs</c>)因此**只读不写**。
+    public bool Heartbeat(string sessionId, bool active, double now)
     {
-        if (string.IsNullOrEmpty(sessionId)) return null;
-        return db.Read<AdminSession?>(conn =>
+        if (string.IsNullOrEmpty(sessionId)) return false;
+        return db.Write(conn =>
         {
             using SqliteCommand c = conn.Cmd(
-                @"SELECT sub,name,issued_at,expires_at FROM admin_sessions WHERE session_id=@sid",
+                @"UPDATE admin_sessions SET
+                    last_heartbeat_at = CASE WHEN @now - last_heartbeat_at >= @thr THEN @now ELSE last_heartbeat_at END,
+                    last_seen_at      = CASE WHEN @act = 1 AND @now - last_seen_at >= @thr THEN @now ELSE last_seen_at END
+                  WHERE session_id = @sid
+                    AND (@now - last_heartbeat_at >= @thr OR (@act = 1 AND @now - last_seen_at >= @thr))",
+                ("@sid", sessionId), ("@now", now), ("@act", active ? 1 : 0),
+                ("@thr", SessionGates.ThrottleSeconds));
+            return c.ExecuteNonQuery() > 0;
+        });
+    }
+
+    /// 按 sessionId 取管理会话;不存在或**三道门任一到点**返回 null(gate 据此拒)。
+    public AdminSession? Get(string sessionId, double now) => GetWithGate(sessionId, now).Session;
+
+    /// 同 <see cref="Get"/>,另外告诉调用方是哪一道门拦下的。
+    public (AdminSession? Session, SessionGate Gate) GetWithGate(string sessionId, double now)
+    {
+        if (string.IsNullOrEmpty(sessionId)) return (null, SessionGate.Ok);
+        return db.Read<(AdminSession?, SessionGate)>(conn =>
+        {
+            using SqliteCommand c = conn.Cmd(
+                @"SELECT sub,name,issued_at,expires_at,
+                         COALESCE(last_heartbeat_at,issued_at), COALESCE(last_seen_at,issued_at)
+                  FROM admin_sessions WHERE session_id=@sid",
                 ("@sid", sessionId));
             using SqliteDataReader r = c.ExecuteReader();
-            if (!r.Read()) return null;
+            if (!r.Read()) return (null, SessionGate.Ok);   // revoked / 不存在
             double expiresAt = r.GetDouble(3);
-            if (now > expiresAt) return null;   // 过期
-            return new AdminSession(sessionId, r.GetString(0), Nz(r, 1), r.GetDouble(2), expiresAt);
+            SessionGate gate = SessionGates.Evaluate(
+                now, expiresAt, lastSeenAt: r.GetDouble(5), lastHeartbeatAt: r.GetDouble(4),
+                cfg.SessionIdleMinutes, cfg.SessionHeartbeatMinutes);
+            if (gate != SessionGate.Ok) return (null, gate);
+            return (new AdminSession(sessionId, r.GetString(0), Nz(r, 1), r.GetDouble(2), expiresAt), SessionGate.Ok);
         });
     }
 

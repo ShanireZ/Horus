@@ -57,8 +57,26 @@ public sealed record ServerConfig
     public string? OidcClientSecretEnc { get; init; }
     /// wentian 的 JWKS(RSA 公钥)内联 JSON:局域网离线验 id_token 用,免运行时拉取。留空则启动时从 issuer 拉取 + 缓存。
     public string? OidcJwksJson { get; init; }
-    /// OIDC 会话有效期(分钟):派发的采集凭证寿命,建议 ≥ 考试时长。默认 180。
-    public int OidcSessionMinutes { get; init; } = 180;
+    /// 采集会话的 **absolute** 门(分钟):建会话时写死的到期时刻。★ **任何活动都推不动它**。
+    /// 默认 **360(6 小时)**,与贝塔通给的默认值一致(其 P88)。
+    ///
+    /// ★★ **它必须覆盖得住一整场考试**:考试 2–3 小时,而学员往往在开考前就登录了。
+    ///   不够长的表现是**考到一半被踢**,而重登要完整走一遍浏览器授权(取消 SSO 后还要输密码)。
+    ///   开考预检(其 P91)因此改为 **Horus 自己算自己的剩余** —— 原设计靠 IdP 下发一个 claim
+    ///   告诉 RP「你的会话还剩多久」,那条随取消 SSO 一并作废。
+    /// ★ 各平台**完全自由调这三个值、不登记、贝塔通不拦**(其 P90 已取消原来那条
+    ///   「RP 的 absolute 不得超过 IdP 的」)。兜底改由永不放弃的撤权重投承担。
+    public int OidcSessionMinutes { get; init; } = 360;
+
+    // ---- 三道门的另外两道(贝塔通 P88–P92·两条链路共用) ----
+    // ★ 采集端与看板**共用这两个值**:三道门的数值口径对两者相同,不同的只是「谁来发心跳、
+    //   `active` 怎么算」(看板用 visibilityState + 输入事件;采集端用机器用户活动)。
+    /// **idle** 门(分钟):距最后一次「人还在」多久算失效。默认 30。挡的是**页面开着但人走了**。
+    /// ★ `last_seen_at` **只由带 `active: true` 的心跳更新**,任何业务请求都不续它(其 P92)。
+    public int SessionIdleMinutes { get; init; } = 30;
+    /// **心跳**门(分钟):距最后一次收到心跳多久算失效。默认 15(= 5 分钟间隔 × 容忍 3 次)。
+    /// 挡的是**关页面 / 关浏览器走人**;与 idle 挡的是两件事,**不要合并**。
+    public int SessionHeartbeatMinutes { get; init; } = 15;
 
     [JsonIgnore]
     public bool OidcEnabled => AuthMode is "oidc" or "both";
@@ -99,8 +117,9 @@ public sealed record ServerConfig
     public string? OidcDashboardClientSecretEnc { get; init; }
     /// dashboard 回调 URI(须与 wentian 注册的 OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致,如 https://<服务器>/cb)。
     public string? OidcDashboardRedirectUri { get; init; }
-    /// 管理会话有效期(分钟):监考员登录后凭证寿命,建议 ≥ 考试时长。默认 180。
-    public int AdminSessionMinutes { get; init; } = 180;
+    /// 管理会话的 **absolute** 门(分钟):监考员登录后凭证寿命。默认 **360(6 小时)**,同采集面。
+    /// idle 与心跳两道门走共用的 <see cref="SessionIdleMinutes"/> / <see cref="SessionHeartbeatMinutes"/>。
+    public int AdminSessionMinutes { get; init; } = 360;
 
     [JsonIgnore]
     public bool DashboardOidcEnabled => string.Equals(AdminAuthMode, "oidc", StringComparison.OrdinalIgnoreCase);

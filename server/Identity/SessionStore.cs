@@ -1,3 +1,4 @@
+using Horus.Server.Config;
 using Horus.Server.Data;
 using Microsoft.Data.Sqlite;
 
@@ -17,9 +18,11 @@ public sealed record HorusSession(
 
 }
 
-public sealed class SessionStore(Db db)
+public sealed class SessionStore(Db db, ServerConfig cfg)
 {
     /// 建会话并落库。k_sess 为 ECDH 派生的 32 字节密钥。
+    /// ★ 两个新时间戳都以 `now` 起步 —— 建会话那一刻我们确实见过这个人,
+    ///   否则第一次心跳到达之前(最长 5 分钟)会话就被自己的门判掉了。
     public HorusSession Create(
         string examId, string seatId, string agentId, string? machineId, OidcClaims claims,
         byte[] kSess, double now, int sessionMinutes)
@@ -30,8 +33,9 @@ public sealed class SessionStore(Db db)
         {
             using SqliteCommand c = conn.Cmd(
                 @"INSERT INTO oidc_sessions
-                    (session_id,exam_id,seat_id,agent_id,machine_id,sub,name,username,k_sess,issued_at,expires_at)
-                  VALUES (@sid,@e,@s,@a,@m,@sub,@n,@u,@k,@iss,@exp)",
+                    (session_id,exam_id,seat_id,agent_id,machine_id,sub,name,username,k_sess,
+                     issued_at,expires_at,last_heartbeat_at,last_seen_at)
+                  VALUES (@sid,@e,@s,@a,@m,@sub,@n,@u,@k,@iss,@exp,@iss,@iss)",
                 ("@sid", sessionId), ("@e", examId), ("@s", seatId), ("@a", agentId), ("@m", machineId),
                 ("@sub", claims.Sub), ("@n", claims.Name), ("@u", claims.Username),
                 ("@k", Convert.ToBase64String(kSess)), ("@iss", now), ("@exp", expiresAt));
@@ -39,6 +43,36 @@ public sealed class SessionStore(Db db)
         });
         return new HorusSession(sessionId, examId, seatId, agentId, machineId,
             claims.Sub, claims.Name, claims.Username, kSess, now, expiresAt);
+    }
+
+    /// 采集端心跳:续「心跳」那道门;★ **只有 `active: true` 才额外续 idle**。
+    ///
+    /// ★★ **`horus-client` 自己定义 `active`**(贝塔通 rp-contract 专门为桌面客户端写了这一条):
+    ///   它没有 `BroadcastChannel`、没有 `visibilityState`,而**它本来就在采集机器上有无用户活动** ——
+    ///   那个信号比浏览器的更准。照抄网页那套的结果是一个恒为 `false` 的 `active`,
+    ///   表现是**每个学生考到 30 分钟就被 idle 踢掉**。
+    ///
+    /// ★★ 节流与「按字段分开」都落在 SQL 上,见 <see cref="SessionGates.ShouldWrite"/> 的说明:
+    ///   WHERE 是「心跳够旧 **或**(本次 active **且** idle 那个时间戳也够旧)」,
+    ///   两个 CASE 各管各的列 —— 于是「标签 A 的 active:false 吞掉标签 B 的 active:true」
+    ///   在结构上就发生不了,而不是靠调用方记得。
+    ///
+    /// @returns 是否真的写了(节流窗口内返回 false;会话不存在也返回 false)。
+    public bool Heartbeat(string sessionId, bool active, double now)
+    {
+        if (string.IsNullOrEmpty(sessionId)) return false;
+        return db.Write(conn =>
+        {
+            using SqliteCommand c = conn.Cmd(
+                @"UPDATE oidc_sessions SET
+                    last_heartbeat_at = CASE WHEN @now - last_heartbeat_at >= @thr THEN @now ELSE last_heartbeat_at END,
+                    last_seen_at      = CASE WHEN @act = 1 AND @now - last_seen_at >= @thr THEN @now ELSE last_seen_at END
+                  WHERE session_id = @sid
+                    AND (@now - last_heartbeat_at >= @thr OR (@act = 1 AND @now - last_seen_at >= @thr))",
+                ("@sid", sessionId), ("@now", now), ("@act", active ? 1 : 0),
+                ("@thr", SessionGates.ThrottleSeconds));
+            return c.ExecuteNonQuery() > 0;
+        });
     }
 
     /// 按考试吊销全部采集会话(监考员远程登出全场)。吊销后 Get 查无此会话 → 重连/上报一律 401,Agent 须重登。
@@ -60,23 +94,32 @@ public sealed class SessionStore(Db db)
             return c.ExecuteNonQuery();
         });
 
-    /// 按 sessionId 取会话;不存在或**已过期**返回 null(过期即拒,Agent 须重登)。
-    public HorusSession? Get(string sessionId, double now)
+    /// 按 sessionId 取会话;不存在或**三道门任一到点**返回 null(即拒,Agent 须重登)。
+    /// ★ 被动判定:过期就发生在这一次查询里,**没有定时任务、没有轮询**。
+    public HorusSession? Get(string sessionId, double now) => GetWithGate(sessionId, now).Session;
+
+    /// 同 <see cref="Get"/>,另外告诉调用方**是哪一道门**拦下的(用于给用户一句人话、以及预检)。
+    /// <see cref="SessionGate.Ok"/> 且 Session 为 null = 查无此会话(已被撤权删掉,或从来就不存在)。
+    public (HorusSession? Session, SessionGate Gate) GetWithGate(string sessionId, double now)
     {
-        if (string.IsNullOrEmpty(sessionId)) return null;
-        return db.Read<HorusSession?>(conn =>
+        if (string.IsNullOrEmpty(sessionId)) return (null, SessionGate.Ok);
+        return db.Read<(HorusSession?, SessionGate)>(conn =>
         {
             using SqliteCommand c = conn.Cmd(
-                @"SELECT exam_id,seat_id,agent_id,machine_id,sub,name,username,k_sess,issued_at,expires_at
+                @"SELECT exam_id,seat_id,agent_id,machine_id,sub,name,username,k_sess,issued_at,expires_at,
+                         COALESCE(last_heartbeat_at,issued_at), COALESCE(last_seen_at,issued_at)
                   FROM oidc_sessions WHERE session_id=@sid", ("@sid", sessionId));
             using SqliteDataReader r = c.ExecuteReader();
-            if (!r.Read()) return null;
+            if (!r.Read()) return (null, SessionGate.Ok);   // revoked / 不存在 —— 判定顺序里最前的一道
             double expiresAt = r.GetDouble(9);
-            if (now > expiresAt) return null;   // 过期
-            return new HorusSession(
+            SessionGate gate = SessionGates.Evaluate(
+                now, expiresAt, lastSeenAt: r.GetDouble(11), lastHeartbeatAt: r.GetDouble(10),
+                cfg.SessionIdleMinutes, cfg.SessionHeartbeatMinutes);
+            if (gate != SessionGate.Ok) return (null, gate);
+            return (new HorusSession(
                 sessionId, r.GetString(0), r.GetString(1), r.GetString(2), r.IsDBNull(3) ? null : r.GetString(3),
                 r.GetString(4), Nz(r, 5), Nz(r, 6),
-                Convert.FromBase64String(r.GetString(7)), r.GetDouble(8), expiresAt);
+                Convert.FromBase64String(r.GetString(7)), r.GetDouble(8), expiresAt), SessionGate.Ok);
         });
     }
 

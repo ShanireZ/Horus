@@ -38,9 +38,11 @@ public class SchemaDriftTests
         var db = app.Services.GetRequiredService<Db>();
         // ★ 身份只剩 sub / name / username(贝塔通 P81)。
         //   `username` 是**座位标识**的来源(ExamDispatch.SeatFrom),不是显示字段 —— 别当画像删掉。
+        // ★ 三道门(P88–P92):`expires_at` 是 absolute,另两道靠 last_heartbeat_at / last_seen_at。
+        //   ★★ 少任何一列都不会编译报错,只会让那道门**静默失效** —— 正是这道闸要挡的形状。
         Assert.Equal(
-            ["agent_id", "exam_id", "expires_at", "issued_at", "k_sess", "machine_id",
-             "name", "seat_id", "session_id", "sub", "username"],
+            ["agent_id", "exam_id", "expires_at", "issued_at", "k_sess", "last_heartbeat_at",
+             "last_seen_at", "machine_id", "name", "seat_id", "session_id", "sub", "username"],
             Columns(db, "oidc_sessions"));
     }
 
@@ -52,7 +54,7 @@ public class SchemaDriftTests
         // ★ **不得再出现任何角色列**:看板准入由贝塔通的 `horus-admin` 平台开关回答(P83),
         //   本地不自己判。加回 user_type / role 之类会让判据变成两个来源。
         Assert.Equal(
-            ["expires_at", "issued_at", "name", "session_id", "sub"],
+            ["expires_at", "issued_at", "last_heartbeat_at", "last_seen_at", "name", "session_id", "sub"],
             Columns(db, "admin_sessions"));
     }
 

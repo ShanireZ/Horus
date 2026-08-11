@@ -57,6 +57,15 @@ public static class Schema
         // 而它们已无人读,留着无害;新建库按 DDL 就没有它们。这里只补新增的 name 列。
         AddColumnIfMissing(conn, "oidc_sessions", "name", "TEXT");
         AddColumnIfMissing(conn, "admin_sessions", "name", "TEXT");
+        // 三道门(贝塔通 P88–P92):两张会话表各补心跳与 idle 两列。
+        // ★ SQLite 的 ADD COLUMN 加不了「NOT NULL 且无默认值」的列,所以这里声明成可空、
+        //   随后 BackfillSessionGateColumns 回填 —— 新建库按 DDL 就是 NOT NULL。
+        foreach (string t in new[] { "oidc_sessions", "admin_sessions" })
+        {
+            AddColumnIfMissing(conn, t, "last_heartbeat_at", "REAL");
+            AddColumnIfMissing(conn, t, "last_seen_at", "REAL");
+        }
+        BackfillSessionGateColumns(conn);
         // 第三轮 F1/F2:把"视觉分析闩锁"从 uploaded_to_ocr(现仅表"真出网")拆到独立列。
         // 旧库 uploaded_to_ocr=1 的图视为已终结(analysis_state 缺省 0 会被重扫,故迁移时把旧 =1 回填为已终结)。
         AddColumnIfMissing(conn, "images", "analysis_state", "INTEGER NOT NULL DEFAULT 0");
@@ -98,6 +107,25 @@ public static class Schema
                 PRIMARY KEY (exam_id, seat_id, agent_id, ts));
               CREATE INDEX IF NOT EXISTS ix_hb_exam_ts ON agent_heartbeats(exam_id, ts);";
         cmd.ExecuteNonQuery();
+    }
+
+    /// 三道门迁移的回填:既有会话行的两个新列为 NULL,回落到 `issued_at`。
+    ///
+    /// ★★ **不能留 NULL,也不能填 0**。两者的表现都是「升级那一刻全体在线会话立刻失效」:
+    ///   NULL 参与比较恒为假 → 心跳那道门的写入判据永远不成立 → 心跳永远续不上;
+    ///   填 0(纪元)→ 直接就是过期。用 `issued_at` 才是如实的:建会话那一刻我们确实见过这个人。
+    /// ★ 幂等:只碰 IS NULL 的行,重跑 no-op。
+    private static void BackfillSessionGateColumns(SqliteConnection conn)
+    {
+        foreach (string t in new[] { "oidc_sessions", "admin_sessions" })
+        {
+            using SqliteCommand c = conn.CreateCommand();
+            c.CommandText =
+                $@"UPDATE {t} SET last_heartbeat_at = COALESCE(last_heartbeat_at, issued_at),
+                                  last_seen_at      = COALESCE(last_seen_at,      issued_at)
+                   WHERE last_heartbeat_at IS NULL OR last_seen_at IS NULL";
+            c.ExecuteNonQuery();
+        }
     }
 
     /// 迁移旧库:旧语义下 uploaded_to_ocr=1 表示"已认领/已分析",新语义把闩锁移到 analysis_state。
