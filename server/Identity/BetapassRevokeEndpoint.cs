@@ -8,6 +8,13 @@ namespace Horus.Server.Identity;
 
 /// 贝塔通**撤权通知**的接收端(其 P44 / P69,契约见 BetaPass `docs/rp-contract.md`)。
 ///
+/// ⏳★★ **本端目前不会被调用**(贝塔通 **P101**,owner 2026-08-11):Horus Server 是局域网机、
+///   **没有可拨地址**(★ 出站≠可入站),因此**有意不登记 `revoke_callback_url`**。
+///   ★ 实现与两道防线(验签 + 「令牌 `sub` == 报文 `sub`」)**照旧保留** ——
+///   走拉取模型那天要用同一套验签与处置,删了将来还得重写。
+///   ★ **残余风险由三道门兜住**:撤权后最长 ≤ absolute(6 小时),且**再也登不进来**(授权阶段就被拒)。
+///   判据全文见 <see cref="Config.ServerConfig.BetapassRevokePushExpected"/>。
+///
 /// 贝塔通侧凭据失效时主动 POST 过来,报文:
 /// `{ jti, sub, platform, client_id, reason }`,`Authorization: Bearer <PS256 JWT>`。
 ///

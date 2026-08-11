@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -275,6 +276,66 @@ public class BetapassHealthTests
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
         Assert.Equal(HttpStatusCode.Unauthorized, (await ProbeAsync(app.CreateClient(), null)).StatusCode);
         Assert.NotNull(app.Services.GetRequiredService<BetapassProbeState>().Snapshot().RejectedAt);
+    }
+
+    // ---- P101:本机有意不接撤权广播 ----
+
+    [Fact]
+    public async Task P101默认_从未探过报ok而不是warn()
+    {
+        // ★★ 不登记撤权回调 ⇒ 不在探活名单里 ⇒「从未探过」**恒为真**。
+        //   照旧报 warn 的话它会变成一条**永远亮着的告警**,而永远亮着的告警等于没有告警 ——
+        //   下一次真出事时没人会看。所以要显式说成「有意不接」,并把界限与触发条件一并写上。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", adminAuth: true, jwks: BuildJwks(rsa, Kid));
+        JsonElement item = await PreflightItemAsync(app, "health_audience");
+
+        Assert.Equal("ok", item.GetProperty("level").GetString());
+        string detail = item.GetProperty("detail").GetString()!;
+        Assert.Contains("有意不接", detail);
+        Assert.Contains("拉取模型", detail);   // ★ 触发条件要写在旁边,免得有人跑去开隧道
+    }
+
+    [Fact]
+    public async Task P101下探活居然到了_照实报warn()
+    {
+        // ★★★ **口径由部署声明,而结论仍由行为决定。**
+        //   本机声明「不接广播」而探活真的到了 ⇒ 有人登记了回调 ⇒ 现实与声明不符,
+        //   必须照实说出来 —— **不能因为配置说不接就不看**,那就退回成配置读数了。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", adminAuth: true, jwks: BuildJwks(rsa, Kid));
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await ProbeAsync(app.CreateClient(), SignProbe(rsa, "horus-client#health"))).StatusCode);
+
+        JsonElement item = await PreflightItemAsync(app, "health_audience");
+        Assert.Equal("warn", item.GetProperty("level").GetString());
+        Assert.Contains("居然到达", item.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task 期待广播的部署_从未探过仍报warn()
+    {
+        // ★ 另一种部署(将来走隧道/拉取,或别的现场):声明期待广播时,
+        //   「从未探过」仍然是**该被看见的异常** —— 多半是后台没登记回调。
+        using RSA rsa = RSA.Create(2048);
+        using var app = new TestApp(authMode: "oidc", adminAuth: true, jwks: BuildJwks(rsa, Kid), expectRevokePush: true);
+        JsonElement item = await PreflightItemAsync(app, "health_audience");
+
+        Assert.Equal("warn", item.GetProperty("level").GetString());
+        Assert.Contains("从未收到过探活", item.GetProperty("detail").GetString());
+    }
+
+    /// 拉一次预检,取出指定 id 的那一项。
+    private static async Task<JsonElement> PreflightItemAsync(TestApp app, string id)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, "/api/preflight");
+        req.Headers.Add("X-Horus-Admin", TestApp.AdminToken);
+        HttpResponseMessage resp = await app.CreateClient().SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+        JsonElement body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        foreach (JsonElement c in body.GetProperty("checks").EnumerateArray())
+            if (c.GetProperty("id").GetString() == id) return c;
+        throw new Xunit.Sdk.XunitException($"预检里没有 {id} 这一项");
     }
 
     [Fact]

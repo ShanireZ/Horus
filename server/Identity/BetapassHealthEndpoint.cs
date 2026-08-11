@@ -5,6 +5,12 @@ namespace Horus.Server.Identity;
 
 /// 贝塔通**存活探测**的接收端(其 P94,契约见 BetaPass `docs/rp-contract.md`「`GET /internal/health`:必办项」)。
 ///
+/// ⏳★★ **本端目前不会被调用**(贝塔通 **P101**,owner 2026-08-11):Horus Server 是局域网机、
+///   **没有可拨地址**,因此**有意不给它登记 `revoke_callback_url`** —— 而探活地址按撤权回调
+///   同源推导,没登记就**不在探活名单里**。★ 实现照旧保留:走拉取模型那天要用**同一套验签与处置**,
+///   删了将来还得重写。判据与残余风险见 <see cref="Config.ServerConfig.BetapassRevokePushExpected"/>。
+///
+/// 以下描述的是**链路真的通起来时**的口径(即 `betapassRevokePushExpected=true` 的部署):
 /// 贝塔通**每 5 分钟**打一次;**连续 3 次失败(15 分钟)即判本站离线**,并**暂停对本站的撤权重投**,
 /// 探到回来之后才从头重投一遍。
 ///

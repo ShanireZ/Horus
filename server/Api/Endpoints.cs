@@ -230,21 +230,39 @@ public static class Endpoints
                     ctx.RequestServices.GetRequiredService<BetapassProbeState>().Snapshot();
                 string Ago(double t) => $"{(Now() - t) / 60.0:F0} 分钟前";
 
+                // ★★ **口径由部署声明,而结论仍由行为决定** —— 两者都要,少哪个都不行:
+                //   只看配置 → 永远绿(它此前就是这个装饰品);
+                //   只看行为 → P101 下「从未探过」恒为真,变成一条**永远亮着的 warn**,
+                //   而永远亮着的告警等于没有告警,下一次真出事时没人会看。
+                bool expectPush = cfg.BetapassRevokePushExpected;
+
                 if (rejAt is not null && (okAt is null || rejAt > okAt))
                     // 口径对不上。最常见是线上贝塔通还是 P100 之前的版本,还在发裸 client_id。
                     Add("health_audience", "fail", "贝塔通探活",
                         $"最近一次探活**被拒**({Ago(rejAt.Value)}):{why}。本机在等 {auds}{legacy}"
                         + " —— 对侧后台只看得到一个 401,那边不会有人替你发现");
                 else if (okAt is not null)
-                    Add("health_audience", "ok", "贝塔通探活",
-                        $"最近一次探活通过({Ago(okAt.Value)}) · 本机认 {auds}{legacy}");
-                else
+                    // ★ 探活到达了。若本机声明「不接广播」(P101),那说明**有人登记了回调** ——
+                    //   现实与声明不符,照实报出来,别因为配置说不接就不看。
+                    Add("health_audience", expectPush ? "ok" : "warn", "贝塔通探活",
+                        expectPush
+                            ? $"最近一次探活通过({Ago(okAt.Value)}) · 本机认 {auds}{legacy}"
+                            : $"探活**居然到达了**({Ago(okAt.Value)}),而本机按 P101 声明不接撤权广播 —— "
+                              + $"说明有人给本机登记了回调。请确认口径,或把 betapassRevokePushExpected 置 true{legacy}");
+                else if (expectPush)
                     // ★ 从未探过:贝塔通每 5 分钟就该来一次。服务器刚起来那几分钟属正常,
                     //   一直没有则多半是**后台没登记撤权回调** —— 探活地址按它同源推导,
                     //   所以那一条登记同时决定探活与撤权两件事。
                     Add("health_audience", "warn", "贝塔通探活",
                         $"**从未收到过探活**(它每 5 分钟应来一次)。服务器刚启动属正常;"
                         + $"否则多半是贝塔通后台**没登记本机的撤权回调**(探活地址按它同源推导)。本机认 {auds}{legacy}");
+                else
+                    // ★★ P101:**有意**不接。这是预期状态,不是故障 —— 把界限与触发条件一并说清,
+                    //   免得下一个人看到「没有探活」就以为链路坏了、跑去开隧道。
+                    Add("health_audience", "ok", "撤权广播",
+                        "本机**有意不接**贝塔通的撤权广播与探活(其 P101:局域网机没有可拨地址,"
+                        + $"出站≠可入站)。残余有界:撤权后最长 ≤{cfg.AdminSessionMinutes / 60} 小时(本机 absolute)、"
+                        + "且再也登不进来、且本机只在考试期在线。★ 需要分钟级撤权时**上拉取模型,不是开隧道**");
             }
 
             // 3.5) 开考预检:**监考员自己这次登录**还剩多久,够不够撑完一场考试(贝塔通 P91)。

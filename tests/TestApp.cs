@@ -29,7 +29,7 @@ public sealed class TestApp : WebApplicationFactory<Program>
     /// 留空则用 <see cref="DummyJwks"/>,它只保证「能构造出验证器」,签不出也验不过任何真令牌。
     /// ★ `healthLegacyAud`:探活是否**额外**收旧口径(`aud` = client_id 本身)。默认 **false**,
     ///   与生产默认一致(对侧 P100 之后只发 `&lt;client_id&gt;#health`);传 true 用来验那个逃生口。
-    public TestApp(bool adminAuth = false, bool keystrokeAuth = false, bool visionMock = false, string? authMode = null, bool adminOidc = false, bool embedMock = false, string? jwks = null, bool healthLegacyAud = false)
+    public TestApp(bool adminAuth = false, bool keystrokeAuth = false, bool visionMock = false, string? authMode = null, bool adminOidc = false, bool embedMock = false, string? jwks = null, bool healthLegacyAud = false, bool expectRevokePush = false)
     {
         _dataDir = Path.Combine(Path.GetTempPath(), "horus-test-" + Guid.NewGuid().ToString("N")[..12]);
         Directory.CreateDirectory(_dataDir);
@@ -55,6 +55,8 @@ public sealed class TestApp : WebApplicationFactory<Program>
         // 探活 aud 的旧口径逃生口(owner 2026-08-11 拍板专属 aud·对侧 P100 已落地)。
         // null 清除 → 用生产默认 false(只认 `<client_id>#health`)。
         Environment.SetEnvironmentVariable("HORUS_OIDC_HEALTH_LEGACY_AUD", healthLegacyAud ? "true" : null);
+        // 是否期待收到贝塔通的撤权广播/探活。null 清除 → 用生产默认 false(贝塔通 P101:有意不接)。
+        Environment.SetEnvironmentVariable("HORUS_BETAPASS_REVOKE_PUSH", expectRevokePush ? "true" : null);
     }
 
     /// 连接事件 WS,附带合法握手头。

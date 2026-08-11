@@ -99,6 +99,10 @@ cfg = cfg with
     OidcDashboardClientId = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_CLIENT_ID") ?? cfg.OidcDashboardClientId,
     OidcDashboardClientSecret = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_SECRET") ?? cfg.OidcDashboardClientSecret,
     OidcDashboardRedirectUri = Environment.GetEnvironmentVariable("HORUS_OIDC_DASHBOARD_REDIRECT") ?? cfg.OidcDashboardRedirectUri,
+    // 是否期待收到贝塔通的撤权广播/探活(贝塔通 P101:Horus 有意不接)。只认显式的 "true"。
+    BetapassRevokePushExpected =
+        string.Equals(Environment.GetEnvironmentVariable("HORUS_BETAPASS_REVOKE_PUSH"), "true", StringComparison.OrdinalIgnoreCase)
+            || cfg.BetapassRevokePushExpected,
     // 探活 aud 的旧口径逃生口:只认显式的 "true"(误拼当没设,不至于把旧口径悄悄放回来)。
     OidcHealthAudienceAcceptLegacy =
         string.Equals(Environment.GetEnvironmentVariable("HORUS_OIDC_HEALTH_LEGACY_AUD"), "true", StringComparison.OrdinalIgnoreCase)
