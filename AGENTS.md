@@ -32,6 +32,7 @@
 ## 目录
 - [docs/architecture-v0.2.md](docs/architecture-v0.2.md) — 总体架构（**权威设计**）
 - [docs/api-contract-m1.md](docs/api-contract-m1.md) — M1 接口契约（Agent↔Server 协议 + 数据模型）
+- [docs/2026-08-10-跨项目-BetaPass会话模型重设计.md](docs/2026-08-10-跨项目-BetaPass会话模型重设计.md) — **会话三道门**（心跳 15min / idle 30min / absolute 6h）与两个客户端各自的心跳规格
 - [docs/m4-identity-oidc.md](docs/m4-identity-oidc.md) — **M4 身份层**：OIDC 取代共享 PSK（★ **2026-08-07 起 IdP 是贝塔通不是问天录**，该文档首段有现状订正表；通用契约以 `BetaPass/docs/rp-contract.md` 为准）—— 原文写的是 wentian OIDC（拓扑 A · 闭合 §10.1 栽赃/seq 抢占 · §10 RBAC 角色映射 + 监考员 OIDC 登录）
 - ★★ **接入的身份提供方是「贝塔通 BetaPass」，不是问天录**（2026-08-07 起）。改任何与登录、
   claims、令牌、端点、撤权有关的东西之前，先读 `BetaPass/docs/rp-contract.md`（**通用 RP 契约、
@@ -116,6 +117,13 @@ dotnet test  Horus.sln -c Debug      # 运行端到端测试
 - ✅ **M4 采集面 OIDC 取代共享 PSK**（闭合 §10.1 A1 跨身份栽赃 / A2 seq 抢占）：学员机 wentian per-user 身份，事件体身份 == 会话身份强制一致；`both` 灰度共存、预检判据要求全部迁 OIDC 才切。见 [docs/m4-identity-oidc.md](docs/m4-identity-oidc.md)。
 - ✅ **监考员看板 OIDC 登录**：★★ **2026-08-07 起准入由贝塔通的 `horus-admin` 平台开关回答**（其 P83），本地**不再判角色** —— `user_type == 'elder'` 那行已整个删除。~~wentian 长老 = 监考员，弟子 = 考生；缺 `user_type` fail-safe 到 disciple 绝不误授~~（**已随 P83 整个消失**）；**移除静态令牌后门**（adminAuthMode=oidc 时，仍然成立）；自签 HTTPS + 贝塔通 `horus-dashboard` client（★ 归属平台 `horus-admin`，`redirect_uri` **每台监考机一条**）。
 - ✅ **M5 采集端硬化**（纯检测 = 检测 + 上报 + 看板健康告警·不做内核对抗）：三层保活（Windows 服务 LocalSystem + 兄弟看门狗互拉 + 心跳告警）+ 4 健康信号（防挂起 `suspected_suspend` / 防遮蔽 `screenshot_obscured` / 防降权限 `capability_degraded` / 服务保活）。见 [docs/m5-agent-hardening.md](docs/m5-agent-hardening.md)。
+
+**会话模型三道门（2026-08-11 完工·随贝塔通 P88/P101）**:
+- ✅ **三道门**：心跳 15min / idle 30min / **absolute 6h**（原 3h）。两张会话表加 `last_heartbeat_at` + `last_seen_at`（幂等迁移，旧行回填 `issued_at`）；心跳端点 `POST /api/heartbeat` → 204（150s 节流，判据按字段分开）。
+- ★★ **两个客户端的心跳规格必须分开**：看板 `horus-dashboard` 是浏览器（定时器 + `BroadcastChannel` 选主）；采集端 `horus-client` 是 exe，用 `GetLastInputInfo` 判真人活动并**复用既有 WS 上行**，不新开端点。**照抄浏览器那套会把学员踢下线。**
+- ★ **任何业务请求都不得续 idle** —— 续期只认心跳这一条通道。
+- ✅ 开考预检自算 absolute 剩余（采集端横幅告警 + 看板 `/api/preflight` 的 `session_lifetime`）；存活探针 `GET /internal/health`。
+- ⏳ **卡 owner**：`post_logout_redirect_uri` 需在贝塔通登记。
 
 **M3 续批 · CLIP 按图搜图（已落地）+ 运维 UX 收尾（2026-07-03）**:
 - ✅ **本地 ONNX CLIP 嵌入器**（`OnnxClipEmbedder`·OnnxRuntime CPU·零出网）：预处理 resize + center-crop 224² + CLIP 归一化 → 512 维单位向量；★实测小米 MiMo-V2.5 **无** `/v1/embeddings` 端点 → owner 拍板改本地 ONNX。**规模小 → C# 暴力余弦，无需 sqlite-vec**（`vec_images` 虚表留大规模余量）。仅嵌证据图省算力；`ImageEmbedService` 后台 backstop 补嵌；看板灯箱「按图搜图」。⚠️真 ONNX 模型（HF `Qdrant/clip-ViT-B-32-vision` 的 `model.onnx`）属部署项，冒烟测试发现模型才跑。
