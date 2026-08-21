@@ -1,3 +1,10 @@
+---
+type: convention
+title: Agent skill domain documentation
+description: Defines how engineering skills locate domain context and architectural decisions.
+tags: [agents, domain-docs, adr]
+status: stable
+---
 # Domain Docs
 
 ## Selected layout
