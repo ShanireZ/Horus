@@ -143,3 +143,21 @@ dotnet test  Horus.sln -c Debug      # 运行端到端测试
 
 ## 提交约定
 默认不提交，除非用户明确要求。commit 信息用中文，简洁。
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five canonical triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This target uses a single-context domain-doc layout. See `docs/agents/domain.md`.
+
+### Related engineering skills
+
+See `docs/agents/skill-workflows.md` for recommendations on when to use the installed engineering skills and how their workflows compose.
