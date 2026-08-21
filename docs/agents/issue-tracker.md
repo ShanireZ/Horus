@@ -5,6 +5,7 @@ description: Defines where engineering skills read and write issues for this rep
 tags: [agents, issue-tracker]
 status: stable
 ---
+
 # Issue tracker: GitHub
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.

@@ -5,6 +5,7 @@ description: Defines how engineering skills locate domain context and architectu
 tags: [agents, domain-docs, adr]
 status: stable
 ---
+
 # Domain Docs
 
 ## Selected layout
