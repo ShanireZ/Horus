@@ -54,6 +54,13 @@
 - [tests/](tests/) — 端到端测试（`Horus.Server.Tests`）
 - [Horus.sln](Horus.sln) — 解决方案（4 个项目）
 
+## Web Platform Baseline
+
+- 看板是 `controlled-web`，开发能力上限为 Newly；原生静态资源没有转译/打包阶段，`buildTarget` 必须诚实标为 `not-applicable`。
+- 受控浏览器合同为机构管理的 Chrome / Edge 当前及前一主版本，不包含 downstream；开考前必须在实际监考工作站跑登录、座位刷新、复核、灯箱和考试控制检查。
+- Newly 能力必须在 [`baseline.config.json`](baseline.config.json) 登记检测与降级；`WebBaselineContractTests` 会拦截受监视但未登记的现代 API。
+- 关键监考操作不得因浏览器缺少 Newly 能力而静默消失，必须保留现有原生路径。
+
 ## Cloudflare Web Analytics / RUM 硬约束
 
 - Rocket Loader 保持关闭，Web Analytics / RUM 保持开启。`.betaoi.cc` 公网页面只使用 Cloudflare 自动注入，源码不得重复加载 beacon。

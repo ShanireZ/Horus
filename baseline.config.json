@@ -1,0 +1,29 @@
+{
+  "runtime": "controlled-web",
+  "featureTarget": "newly",
+  "buildTarget": {
+    "strategy": "not-applicable",
+    "consumer": "ASP.NET Core static web assets",
+    "reason": "监考看板是无转译、无打包的原生 HTML/CSS/JavaScript，不虚构构建目标。"
+  },
+  "downstream": {
+    "enabled": false,
+    "reason": "看板只运行在机构管理的 LAN 监考工作站，不面向公网下游浏览器。"
+  },
+  "browserContract": {
+    "engines": ["chrome", "edge"],
+    "releaseWindow": "current-and-previous-major",
+    "preflight": "开考前在实际监考工作站验证登录、座位刷新、复核、图片灯箱和考试控制。"
+  },
+  "newlyFeatures": [],
+  "criticalFallback": "Newly 能力必须先做特性检测；不可用时保留现有原生路径，关键监考操作不得静默消失。",
+  "verification": [
+    "dotnet build Horus.sln -c Debug",
+    "dotnet test Horus.sln -c Debug",
+    "实际监考工作站 Chrome/Edge 开考前检查"
+  ],
+  "snapshot": {
+    "approvedAt": "2026-08-23",
+    "browserslistObservation": "4.28.7 的 baseline newly available 仅解析出 Chromium 系浏览器；本项目不把该移动查询接入构建。"
+  }
+}

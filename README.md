@@ -23,6 +23,8 @@ Horus 是一款**本地局域网考试监考系统**。
 | 监考服务器   | 笔记本;接收 + 分析(L1 元数据 / L2 视觉 LLM 识图) + 落库 + 看板 | ASP.NET Core + SQLite + 文件 + 本地 ONNX CLIP  |
 | 监考端       | 实时看板 + 可疑队列复核 + 按图搜图                             | 已实现的原生单页 Web 看板（`server/wwwroot/`） |
 
+监考看板按工作区 Web Platform Baseline 策略声明为受控 Web：Newly 是开发能力上限，实际运行合同为机构管理的 Chrome / Edge 当前及前一主版本。看板没有前端构建链，兼容性由 [`baseline.config.json`](baseline.config.json)、合同测试与开考前实机检查共同保证。
+
 ## 合规与正当使用
 
 本系统仅用于**获得授权的考试监考，请勿用于未授权的监控**。部署前须告知被监考者采集范围、取得知情同意，并遵守所在地隐私与数据保护法规。
