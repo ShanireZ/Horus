@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Xunit;
 
@@ -35,6 +36,8 @@ public class WebBaselineContractTests
         Assert.Equal("newly", root.GetProperty("featureTarget").GetString());
         Assert.Equal("not-applicable", root.GetProperty("buildTarget").GetProperty("strategy").GetString());
         Assert.False(root.GetProperty("downstream").GetProperty("enabled").GetBoolean());
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("criticalFallback").GetString()));
+        Assert.NotEmpty(root.GetProperty("verification").EnumerateArray());
     }
 
     [Fact]
@@ -49,6 +52,29 @@ public class WebBaselineContractTests
         Assert.Equal(["chrome", "edge"], engines);
         Assert.Equal("current-and-previous-major", contract.GetProperty("releaseWindow").GetString());
         Assert.False(string.IsNullOrWhiteSpace(contract.GetProperty("preflight").GetString()));
+
+        JsonElement approvedMajors = contract.GetProperty("approvedMajors");
+        JsonElement snapshot = doc.RootElement.GetProperty("snapshot");
+        string approvedAtRaw = snapshot.GetProperty("approvedAt").GetString() ?? "";
+        Assert.True(
+            DateOnly.TryParseExact(approvedAtRaw, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly approvedAt),
+            "Baseline 快照日期必须是 yyyy-MM-dd");
+        int ageDays = DateOnly.FromDateTime(DateTime.UtcNow).DayNumber - approvedAt.DayNumber;
+        Assert.InRange(ageDays, 0, 100);
+        JsonElement reviewVersions = snapshot.GetProperty("reviewMachineVersions");
+        foreach (string engine in engines)
+        {
+            int[] majors = approvedMajors.GetProperty(engine).EnumerateArray()
+                .Select(item => item.GetInt32())
+                .ToArray();
+            Assert.Equal(2, majors.Length);
+            Assert.Equal(majors[0] + 1, majors[1]);
+
+            string observed = reviewVersions.GetProperty(engine).GetString() ?? "";
+            Assert.True(Version.TryParse(observed, out Version? version), $"{engine} 快照版本无效");
+            Assert.Equal(majors[1], version.Major);
+        }
+        Assert.Matches(@"^8\.0\.\d+$", snapshot.GetProperty("dotnetSdk").GetString() ?? "");
     }
 
     [Fact]
@@ -80,8 +106,14 @@ public class WebBaselineContractTests
             Assert.False(string.IsNullOrWhiteSpace(declaration.GetProperty("detection").GetString()));
             Assert.False(string.IsNullOrWhiteSpace(declaration.GetProperty("fallback").GetString()));
             string marker = declaration.GetProperty("marker").GetString() ?? "";
+            string detectionMarker = declaration.GetProperty("detectionMarker").GetString() ?? "";
+            string fallbackMarker = declaration.GetProperty("fallbackMarker").GetString() ?? "";
             Assert.False(string.IsNullOrWhiteSpace(marker));
             Assert.Contains(marker, allSource);
+            Assert.False(string.IsNullOrWhiteSpace(detectionMarker));
+            Assert.False(string.IsNullOrWhiteSpace(fallbackMarker));
+            Assert.Contains(detectionMarker, allSource);
+            Assert.Contains(fallbackMarker, allSource);
         }
 
         foreach (string marker in WatchedNewlyMarkers)

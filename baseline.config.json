@@ -13,6 +13,10 @@
   "browserContract": {
     "engines": ["chrome", "edge"],
     "releaseWindow": "current-and-previous-major",
+    "approvedMajors": {
+      "chrome": [150, 151],
+      "edge": [150, 151]
+    },
     "preflight": "开考前在实际监考工作站验证登录、座位刷新、复核、图片灯箱和考试控制。"
   },
   "newlyFeatures": [],
@@ -23,7 +27,12 @@
     "实际监考工作站 Chrome/Edge 开考前检查"
   ],
   "snapshot": {
-    "approvedAt": "2026-08-23",
+    "approvedAt": "2026-08-24",
+    "reviewMachineVersions": {
+      "chrome": "151.0.7922.170",
+      "edge": "151.0.4129.93"
+    },
+    "dotnetSdk": "8.0.424",
     "browserslistObservation": "4.28.7 的 baseline newly available 仅解析出 Chromium 系浏览器；本项目不把该移动查询接入构建。"
   }
 }
