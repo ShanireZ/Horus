@@ -28,7 +28,7 @@
 - 监考看板运行时为 `controlled-web`，Newly 是开发能力上限；LAN 工作站合同为 Chrome / Edge 当前及前一主版本，不覆盖公网 downstream。
 - 该移动窗口在 2026-08-24 的批准快照为 Chrome / Edge 150–151；实际复核机版本与 .NET SDK 一并记录在根 `baseline.config.json`，版本窗口升级不得静默漂移。
 - 看板是 ASP.NET Core 直接提供的原生 HTML/CSS/JavaScript，没有转译或打包阶段，因此构建目标标记为 `not-applicable`，不以一份虚假的 Browserslist 配置冒充兼容性保证。
-- 引入 Newly 能力时必须在 `baseline.config.json` 登记检测与回退的源码标记；关键登录、座位刷新、复核、证据灯箱和考试控制不得静默降级。
+- 引入 Newly 能力时必须在 `baseline.config.json` 登记检测与回退的源码标记，且注释中的标记不算活动实现；关键登录、座位刷新、复核、证据灯箱和考试控制不得静默降级。
 - `WebBaselineContractTests` 检查策略、原生资源和已监视现代 API；开考前仍须在实际工作站完成浏览器预检。
 
 ## 1. 总体架构

@@ -59,7 +59,7 @@
 - 看板是 `controlled-web`，开发能力上限为 Newly；原生静态资源没有转译/打包阶段，`buildTarget` 必须诚实标为 `not-applicable`。
 - 受控浏览器合同为机构管理的 Chrome / Edge 当前及前一主版本，不包含 downstream；开考前必须在实际监考工作站跑登录、座位刷新、复核、灯箱和考试控制检查。
 - 2026-08-24 的批准窗口具体冻结为 Chrome / Edge 150–151；复核机实装版本与 .NET SDK 快照在 [`baseline.config.json`](baseline.config.json)，升级窗口必须形成显式变更。
-- Newly 能力必须在 [`baseline.config.json`](baseline.config.json) 登记检测与降级的源码标记；`WebBaselineContractTests` 会拦截受监视但未登记、或只写说明却没有实际检测/回退代码的现代 API。
+- Newly 能力必须在 [`baseline.config.json`](baseline.config.json) 登记检测与降级的源码标记；`WebBaselineContractTests` 会拦截受监视但未登记、或只出现在注释/说明中却没有实际检测与回退代码的现代 API。
 - 关键监考操作不得因浏览器缺少 Newly 能力而静默消失，必须保留现有原生路径。
 
 ## Cloudflare Web Analytics / RUM 硬约束

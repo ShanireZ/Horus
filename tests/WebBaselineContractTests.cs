@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Horus.Server.Tests;
@@ -25,6 +28,79 @@ public class WebBaselineContractTests
 
     private static JsonDocument ReadPolicy()
         => JsonDocument.Parse(File.ReadAllText(Path.Combine(FindRoot(), "baseline.config.json")));
+
+    private static string ReadDotnetSdkVersion()
+    {
+        var startInfo = new ProcessStartInfo("dotnet", "--version")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("无法启动 dotnet --version");
+        string output = process.StandardOutput.ReadToEnd().Trim();
+        string error = process.StandardError.ReadToEnd().Trim();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"dotnet --version 失败：{error}");
+        return output;
+    }
+
+    private static string WithoutComments(string source)
+    {
+        source = Regex.Replace(source, @"<!--[\s\S]*?-->", "");
+        var output = new StringBuilder(source.Length);
+        char? quote = null;
+        for (int index = 0; index < source.Length; index++)
+        {
+            char current = source[index];
+            char next = index + 1 < source.Length ? source[index + 1] : '\0';
+            if (quote is not null)
+            {
+                output.Append(current);
+                if (current == '\\' && index + 1 < source.Length)
+                {
+                    output.Append(next);
+                    index++;
+                }
+                else if (current == quote) quote = null;
+                continue;
+            }
+            if (current is '"' or '\'' or '`')
+            {
+                quote = current;
+                output.Append(current);
+                continue;
+            }
+            if (current == '/' && next == '/')
+            {
+                int lineEnd = source.IndexOf('\n', index + 2);
+                if (lineEnd < 0) break;
+                output.Append('\n');
+                index = lineEnd;
+                continue;
+            }
+            if (current == '/' && next == '*')
+            {
+                int commentEnd = source.IndexOf("*/", index + 2, StringComparison.Ordinal);
+                if (commentEnd < 0) break;
+                index = commentEnd + 1;
+                continue;
+            }
+            output.Append(current);
+        }
+        return output.ToString();
+    }
+
+    [Fact]
+    public void Newly标记只写在注释中时不算活动实现()
+    {
+        const string source = "/* document.startViewTransition */\n// scheduler.yield\n<!-- showPopover( -->\nconst url = \"https://example.test\";";
+        string activeSource = WithoutComments(source);
+        Assert.DoesNotContain("document.startViewTransition", activeSource);
+        Assert.DoesNotContain("scheduler.yield", activeSource);
+        Assert.DoesNotContain("showPopover(", activeSource);
+        Assert.Contains("https://example.test", activeSource);
+    }
 
     [Fact]
     public void 看板声明为受控原生Web_不虚构构建目标()
@@ -59,8 +135,8 @@ public class WebBaselineContractTests
         Assert.True(
             DateOnly.TryParseExact(approvedAtRaw, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly approvedAt),
             "Baseline 快照日期必须是 yyyy-MM-dd");
-        int ageDays = DateOnly.FromDateTime(DateTime.UtcNow).DayNumber - approvedAt.DayNumber;
-        Assert.InRange(ageDays, 0, 100);
+        int ageDays = DateOnly.FromDateTime(DateTime.Now).DayNumber - approvedAt.DayNumber;
+        Assert.InRange(ageDays, 0, 92);
         JsonElement reviewVersions = snapshot.GetProperty("reviewMachineVersions");
         foreach (string engine in engines)
         {
@@ -74,24 +150,27 @@ public class WebBaselineContractTests
             Assert.True(Version.TryParse(observed, out Version? version), $"{engine} 快照版本无效");
             Assert.Equal(majors[1], version.Major);
         }
-        Assert.Matches(@"^8\.0\.\d+$", snapshot.GetProperty("dotnetSdk").GetString() ?? "");
+        string approvedSdk = snapshot.GetProperty("dotnetSdk").GetString() ?? "";
+        Assert.Matches(@"^8\.0\.\d+$", approvedSdk);
+        Assert.Equal(approvedSdk, ReadDotnetSdkVersion());
     }
 
     [Fact]
     public void 原生资源存在_受监视的Newly能力必须登记检测与降级()
     {
         string root = FindRoot();
-        string[] assets =
-        [
-            "server/wwwroot/index.html",
-            "server/wwwroot/styles.css",
-            "server/wwwroot/app.js"
-        ];
-        string allSource = string.Join("\n", assets.Select(path =>
+        string webRoot = Path.Combine(root, "server", "wwwroot");
+        Assert.True(Directory.Exists(webRoot), "缺少看板原生资源目录 server/wwwroot");
+        string[] browserExtensions = [".html", ".css", ".js"];
+        string[] assets = Directory.EnumerateFiles(webRoot, "*", SearchOption.AllDirectories)
+            .Where(path => browserExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.NotEmpty(assets);
+        string activeSource = string.Join("\n", assets.Select(path =>
         {
-            string fullPath = Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar));
-            Assert.True(File.Exists(fullPath), $"缺少看板资源 {path}");
-            return File.ReadAllText(fullPath);
+            Assert.True(File.Exists(path), $"缺少看板资源 {path}");
+            return WithoutComments(File.ReadAllText(path));
         }));
 
         using JsonDocument doc = ReadPolicy();
@@ -109,16 +188,16 @@ public class WebBaselineContractTests
             string detectionMarker = declaration.GetProperty("detectionMarker").GetString() ?? "";
             string fallbackMarker = declaration.GetProperty("fallbackMarker").GetString() ?? "";
             Assert.False(string.IsNullOrWhiteSpace(marker));
-            Assert.Contains(marker, allSource);
+            Assert.Contains(marker, activeSource);
             Assert.False(string.IsNullOrWhiteSpace(detectionMarker));
             Assert.False(string.IsNullOrWhiteSpace(fallbackMarker));
-            Assert.Contains(detectionMarker, allSource);
-            Assert.Contains(fallbackMarker, allSource);
+            Assert.Contains(detectionMarker, activeSource);
+            Assert.Contains(fallbackMarker, activeSource);
         }
 
         foreach (string marker in WatchedNewlyMarkers)
         {
-            if (allSource.Contains(marker, StringComparison.Ordinal)) Assert.Contains(marker, declaredMarkers);
+            if (activeSource.Contains(marker, StringComparison.Ordinal)) Assert.Contains(marker, declaredMarkers);
         }
     }
 }
