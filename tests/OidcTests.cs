@@ -18,7 +18,11 @@ namespace Horus.Server.Tests;
 /// M4·S1 + 会话密钥:id_token 离线验签(RS256)与 ECDH K_sess 协商的回归锁定。
 public class OidcTokenValidatorTests
 {
-    private const string Issuer = "https://betaoi.cc";
+    /// ★★★ 验签用的 issuer 夹具:**虚构域名**。
+    /// ★ 本组测的是验签器的行为(iss 不符要拒 / aud 不符要拒 / kid 轮换……),
+    ///   ★★ **与贝塔通此刻的 issuer 是什么完全无关** —— 写真实域名只会让它跟着上游一起腐烂,
+    ///   而 2026-08-26 实测:那种腐烂是**自洽的**,一道判据都不会红。
+    private const string Issuer = "https://idp.test";
     private const string Audience = "horus-client";
     private const string Kid = "test-kid-1";
 
@@ -125,11 +129,11 @@ public class OidcTokenValidatorTests
         var handler = new RecordingHandler("""{"sub":"sub-abc","name":"叶锋","preferred_username":"ye_feng"}""");
         using var http = new HttpClient(handler);
         OidcClaims c = await Userinfo.FetchAsync(
-            http, "https://betaoi.cn/me", "at-xyz", new OidcSubject("sub-abc"), NullLogger.Instance, CancellationToken.None);
+            http, "https://idp.test/me", "at-xyz", new OidcSubject("sub-abc"), NullLogger.Instance, CancellationToken.None);
 
         Assert.Equal("Bearer", handler.LastAuth?.Scheme);
         Assert.Equal("at-xyz", handler.LastAuth?.Parameter);
-        Assert.Equal("https://betaoi.cn/me", handler.LastUrl);
+        Assert.Equal("https://idp.test/me", handler.LastUrl);
         Assert.Equal("ye_feng", c.Username);
     }
 
@@ -140,7 +144,7 @@ public class OidcTokenValidatorTests
         var handler = new RecordingHandler("nope", HttpStatusCode.Unauthorized);
         using var http = new HttpClient(handler);
         await Assert.ThrowsAsync<OidcValidationException>(() => Userinfo.FetchAsync(
-            http, "https://betaoi.cn/me", "at-xyz", new OidcSubject("sub-abc"), NullLogger.Instance, CancellationToken.None));
+            http, "https://idp.test/me", "at-xyz", new OidcSubject("sub-abc"), NullLogger.Instance, CancellationToken.None));
     }
 
     [Fact]
@@ -148,13 +152,17 @@ public class OidcTokenValidatorTests
     {
         // ★ 贝塔通 P72:`.cc` 是同一个 issuer 的第二条入口。端点**整套**换前缀,issuer 不动。
         //   userinfo 是本轮新增的一条,与 token / auth / jwks 同源派生,不能漏进这条口径。
-        var cfg = new ServerConfig { OidcIssuer = "https://betaoi.cn", OidcEndpointBase = "https://betaoi.cc" };
-        Assert.Equal("https://betaoi.cc/me", cfg.OidcUserinfoEndpoint);
-        Assert.Equal("https://betaoi.cn", cfg.OidcIssuer);
+// ★★★ 贝塔通那一侧用**虚构域名**:本条测的是**关系**(端点整套换前缀而 issuer 不动),
+        //   ★ 而关系不随上游搬域而变。2026-08-26 的教训:这些夹具里的真实域名此前彼此自洽地
+        //   停在 P110 之前的旧值,**一道判据都没红** —— 自洽的抄件与正确的抄件长得一模一样。
+        var cfg = new ServerConfig { OidcIssuer = "https://idp.test", OidcEndpointBase = "https://idp-backup.test" };
+        Assert.Equal("https://idp-backup.test/me", cfg.OidcUserinfoEndpoint);
+        Assert.Equal("https://idp.test", cfg.OidcIssuer);
+        Assert.NotEqual(cfg.OidcIssuer, cfg.OidcEndpointBase);   // ★ 要害是两者**可以**不同主机
 
         // 不填前缀时回落 issuer;★ 路径是根 `/me`,**不是**旧 wentian 的 `/oauth/userinfo`。
-        var plain = new ServerConfig { OidcIssuer = "https://betaoi.cn" };
-        Assert.Equal("https://betaoi.cn/me", plain.OidcUserinfoEndpoint);
+        var plain = new ServerConfig { OidcIssuer = "https://idp.test" };
+        Assert.Equal("https://idp.test/me", plain.OidcUserinfoEndpoint);
     }
 
     /// 记录最后一次请求的桩 handler(取 userinfo 用:要验 Bearer 头与目标 URL 都对)。

@@ -38,16 +38,28 @@ public sealed record ServerConfig
     // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
     /// 采集面鉴权模式:"psk"(默认·共享 PSK·M1-M3 原样) | "oidc"(仅 OIDC 会话) | "both"(共存·迁移期回退网)。
     public string AuthMode { get; init; } = "psk";
-    /// 贝塔通 OIDC issuer(生产为 `https://betaoi.cn`)。OIDC 模式必配。
-    /// ★★ **issuer 是标识符不是地址**(贝塔通 P72):令牌里的 `iss` 恒为它,`iss` 校验也永远对它 ——
+    /// 贝塔通 OIDC issuer(生产现值 `https://pass.betaoi.cn`)。OIDC 模式必配。
+    /// ★★ **issuer 是标识符不是地址**(贝塔通 P116):令牌里的 `iss` 恒为它,`iss` 校验也永远对它 ——
     ///   即便走备用域 `.cc` 进来也不变。**不要**为了走备用域去改这一项,那会让所有令牌验不过。
     ///   要换入口改 <see cref="OidcEndpointBase"/>。
+    /// ⚠★★★ **2026-08-26 订正:本行此前写着「生产为 `https://betaoi.cn`」,而它已经错了三天。**
+    ///   贝塔通 **P110**(08-23)把 issuer 从根域搬到 `pass.` 子域、**P116** 当晚定稿,
+    ///   而 Horus 与成均两家 RP 的配置**一处都没跟上**。
+    /// ★★ **失效形态极难查**:`betaoi.cn` 现在解析到 Fulcrum 那台机器,
+    ///   `/.well-known/openid-configuration` 回 **`200 text/plain`**(正文
+    ///   `fulcrum on betaoi.cn -- production v1`) —— **不是 404、不是连不上,是一个 200**。
+    /// ★★★ **别再把具体的域名抄进注释或默认值里**:契约(`../BetaPass/docs/rp-contract.md`
+    ///   「双域(P116)」一节)明写「★★★ 别把它抄进任何代码或写死进配置的字面量里」。
+    ///   ★ 真要知道它现在是什么,**读线上 discovery**,别读这行字。
     public string? OidcIssuer { get; init; }
     /// 协议端点的**取回地址**前缀。留空 = 用 issuer。
-    /// ★ 贝塔通 P72:`.cc` 是**同一个 issuer 的第二条入口** —— 端点整套走 `.cc`,而 `iss` 仍是 `.cn`。
-    ///   主域不可达时把这一项填成 `https://betaoi.cc` 即可,issuer 一个字都不用动。
-    /// ★ **不要走 discovery 自动发现**:从 `.cc` 拉回的文档里 `issuer` 与取回地址不一致,
-    ///   合规的 OIDC 库会当场拒绝;本类是手写端点配置,正合这条口径。
+    /// ★ 贝塔通 P116:备用域是**同一个 issuer 的第二条入口** —— 端点整套走备用域,而 `iss` 不变。
+    ///   主域不可达时把这一项填成 `https://pass.betaoi.cc` 即可,issuer 一个字都不用动。
+    /// ★ **不要走 discovery 自动发现**:备用域那两份 well-known 已由 Caddy **302 回主力域**(P116),
+    ///   而本类是手写端点配置,正合这条口径。
+    /// ★★ 手写的那五条路径(`/auth` `/token` `/jwks` `/me` `/session/end`)**与线上一致**
+    ///   —— 2026-08-26 逐条实测核过。它们挂在**根路径**(对侧 `docs/oidc-mounting.md`,P52 方案 A)。
+    ///   ⚠ 同日成均那边这五条**全带一层多余的 `/oidc` 前缀、五个全 404**,Horus 这侧没这个问题。
     public string? OidcEndpointBase { get; init; }
     /// Horus 在 wentian 注册的 client_id(默认 horus-client)。
     public string? OidcClientId { get; init; }

@@ -26,9 +26,14 @@
   // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
   // authMode: "psk"(默认·共享 PSK) | "oidc"(仅 OIDC 会话) | "both"(迁移共存·可回退 PSK)。
   "authMode": "psk",
-  // OIDC issuer(wentian 对外根域名,如 https://betaoi.cc)。oidc/both 必配。
+  // OIDC issuer:**贝塔通**的对外根域名。oidc/both 必配(留空会在启动时抛,不会静默放行)。
+  // ⚠★★★ 2026-08-26:本行此前写着「wentian 对外根域名,如 https://betaoi.cc」——**落后两代**
+  //   (贝塔通接手后是 betaoi.cn,P110 又搬到 pass. 子域)。★ 这里**有意不写现值**:
+  //   契约明写「别把它抄进任何代码或写死进配置的字面量里」,而一个写在注释里的举例
+  //   ★★ **会被人当成可以照抄的值**,然后跟着上游一起腐烂 —— 上面那句就是这么来的。
+  //   ⇒ 真要知道现值,打线上 discovery;或看 AgentConfig.OidcIssuer 的内置默认。
   "oidcIssuer": "",
-  // Horus 在 wentian 注册的 client_id(与 wentian OAUTH_HORUS_CLIENT_ID 一致)。
+  // Horus 在**贝塔通**注册的 client_id。
   "oidcClientId": "horus-client",
   // client_secret:**把明文填进 oidcClientSecret,启动一次即自动加密为 oidcClientSecretEnc 并清空明文**(同 visionApiKey 机制·DPAPI)。
   //   也可 `Horus.Server protect-secret <secret>` 预生成密文直接填 Enc、明文留空;或 env HORUS_OIDC_SECRET 注入(不落盘)。Server-Broker:secret 只在本服务器。

@@ -11,9 +11,18 @@
   "agentId": "",
   "machineId": "",
 
-  // 采集鉴权:默认 oidc(启动待命,开考弹浏览器登录 wentian)。以下三项都有默认,一般不用写。
+  // 采集鉴权:默认 oidc(启动待命,开考弹浏览器登录**贝塔通**)。以下三项都有默认,一般不用写。
+  //
+  // ⚠★★★ 2026-08-26:本行此前写着 "oidcIssuer": "https://betaoi.cc",而那个值**落后两代** ——
+  //   它是**问天录时期**的域(贝塔通接手后 issuer 是 betaoi.cn,P110 又搬到 pass. 子域)。
+  // ★★★ 危险在于**这份样例正是装机时被复制的那一份**:它用一个陈旧的值
+  //   **覆盖掉了代码里正确的默认值**,而那比「不写这一行」更糟。
+  // ⇒ 现在**整行删掉**,用 AgentConfig 的内置默认。★ **除非你确知贝塔通换了 issuer 而 Agent
+  //   还没更新**,否则不要写这一项 —— 写了就等于又开一个会腐烂的地方。真要确认现值,打线上 discovery。
+  // ⚠★★★ **「留空」与「不写」不是一回事**:JSON 里写 "oidcIssuer": "" 会把内置默认
+  //   **覆盖成空串**(反序列化只认「键在不在」,不认「值是不是空」),
+  //   ★ 表现是开考时 OidcLoginFlow 抛「oidc 模式需配 oidcIssuer」。⇒ 要用默认就**别写这个键**。
   "authMode": "oidc",
-  "oidcIssuer": "https://betaoi.cc",
   "oidcClientId": "horus-client",
 
   // psk(legacy)模式才需要:authMode 改 "psk" 并补 psk + examId + seatId(oidc 模式留空/删除)。

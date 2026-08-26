@@ -155,10 +155,20 @@
 >
 > | 项 | 本文原写 | 现在（2026-08-07） | 依据 |
 > |---|---|---|---|
-> | IdP | 问天录 `betaoi.cc` | **贝塔通**，issuer `https://betaoi.cn` | 贝塔通 M7 |
+> | IdP | 问天录 `betaoi.cc` | **贝塔通**，issuer `https://pass.betaoi.cn`（★ **2026-08-26 订正**，原写 `https://betaoi.cn`） | 贝塔通 M7 → **P110 / P116** |
 > | 签名算法 | RS256（RSA-PKCS1） | **PS256（RSA-PSS）**，允许清单**只有一项** | 贝塔通 P58 |
 > | 协议端点 | `/oauth/authorize`、`/oauth/token`、`/.well-known/jwks.json` | **根路径**：`/auth`、`/token`、`/jwks`、`/session/end` | 贝塔通 `docs/oidc-mounting.md` |
-> | 备用域 | 无 | `OidcEndpointBase` —— **端点整套换入口而 issuer 不变** | 贝塔通 P72 |
+> | 备用域 | 无 | `OidcEndpointBase` —— **端点整套换入口而 issuer 不变**；现值 `https://pass.betaoi.cc` | 贝塔通 P72 → **P116** |
+>
+> ⚠ ★★★ **2026-08-26 的教训（这张表自己就是那个形态）**：上面那行 issuer 从 2026-08-23
+> 起就是错的，**而没有任何东西会红** —— 贝塔通 **P110** 把 issuer 从根域搬到 `pass.` 子域，
+> Horus 与成均两家 RP 的配置一处都没跟上。★★ **失效形态不是 404**：`betaoi.cn` 现在解析到
+> Fulcrum 那台机器，`/.well-known/openid-configuration` 回一个 **`200 text/plain`**。
+> ⇒ ★ 契约（`../BetaPass/docs/rp-contract.md`「双域（P116）」）明写
+> 「★★★ **别把它抄进任何代码或写死进配置的字面量里**」——
+> ★★ **本表与 `AgentConfig.OidcIssuer` 的默认值都是那句警告的反面**，
+> 留着是因为考场现场要少配一项，★ **代价是它会单向腐烂 ⇒ 联调前必须拿线上 discovery 核一次**。
+> ★ 协议端点那一行（根路径五条）2026-08-26 逐条实测核过，**Horus 这侧是对的**。
 > | scope | `openid horus_profile` | **`openid profile`**（`horus_profile` 永不登记） | 贝塔通 P81 |
 > | 身份字段 | 9 项富画像 | **3 项**：`sub` / `name` / `username` | 贝塔通 P81 |
 > | 身份字段**从哪取** | id_token（wentian 为此设了 `conformIdTokenClaims: false`） | ★★ **userinfo（`/me`）** —— 贝塔通的 id_token 里**只有 `sub`** | 贝塔通 `docs/rp-contract.md` |

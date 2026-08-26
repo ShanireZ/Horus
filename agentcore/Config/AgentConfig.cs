@@ -26,10 +26,18 @@ public sealed class AgentConfig
     // ---- M4 身份层:OIDC 登录(取代共享 PSK)----
     /// 采集鉴权:"oidc"(默认·经 wentian 登录换会话) | "psk"(legacy·须配 psk+examId+seatId)。both 由服务器侧决定。
     public string AuthMode { get; init; } = "oidc";
-    /// 贝塔通 OIDC issuer。★★ **它是标识符不是地址**(贝塔通 P72):`iss` 恒为它,
-    /// 走备用域 `.cc` 进来也不变 —— 换入口请改 <see cref="OidcEndpointBase"/>,**别改这一项**。
-    public string? OidcIssuer { get; init; } = "https://betaoi.cn";
-    /// 协议端点的取回地址前缀。留空 = 用 issuer。主域不可达时填 `https://betaoi.cc`(P72)。
+    /// 贝塔通 OIDC issuer。★★ **它是标识符不是地址**(贝塔通 P116):`iss` 恒为它,
+    /// 走备用域进来也不变 —— 换入口请改 <see cref="OidcEndpointBase"/>,**别改这一项**。
+    /// ⚠★★★ **2026-08-26 订正:这个默认值此前是 `https://betaoi.cn`,已经错了三天。**
+    ///   贝塔通 P110(08-23)把 issuer 搬到 `pass.` 子域、P116 当晚定稿。
+    /// ★★ **它是默认值不是注释** —— 不配这一项的 Agent 会拿着一个陈旧的 issuer 去验签,
+    ///   而 `betaoi.cn` 现在是 Fulcrum 的占位页(`/.well-known/…` 回 **`200 text/plain`**,
+    ///   **不是 404**),于是失效形态是「解析不出 JSON」而不是「找不到」。
+    /// ★★★ 契约明写「别把它抄进任何代码或写死进配置的字面量里」——
+    ///   ★ 这里留一个默认值是为了考场现场少配一项,**代价就是它会单向腐烂**:
+    ///   ⇒ **联调前必须拿线上 discovery 核一次**,别信这行字。
+    public string? OidcIssuer { get; init; } = "https://pass.betaoi.cn";
+    /// 协议端点的取回地址前缀。留空 = 用 issuer。主域不可达时填 `https://pass.betaoi.cc`(P116)。
     public string? OidcEndpointBase { get; init; }
 
     /// 授权端点。★ 贝塔通挂**根路径**(`/auth`),不是旧 wentian 的 `/oauth/authorize`。
