@@ -17,18 +17,30 @@
  * ════════════════════════════════════════════════════════════════════════ */
 const DOWNLOADS = {
   agent: {
-    /** @type {string | null} R2 上的 Horus.Agent.exe */
+    /** @type {string | null} R2 上的 Horus.Agent.exe。★ 填它就是全部改动。 */
     url: null,
-    version: null,
-    size: null,
+    file: 'Horus.Agent.exe',
+    size: '158 MB',
+    /** ★ 一个 158 MB 的 exe 值得给摘要 —— 拿到之后能自己核。 */
+    sha256: 'a1bb0eb19cf1b1068593a5eada4c56d69fdf0170e0f87234a80bbfbb674d1390',
   },
   server: {
-    /** @type {string | null} R2 上的 Horus.Server.exe */
+    /** @type {string | null} R2 上的 Horus-Server.zip */
     url: null,
-    version: null,
-    size: null,
+    file: 'Horus-Server.zip',
+    size: '47 MB',
+    sha256: '14443e9366230b755693db8266d45cd4590c4502defc33aa54f08fbe530fcb8b',
   },
 };
+
+/**
+ * ★★ 这两份产物是从**哪一版源码**建出来的 —— 写在这里，因为它救过一次：
+ *   `dist/` 里原先那两个 exe 是 2026-07-03 建的，嵌着的默认 issuer 是 `https://betaoi.cc`，
+ *   ★★★ **比 `f335b59` 订正的那一版还早一代，而那个域现在根本不是贝塔通** ——
+ *   Agent 是「零配置双击就跑」，嵌进去的默认值就是它实际会去连的地址。
+ * ⇒ 换产物时**连这一行一起换**，别让页面上的说法与文件对不上。
+ */
+const BUILT_FROM = 'f335b59'; // 最后一笔动过 C# 源码的提交（2026-08-26）
 
 function applyDownloads() {
   for (const [key, info] of Object.entries(DOWNLOADS)) {
@@ -51,7 +63,15 @@ function applyDownloads() {
      * ★ 不加 `download` 属性：产物在 R2（跨源），而跨源的 `download` 会被浏览器忽略，
      *   ⇒ 加了它只会让人以为「已经指定了文件名」，实际由响应头说了算。
      */
-    meta.textContent = [info.version, info.size].filter(Boolean).join(' · ');
+    meta.textContent = `${info.file} · ${info.size} · 构建自 ${BUILT_FROM}`;
+    if (typeof info.sha256 === 'string') {
+      const sum = document.createElement('code');
+      sum.className = 'card__sum';
+      sum.textContent = `sha256 ${info.sha256}`;
+      // ★ 摘要用 <code> 而不是塞进 meta 那一行：它要能被整段选中复制，
+      //   而与文件名挤在一行时人只会复制到半截。
+      meta.after(sum);
+    }
   }
 }
 
