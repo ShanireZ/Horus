@@ -29,7 +29,7 @@ const DOWNLOADS = {
     url: null,
     file: 'Horus-Server.zip',
     size: '47 MB',
-    sha256: '14443e9366230b755693db8266d45cd4590c4502defc33aa54f08fbe530fcb8b',
+    sha256: '0d67cecf1f25910be005334735d1116940a15d03d8257231af5e40a124916581',
   },
 };
 
