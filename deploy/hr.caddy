@@ -1,0 +1,84 @@
+# Horus 主页 —— hr.betaoi.cn（静态两屏页，无后端）
+#
+# ★★★ **装法：落到 `/etc/caddy/sites/hr.caddy`，不要碰 `/etc/caddy/Caddyfile`。**
+#   这台机器（`47.104.190.255`）上跑着三个项目：betai（拥有主 Caddyfile）、
+#   成均（`sites/cj.caddy`）、Horus（本文件）。主 Caddyfile 末尾一行
+#   `import sites/*.caddy` 把后两个引进来。
+#   ⚠ **整份覆盖主 Caddyfile 会把 betai 的全部站点块删掉，而 `caddy validate`
+#     会说 Valid、`reload` 会成功 —— 没有任何一步会拦你。**
+#
+#     install -D -m 644 deploy/hr.caddy /etc/caddy/sites/hr.caddy
+#     rsync -a --delete web/ root@47.104.190.255:/opt/horus-web/
+#     caddy validate --config /etc/caddy/Caddyfile     # ★ 先验语法
+#     systemctl reload caddy && journalctl -u caddy -n 30
+#
+# ★ 改完必须 `caddy validate` —— **reload 失败时旧配置仍在跑**，
+#   那意味着「改了没生效」而站点看上去一切正常。
+#
+# ★★★ 怎么验它（没有任何 CI 门能验这一份，所以写清）：
+#   1. curl -sSI https://hr.betaoi.cn/ | head -1
+#        ★ 拿得到响应行 = 证书已签发（此前这个主机名在 Caddy 里根本没有站点块，
+#          A 记录指过来但 **TLS 握手直接失败**，而 80 端口上给的是一个 308）
+#   2. curl -sS -o /dev/null -w '%{http_code}\n' https://hr.betaoi.cn/
+#        ★ 应是 200
+#   3. ★★ **换一个不在彩排名单里的出口再打一次，应当仍是 200** ——
+#        本站有意**不挂闸门**，而隔壁两个站挂着；只验「我这台能开」证明不了这件事。
+
+hr.betaoi.cn {
+	# ══════════════════════════════════════════════════════════════════════
+	# ★★★ **本站有意不 import /etc/caddy/rehearsal/*.caddy。**
+	#
+	#   owner 2026-08-27 拍板：hr 是**下载页**，面向要装 Agent 的老师与考场，
+	#   挂闸门等于谁都下载不了。
+	#
+	# ⚠ **写在这里是因为隔壁两个站点块都有那一行** —— 下一个人对照着看，
+	#   会以为这里是漏了。**它不是漏了，是一条决定。**
+	#   ★ 反过来说：哪天要给它挂上，是加一行 `import /etc/caddy/rehearsal/*.caddy`，
+	#     且必须写**绝对路径**（`import` 相对于它所在的文件解析，本文件在 `sites/` 下，
+	#     写相对路径会去找 `sites/rehearsal/*.caddy`，**glob 不命中就静默什么也不做**，
+	#     而 validate 说 Valid、reload 成功、日志一个字没有）。
+	# ══════════════════════════════════════════════════════════════════════
+
+	root * /opt/horus-web
+	encode zstd gzip
+	file_server
+
+	header {
+		# ★★ 静态站没有应用层，安全头**只能由 Caddy 给** ——
+		#   隔壁 cj 那些头是 Next 自己发的，本站照抄不到。
+		#
+		# ★ CSP 逐条对着这个页面实际用到的东西写：
+		#   - script：自己的 main.js（module）+ Cloudflare beacon 的宿主
+		#   - connect：beacon 回传打的是 cloudflareinsights.com（与 script 的宿主不同域）
+		#   - style / font / img：全部同源（Cinzel 自托管，logo 与背景图自托管）
+		#   ★ **没有 'unsafe-inline'**：本页一个内联 style 属性、一个内联 script 都没有。
+		#     ⚠ 哪天加了内联样式，表现是**那条样式静默不生效**，不是报错。
+		#   ★ form-action 'none'：本页没有任何表单。
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+
+		# ★ `.cn` 是境内直连、**Cloudflare 不在路径上** ⇒ HSTS 只能由这里发。
+		#   ★ 不带 preload、不带 includeSubDomains：preload 一旦进列表就很难退，
+		#     而 includeSubDomains 会替 betaoi.cn 下**别人的子域**做决定。
+		Strict-Transport-Security "max-age=31536000"
+
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# ★ 本页不用任何设备能力，一次性全关。
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		-Server
+	}
+
+	# ★ 带指纹的资产可以长缓存，HTML 不行 —— 改一版文案要立刻可见。
+	#   ⚠ 本站的资产**没有内容指纹**（无构建链），所以给的是一天而不是一年：
+	#     换 logo 或换字体那天，长缓存会让老访客看到新旧混搭的一版。
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=86400"
+
+	@html path / /index.html
+	header @html Cache-Control "no-cache"
+
+	log {
+		output stderr
+		format console
+	}
+}

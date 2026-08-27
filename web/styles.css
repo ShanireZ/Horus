@@ -1,0 +1,452 @@
+/*
+ * Horus 主页（hr.betaoi.cn）。
+ *
+ * ★ 无构建链：Caddy 直接 file_server 这一份。加一层打包对两屏静态页只换来一套会腐烂的工具链。
+ * ★ 色板取自 assets/brand/PROVENANCE.md 的定稿：青金蓝 / 鎏金 / 暖白。
+ */
+
+@font-face {
+  font-family: 'Cinzel';
+  /* ★ 只用于 HORUS 这一个字标（Cinzel 是拉丁字体，中文正文一个字都不走它）。 */
+  src: url('./assets/Cinzel.ttf') format('truetype');
+  font-weight: 400 700;
+  font-display: swap;
+  /* ★ 限定到大写拉丁：字体表里的其余字形不必参与匹配，也避免它被中文误用。 */
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+
+:root {
+  --lapis: #2e5eaa;
+  --gold: #c9a227;
+  --ivory: #f2ede4;
+
+  --ink: #0b1424;
+  --ink-2: #101c31;
+  --line: rgb(201 162 39 / 22%);
+  --muted: rgb(242 237 228 / 62%);
+
+  --wrap: 62rem;
+  --pad: clamp(1.25rem, 4vw, 3rem);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--ivory);
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: inherit;
+}
+
+/*
+ * ★★★ 两屏各自满屏。**用 dvh 不用 vh** —— 移动端地址栏收起/展开会改变 vh，
+ *   表现是页脚被顶出屏幕一截，而在桌面上完全看不出来。
+ * ★ 用 min-height 不用 height：内容在窄屏或大字号下会超出一屏，
+ *   写死 height 会把它裁掉，而**被裁掉的恰恰是下载按钮**。
+ */
+.screen {
+  min-height: 100dvh;
+  padding: var(--pad);
+  display: grid;
+}
+
+/* ══════════ 第一屏 ══════════ */
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  place-items: center;
+  text-align: center;
+  overflow: hidden;
+}
+
+.hero__bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 50% 32%, rgb(46 94 170 / 34%), transparent 62%),
+    linear-gradient(180deg, rgb(11 20 36 / 55%) 0%, rgb(11 20 36 / 88%) 58%, var(--ink) 100%),
+    url('./assets/horus-stage-bg.webp') center / cover no-repeat;
+}
+
+.hero__inner {
+  max-width: var(--wrap);
+  display: grid;
+  justify-items: center;
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+  padding-block: clamp(3rem, 10vh, 6rem);
+}
+
+.hero__mark {
+  width: clamp(104px, 15vw, 168px);
+  height: auto;
+  filter: drop-shadow(0 6px 24px rgb(0 0 0 / 45%));
+}
+
+.wordmark {
+  font-family: 'Cinzel', serif;
+  /* ★ 品牌规范：全大写、字距 0.16–0.18em。字距靠 letter-spacing，不靠手工插空格。 */
+  text-transform: uppercase;
+  letter-spacing: 0.17em;
+  /* ★ letter-spacing 会在最后一个字母右侧也加一份，视觉上整体左偏；补回来。 */
+  margin: 0 0 0 0.17em;
+  font-size: clamp(2.75rem, 9vw, 5.25rem);
+  font-weight: 600;
+  line-height: 1.05;
+  color: var(--ivory);
+}
+
+.hero__lede {
+  margin: 0;
+  font-size: clamp(1rem, 2.4vw, 1.25rem);
+  letter-spacing: 0.06em;
+  color: rgb(242 237 228 / 88%);
+}
+
+.hero__lede::after {
+  content: '';
+  display: block;
+  width: 3.5rem;
+  height: 1px;
+  margin: clamp(1rem, 3vh, 1.75rem) auto 0;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+
+.tenets {
+  list-style: none;
+  margin: clamp(0.5rem, 2vh, 1rem) 0 0;
+  padding: 0;
+  display: grid;
+  gap: clamp(0.75rem, 2vh, 1.15rem);
+  text-align: left;
+  width: 100%;
+  max-width: 44rem;
+}
+
+.tenets li {
+  display: grid;
+  grid-template-columns: minmax(9.5rem, auto) 1fr;
+  gap: 0.35rem 1.25rem;
+  align-items: baseline;
+  padding-left: 1rem;
+  border-left: 2px solid var(--line);
+}
+
+.tenets__k {
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+}
+
+.tenets__v {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.hero__note {
+  margin: clamp(0.5rem, 2vh, 1rem) 0 0;
+  max-width: 44rem;
+  font-size: 0.925rem;
+  color: var(--muted);
+}
+
+.hero__note strong {
+  color: rgb(242 237 228 / 90%);
+  font-weight: 600;
+}
+
+.scroll-cue {
+  position: absolute;
+  bottom: clamp(1rem, 3vh, 2rem);
+  left: 50%;
+  translate: -50% 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+}
+
+.scroll-cue svg {
+  animation: nudge 2.4s ease-in-out infinite;
+}
+
+.scroll-cue:hover,
+.scroll-cue:focus-visible {
+  color: var(--gold);
+}
+
+@keyframes nudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+/* ══════════ 第二屏：下载 + 页脚 ══════════ */
+
+/*
+ * ★★★ `1fr auto` 是「第二屏算页脚一起满屏」那句话的落点：
+ *   内容占满剩余高度，页脚贴在这一屏的底边 —— 而不是贴在文档底边。
+ */
+.download {
+  grid-template-rows: 1fr auto;
+  gap: clamp(1.5rem, 4vh, 3rem);
+  background: linear-gradient(180deg, var(--ink) 0%, var(--ink-2) 100%);
+}
+
+.download__inner {
+  width: 100%;
+  max-width: var(--wrap);
+  margin-inline: auto;
+  align-self: center;
+  display: grid;
+  gap: clamp(1.5rem, 4vh, 2.5rem);
+}
+
+.download__head h2 {
+  font-size: clamp(1.6rem, 4.5vw, 2.25rem);
+  margin: 0 0 0.35rem;
+  letter-spacing: 0.04em;
+}
+
+.download__head p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  background: rgb(242 237 228 / 3%);
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+}
+
+.card__name {
+  margin: 0;
+  font-size: 1.2rem;
+  letter-spacing: 0.03em;
+}
+
+.card__role {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+}
+
+.card__desc {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.btn {
+  justify-self: start;
+  display: inline-block;
+  padding: 0.6rem 1.4rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--gold);
+  background: var(--gold);
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  transition: filter 0.15s ease;
+}
+
+.btn:hover,
+.btn:focus-visible {
+  filter: brightness(1.08);
+}
+
+/*
+ * ★★ 「还没有可下的东西」这个状态要**在按钮本体上看得见**，
+ *   而不只是旁边一行小字：一个看起来能点的金色按钮，点下去什么也不发生，
+ *   比一个明确禁用的按钮糟得多。
+ * ★ 同时给 aria-disabled，样式与语义各守一半。
+ */
+.btn[aria-disabled='true'] {
+  background: transparent;
+  color: var(--muted);
+  border-color: rgb(242 237 228 / 22%);
+  cursor: not-allowed;
+  filter: none;
+}
+
+.card__meta {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-height: 1.2em;
+}
+
+.compliance {
+  margin: 0;
+  padding: clamp(0.9rem, 2vw, 1.15rem) clamp(1rem, 2.5vw, 1.5rem);
+  border-left: 2px solid var(--gold);
+  background: rgb(201 162 39 / 7%);
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-size: 0.9rem;
+  color: rgb(242 237 228 / 78%);
+}
+
+.compliance strong {
+  color: var(--ivory);
+}
+
+.foot {
+  border-top: 1px solid var(--line);
+  padding-top: clamp(1rem, 2.5vh, 1.5rem);
+  width: 100%;
+  max-width: var(--wrap);
+  margin-inline: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.foot__links {
+  margin: 0;
+  display: flex;
+  gap: 0.6rem;
+}
+
+.foot__links a {
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.foot__links a:hover,
+.foot__links a:focus-visible {
+  color: var(--gold);
+  border-bottom-color: currentColor;
+}
+
+.foot__copyright {
+  font-size: inherit;
+}
+
+/*
+ * ══════════ 窄屏 ══════════
+ *
+ * ★★★ **「每页满屏」在手机上收不住，这里记下实测数与取舍。**
+ * iPhone 尺寸（375×812）实测：收紧前第二屏 **1052px（超 240px）**，
+ * 逐项收紧间距 + 窄屏下准则改单列之后 **847px（超 35px，约 4%）**。
+ * ★ 首屏两种尺寸下都是**精确一屏**，页脚在两种尺寸下都贴在第二屏底边。
+ *
+ * ★★ **剩下这 35px 没有再压**，因为能砍的只有两样：
+ *   ① 正文字号 —— 压到能塞下就不再是能读的字号；
+ *   ② 那段合规提示 —— 它不是装饰，是 README「合规与正当使用」的原话，
+ *      **一个把「未授权监控」明确划出去的声明，不该为了排版让路**。
+ * ⇒ 取舍是：**桌面与平板严格一屏，手机上第二屏允许滚一小段**。
+ * ★ 这条取舍要写在这里而不是只写在交接单里 —— 下一个人改这块 CSS 时看的是这里。
+ */
+@media (width <= 30rem) {
+  .screen {
+    padding: 1rem;
+  }
+
+  .download {
+    gap: 0.9rem;
+  }
+
+  .download__head h2 {
+    font-size: 1.45rem;
+  }
+
+  .download__head p {
+    font-size: 0.85rem;
+  }
+
+  .download__inner {
+    gap: 1.15rem;
+  }
+
+  .download__head h2 {
+    margin-bottom: 0.15rem;
+  }
+
+  .cards {
+    gap: 0.75rem;
+  }
+
+  .card {
+    padding: 1rem 1.1rem;
+    gap: 0.35rem;
+  }
+
+  .card__desc {
+    font-size: 0.875rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .compliance {
+    padding: 0.8rem 1rem;
+    font-size: 0.825rem;
+  }
+
+  /* ★ 三条准则在窄屏改成上下两行：并排会把右列挤成一列两三个字。 */
+  .tenets li {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}
+
+/* ══════════ 通用 ══════════ */
+
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .scroll-cue svg {
+    animation: none;
+  }
+}

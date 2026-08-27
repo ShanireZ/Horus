@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Horus · 本地局域网考试监考系统</title>
+    <meta
+      name="description"
+      content="Horus 是一款本地局域网考试监考系统。纯检测 + 取证，不做网络与主机层阻断；元数据优先、图像为辅；系统只初筛、人工裁决。"
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0B1424" />
+    <link rel="icon" href="./assets/horus-logo.png" type="image/png" />
+    <link rel="preload" href="./assets/Cinzel.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <!--
+      ★★★ 两屏各自满屏，第二屏把页脚算进自己那一屏（owner 定的形态）。
+      落法是 `min-height: 100dvh` + 第二屏内部 `grid-template-rows: 1fr auto`，
+      ★ 用 dvh 不用 vh：移动端浏览器地址栏收起/展开会改变 vh，
+        表现是「页脚被顶出屏幕一截」或「滚动时页面抖一下」。
+    -->
+    <main>
+      <!-- ══════════ 第一屏：定位 ══════════ -->
+      <section class="screen hero" aria-labelledby="hero-title">
+        <div class="hero__bg" aria-hidden="true"></div>
+
+        <div class="hero__inner">
+          <img
+            class="hero__mark"
+            src="./assets/horus-logo.png"
+            alt=""
+            width="1024"
+            height="1024"
+            decoding="async"
+            fetchpriority="high"
+          />
+
+          <h1 id="hero-title" class="wordmark">HORUS</h1>
+          <p class="hero__lede">本地局域网考试监考系统</p>
+
+          <!--
+            ★★★ 这三条是设计铁律的原话，不是营销话术（AGENTS.md §设计铁律）。
+            ⛔ **任何时候都不得把它写成「防止 / 拦截 / 阻断作弊」** ——
+               预防层为零是这个系统的定义，不是它还没做的功能。
+          -->
+          <ul class="tenets">
+            <li>
+              <span class="tenets__k">纯检测 + 取证</span>
+              <span class="tenets__v">不做网络与主机层阻断，只采集、留证</span>
+            </li>
+            <li>
+              <span class="tenets__k">元数据优先，图像为辅</span>
+              <span class="tenets__v">前台窗口 / 进程 / 浏览器 URL / 剪贴板 / USB</span>
+            </li>
+            <li>
+              <span class="tenets__k">系统只初筛，人工裁决</span>
+              <span class="tenets__v">可疑队列交监考员复核，机器不下结论</span>
+            </li>
+          </ul>
+
+          <p class="hero__note">
+            全部数据在局域网内流转，存在本地监考服务器上。唯一出网的是服务器侧的视觉识图 ——
+            <strong>送云前降采样并剥离元数据，原图永不出网</strong>。
+          </p>
+        </div>
+
+        <a class="scroll-cue" href="#download">
+          <span>下载</span>
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path
+              d="M6 9l6 6 6-6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </a>
+      </section>
+
+      <!-- ══════════ 第二屏：下载 + 页脚（合起来满屏）══════════ -->
+      <section class="screen download" id="download" aria-labelledby="download-title">
+        <div class="download__inner">
+          <header class="download__head">
+            <h2 id="download-title">下载</h2>
+            <p>两个自包含单文件，免装 .NET。Windows x64。</p>
+          </header>
+
+          <div class="cards">
+            <article class="card" data-artifact="agent">
+              <h3 class="card__name">采集 Agent</h3>
+              <p class="card__role">每台考试机一份</p>
+              <p class="card__desc">
+                零配置，双击运行并自动申请管理员权限。采集信号与随机基线截图，哈希链 + HMAC
+                上报到监考服务器。
+              </p>
+              <a class="btn" data-download="agent" href="#download">下载 Agent</a>
+              <p class="card__meta" data-meta="agent"></p>
+            </article>
+
+            <article class="card" data-artifact="server">
+              <h3 class="card__name">监考服务器</h3>
+              <p class="card__role">一台笔记本即可</p>
+              <p class="card__desc">
+                接收与分析、落库、留证，自带实时看板与可疑队列复核、按图搜图。启动成功自动打开看板。
+              </p>
+              <a class="btn" data-download="server" href="#download">下载 Server</a>
+              <p class="card__meta" data-meta="server"></p>
+            </article>
+          </div>
+
+          <!--
+            ★ 这段不是免责声明，是 README「合规与正当使用」那一节的原话。
+              它与「预防层为零」同级：都是这个项目对自己的定义。
+          -->
+          <p class="compliance">
+            仅用于<strong>获得授权的考试监考</strong>，请勿用于未授权的监控。部署前须告知被监考者采集范围、取得知情同意，并遵守所在地隐私与数据保护法规。
+          </p>
+        </div>
+
+        <footer class="foot">
+          <p class="foot__links">
+            <a href="https://github.com/ShanireZ/Horus">GitHub</a>
+            <span class="foot__sep" aria-hidden="true">·</span>
+            <a href="https://github.com/ShanireZ/Horus/blob/main/LICENSE">GPL-3.0</a>
+          </p>
+          <!--
+            ★ 页脚只放版权、不放备案（owner 2026-08-26 对 RootPage 的拍板，本站沿用）。
+            ⚠ 这一行与 RootPage 的 `src/data/site.ts` 是**两份各自独立的抄件** ——
+              跨年时两处都要改，而两边都没有任何东西会提醒。
+          -->
+          <small class="foot__copyright">© 2018–2027 贝塔编程 BetaSchool. All rights reserved.</small>
+        </footer>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

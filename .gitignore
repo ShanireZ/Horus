@@ -59,3 +59,11 @@ Thumbs.db
 desktop.ini
 
 # 注意:agents.md 为项目准则,必须跟踪,勿在此排除。
+
+# === 主页（web/）的品牌资产 ===
+# ★★★ 这一份是**装配出来的副本，不入库**。权威在 assets/brand/，
+#   而那份本身已经是 BetaPass/std/brand/horus/ 的逐字节镜像（见其 PROVENANCE.md）——
+#   再入库一份就是**第三份抄件**：上游换一次 logo，三处一起过期而彼此自洽，
+#   ★ 本仓内任何判据都看不见那个分歧。
+# ⇒ 装配与部署命令见 web/README.md。
+web/assets/
