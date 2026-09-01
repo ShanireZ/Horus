@@ -1,3 +1,8 @@
+---
+type: spec
+title: M1 接口契约 — Agent ↔ Server
+---
+
 # M1 接口契约 — Agent ↔ Server
 
 - 项目：**Horus** · 里程碑：M1（最小闭环）

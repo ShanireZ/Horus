@@ -1,3 +1,8 @@
+---
+type: audit
+title: Horus 代码审查报告（2026-07-21）
+---
+
 # Horus 代码审查报告（2026-07-21）
 
 审查范围：`contracts/`(Horus.Contracts)、`agentcore/`(Horus.Agent.Core)、`agent/`(Horus.Agent)、`server/`(Horus.Server) 全部源码（约 80 个 .cs 文件，排除 obj/ 生成物）。

@@ -8,7 +8,6 @@ status: current
 
 # Horus 里程碑状态
 
-> 2026-08-30 从 `AGENTS.md` 移入（工作区 `nxtplan.md` 阶段 2 的常驻上下文预算）。
 > 这里是**进度与审计记录**；不许倒退的硬线留在 `AGENTS.md` 的「已完成」节。
 
 ## 状态
