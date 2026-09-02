@@ -41,13 +41,13 @@ dotnet run -c Debug                                # 或运行已发布 exe
 | 键 | 说明 |
 |---|---|
 | `authMode` | 采集面鉴权模式：`psk`（默认·M1-M3 原样）/ `oidc`（仅 OIDC 会话）/ `both`（共存·迁移期回退网） |
-| `oidcIssuer` / `oidcClientId` / `oidcClientSecret`(→`Enc`) / `oidcJwksJson` / `oidcSessionMinutes` | wentian OIDC 接入：issuer、`horus-client`、client_secret（明文自动 DPAPI 加密为 `Enc`；env `HORUS_OIDC_SECRET`）、JWKS 内联（留空则启动拉取缓存）、会话有效期（默认 180min·建议 ≥ 考试时长） |
+| `oidcIssuer` / `oidcEndpointBase` / `oidcClientId` / `oidcClientSecret`(→`Enc`) / `oidcJwksJson` / `oidcSessionMinutes` | 贝塔通 OIDC 接入：issuer 固定 `https://pass.betaoi.cn`；备用入口只改 endpoint base；`horus-client`、client_secret（明文自动 DPAPI 加密为 `Enc`；env `HORUS_OIDC_SECRET`）、PS256 JWKS 内联（留空则从根路径 `/jwks` 拉取缓存）、会话 absolute 门默认 360min |
 
 **M4·RBAC 管理端 OIDC（监考员登录·取代静态令牌·§10）**
 | 键 | 说明 |
 |---|---|
-| `adminAuthMode` | 管理端鉴权：`token`（默认·静态 `adminToken`）/ `oidc`（仅 wentian 长老会话·无令牌后门） |
-| `oidcDashboardClientId` / `oidcDashboardClientSecret`(→`Enc`) / `oidcDashboardRedirectUri` / `adminSessionMinutes` | dashboard web client（`horus-dashboard`·env `HORUS_OIDC_DASHBOARD_SECRET`）、回调（须与 wentian 注册一条精确一致·如 `https://<服务器>/cb`）、管理会话有效期 |
+| `adminAuthMode` | 管理端鉴权：`token`（默认·静态 `adminToken`）/ `oidc`（贝塔通 `horus-admin` 平台开关已准入的账号；Horus 本地不判角色、无令牌后门） |
+| `oidcDashboardClientId` / `oidcDashboardClientSecret`(→`Enc`) / `oidcDashboardRedirectUri` / `adminSessionMinutes` | dashboard web client（`horus-dashboard`·env `HORUS_OIDC_DASHBOARD_SECRET`）、回调（须与贝塔通登记值精确一致·如 `https://<服务器>/cb`）、管理会话 absolute 门默认 360min |
 | `httpsCertPath` / `httpsCertPassword` / `httpsSanHosts` | 自签 HTTPS（远端监考工作站 OIDC 回调须 https；留空自动生成·SAN 自动含 localhost/127.0.0.1·`httpsSanHosts` 补服务器 LAN IP/主机名）。仅 `urls` 含 https 时生效 |
 
 **M3 CLIP 按图搜图（provider-agnostic 嵌入器·C# 暴力余弦·**未用** sqlite-vec·见 [../docs/architecture-v0.2.md §8](../docs/architecture-v0.2.md)）**
@@ -83,20 +83,20 @@ dotnet run -c Debug                                # 或运行已发布 exe
 - `POST /api/agents/{agentId}/capture` — 监考员点名抓图：向在线 Agent 推 `capture_now`，返回 `pushed`。
 - `POST /api/archive/run` — 手动触发归档作业（后台亦每 `archiveScanIntervalHours` 自动跑）。
 - `GET  /api/authmode`（**公开·gate 豁免**）— 前端探测采集/管理鉴权模式（`psk|oidc|both` / `token|oidc`），据此切换令牌门 / OIDC 登录按钮，`both` 灰度期高亮仍走 PSK 的座位。
-- `GET  /api/preflight` — 考前预检：鉴权配置 / wentian 可达（`issuer_reachable`）/ active 考试白名单覆盖 / both→oidc 迁移进度（`migration`）。
+- `GET  /api/preflight` — 考前预检：鉴权配置 / 贝塔通可达（`issuer_reachable`）/ active 考试白名单覆盖 / both→oidc 迁移进度（`migration`）。
 
 **M4 身份层（OIDC·非 `/api/*`，不受 admin gate）**
 - `POST /oidc/exchange` — Agent 用 loopback code + PKCE verifier + ECDH 公钥换会话；**examId 服务端派发**（当前活跃考试，无则 `no_active_exam`），seatId := username。
 - `GET  /oidc/active-exam`（**公开**）— Agent 待命轮询：当前是否有活跃考试（考试开始才弹登录、启采集）。
 - `GET  /oidc/session` — 会话探针（头 `X-Horus-Session`）：会话是否仍有效 + 所绑考试状态（Agent 60s 兜底探"被远程登出/考试结束"）。
-- `GET  /admin/login` — 监考员看板 OIDC 登录：生成 state+nonce+PKCE，302 到 wentian 授权页（dashboard client）。
-- `GET  /cb` — wentian 回调：换 token → 验 id_token → **须长老**（`user_type='elder'`）→ 建管理会话 → 种 HttpOnly cookie → 跳看板；非长老 → 403。
+- `GET  /admin/login` — 监考员看板 OIDC 登录：生成 state+nonce+PKCE，302 到贝塔通根路径 `/auth`（dashboard client，scope=`openid profile`）。
+- `GET  /cb` — 贝塔通回调：换 token → 仅按 PS256 验 id_token subject → 从 userinfo `/me` 取姓名/用户名 → 建管理会话 → 种 HttpOnly cookie → 跳看板。没有 `horus-admin` 平台权限的账号在贝塔通授权阶段即被拒，Horus 不再检查 `user_type`。
 
 ## 实现进度（见 architecture §15）
 - **M1 已实现**：ingest 落库 / 幂等去重 / 图片存盘去重 / HMAC 验签 / 可疑队列 / 看板 + 人工裁决 + Agent 采集/握手/续传/断线重连。
 - **M2 已实现**：**L2 视觉 LLM 识图**(取代 OCR+Logo·provider-agnostic·小米 MiMo-V2.5)+ 服务器侧 `server_risk` 复判 + keystroke KSK 会话签名 + admin HttpOnly cookie + DB 读写分离。
 - **M3 已实现**：**哈希链完整性复验**(ingest 复算 `bad_hash` 拒收 + 离线 `GET /api/exams/{id}/integrity` 审计:锚点/sig/链连续/重启边界) + **归档作业** `ArchiveService`(到龄考试关键数据转 archive 库 + 清理 live + VACUUM) + **CLIP 按图搜图已落地**(provider-agnostic 嵌入器·本地 ONNX CLIP·**C# 暴力余弦·未用 sqlite-vec**·仅嵌证据图·`POST /api/exams/{id}/search-image` + 看板灯箱)。
-- **M4 已实现**：**采集面 OIDC**(wentian per-user 身份取代共享 PSK·闭合事件通道栽赃 + seq 抢占·`authMode=psk|oidc|both`) + **RBAC**(弟子=考生 / 长老=监考员·管理端 OIDC 取代静态令牌·`adminAuthMode=token|oidc`·自签 HTTPS) + **考前预检** `/api/preflight`。
+- **M4 已实现**：**采集面 OIDC**(贝塔通 per-user 身份取代共享 PSK·闭合事件通道栽赃 + seq 抢占·`authMode=psk|oidc|both`) + **管理端平台准入**(`horus-admin` 开关在授权阶段判定·管理端 OIDC 取代静态令牌·`adminAuthMode=token|oidc`·自签 HTTPS) + **考前预检** `/api/preflight`。
 - **M5 已实现**：**采集端硬化**(保活三层看门狗 + 遮蔽/挂起/能力降级/异常重启四类健康信号·服务器独立赋分入队 + 座位健康度)——纯检测·不做内核对抗。
 - **考试派发（2026-07-03）**：examId 服务端派发（`/oidc/exchange` 指派活跃考试）· seatId=username · Agent 待命轮询（`/oidc/active-exam`）· 全场远程登出（`/api/exams/{id}/logout`）。
 - **待做**：击键前端埋点已撤（判题走外部洛谷、无本地判题页可埋点，核心"粘贴外部代码"信号由 Agent OS 级剪贴板检测覆盖；server 侧 KSK 旁路保留待未来自控提交页）。启动时按权威 `schema.sql` 建表，跳过 `vec0` 虚表（CLIP 暴力余弦不依赖 sqlite-vec 扩展）。

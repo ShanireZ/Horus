@@ -46,7 +46,7 @@ status: current
 - **F5** URL 黑名单 `Contains` 子串假阳性(richardbard→bard·foryou.com→you.com)→ `RiskModel.HostMatchesAny` 改**按 DNS 标签**(裸词配整段标签·dotted 配域后缀);进程名保留子串(改名远控)。HostOf 解析失败返空不撞整串。**F11** 空 host(about:blank/data:)不再误判高危。
 - **F6** `LocalBuffer.MaxBufferedSeq` 不再全量读图字节(只解析文件名)。**F7** config 端点补 `IsSafeId`。**F8** no-referrer/no-store 提全局中间件。**F9** ParseConfidence 整数 1 不再放大成 100(仅严格 0<d<1)。**F10** 视觉解码 `Image.Identify` 先探尺寸拒超 4096² 防解码炸弹。
 - **D2** `capture_now` 帧从文档承诺变**真**(`POST /api/agents/{agentId}/capture` 推帧)。**D6** integrity 报告加 `sigVerified`/`note`(psk=null 联调"绿"不伪装取证清白)。文档漂移全清(测试数 130·event:manual·旧术语"云OCR/裁剪打码"·尾部截断诚实残留)。
-- **⚠️ A1/A2 事件通道跨身份栽赃 + seq 抢占**(共享 PSK 下真实·"事件体身份==握手 query"修法**无效**因握手可伪造任意身份)→ **owner 决策 = 学员机改账密登录 + 每次 wentian OIDC 授权(per-user 身份取代共享 PSK)**,OIDC 跨系统另立项;已诚实写进 architecture §10.1。
+- **A1/A2 事件通道跨身份栽赃 + seq 抢占**在共享 PSK 模式下是真实风险；当前贝塔通 OIDC 路径以 per-user 身份和会话绑定闭合它，`psk` / `both` 仅保留为 legacy / 灰度模式。详见 architecture §10.1 与 [m4-identity-oidc.md](m4-identity-oidc.md)。
 
 **考试派发 + 常态待命 + 全场远程登出(owner 决策 2026-07-03 · 207 项测试全绿)**:
 - ✅ **examId 不再由 Agent 配置携带**:`/oidc/exchange` 服务端指派「当前活跃考试」(status='active' 最近创建一场;无则 `no_active_exam` 拒,且**先于 token 交换**判定不白耗一次性授权码);**seatId := OIDC username**(空/不安全回退 sub·`ExamDispatch.SeatFrom`)—— 座位=身份,学员无法自报;协议/canonical/schema/KSK **零迁移**(字段保留,来源改变),物理定位由 machineId/agentId 承担。
@@ -54,12 +54,12 @@ status: current
 - ✅ **全场远程登出** `POST /api/exams/{id}/logout`(admin 门内):`SessionStore.RevokeByExam` 吊销全部采集会话 + 推 `session_revoked` + **强断在线连接**(吊销会话的旧 WS 不能续用),重连 401;`POST /api/exams/{id}/end` 现在向在线 Agent 推 `exam_ended`(响应带 notified)。
 - ✅ **换场缓冲卫生**:新 OIDC 会话开始即 `LocalBuffer.PurgeSession`(旧 K_sess 已死,残留缓冲必 bad_sig 永不 ack → 每次重连重放-被拒死循环);seq 高水位保留 + hello_ack 对齐不撞旧 seq。
 - ✅ **默认管理员运行**:agent exe 内嵌 `requireAdministrator` manifest(双击即 UAC 提权,免右键);⚠️ requireAdministrator 程序**不能**挂 Run 键自启(系统静默跳过)—— 本就不常驻自启(考试前手动打开),保活场景走 `install-service`(LocalSystem 无 UAC)。看门狗单例键改 `agentId_machineId`(与考试解耦)。
-- ✅ **Agent 近零配置**(owner 决策 2026-07-03):`AgentConfig` 所有字段内置默认,**配置文件整个可选**(缺文件即全默认)。authMode=oidc / issuer=betaoi.cc / 采集参数 / 白名单(洛谷 + 常见 IDE)全烤默认;**agentId/machineId 留空由主机名自动推导**(machineId=主机名·agentId="ag-"+主机名·`ApplyIdentityDefaults`);examId/seatId/psk 在 oidc 无需配。**唯一去不掉 = 服务器地址**(Agent 连上前须知道服务器在哪·无法下发)→ owner 拍板烤固定默认 `192.168.32.145:8080`(IP 不符才覆盖);**dist/client 不再带任何配置文件**(纯默认零配置)。★STJ init 集合属性:配置提供的 whitelist **替换**(非合并)内置默认。
+- ✅ **Agent 近零配置**(owner 决策 2026-07-03):`AgentConfig` 所有字段内置默认,**配置文件整个可选**(缺文件即全默认)。authMode=oidc / issuer=`https://pass.betaoi.cn` / scope=`openid profile` / 采集参数 / 白名单(洛谷 + 常见 IDE)全烤默认;**agentId/machineId 留空由主机名自动推导**(machineId=主机名·agentId="ag-"+主机名·`ApplyIdentityDefaults`);examId/seatId/psk 在 oidc 无需配。**唯一去不掉 = 服务器地址**(Agent 连上前须知道服务器在哪·无法下发)→ owner 拍板烤固定默认 `192.168.32.145:8080`(IP 不符才覆盖);**dist/client 不再带任何配置文件**(纯默认零配置)。★STJ init 集合属性:配置提供的 whitelist **替换**(非合并)内置默认。
 
 **M4 身份层 + M5 采集端硬化（承前·补记状态·功能面见对应 docs）**:
-- ✅ **M4 采集面 OIDC 取代共享 PSK**（闭合 §10.1 A1 跨身份栽赃 / A2 seq 抢占）：学员机 wentian per-user 身份，事件体身份 == 会话身份强制一致；`both` 灰度共存、预检判据要求全部迁 OIDC 才切。见 [docs/m4-identity-oidc.md](docs/m4-identity-oidc.md)。
+- ✅ **M4 采集面 OIDC 取代共享 PSK**（闭合 §10.1 A1 跨身份栽赃 / A2 seq 抢占）：学员机使用贝塔通 per-user 身份，事件体身份 == 会话身份强制一致；`both` 灰度共存、预检判据要求全部迁 OIDC 才切。见 [m4-identity-oidc.md](m4-identity-oidc.md)。
 - ✅ **监考员看板 OIDC 登录**：★★ **2026-08-07 起准入由贝塔通的 `horus-admin` 平台开关回答**（其 P83），本地**不再判角色** —— `user_type == 'elder'` 那行已整个删除。~~wentian 长老 = 监考员，弟子 = 考生；缺 `user_type` fail-safe 到 disciple 绝不误授~~（**已随 P83 整个消失**）；**移除静态令牌后门**（adminAuthMode=oidc 时，仍然成立）；自签 HTTPS + 贝塔通 `horus-dashboard` client（★ 归属平台 `horus-admin`，`redirect_uri` **每台监考机一条**）。
-- ✅ **M5 采集端硬化**（纯检测 = 检测 + 上报 + 看板健康告警·不做内核对抗）：三层保活（Windows 服务 LocalSystem + 兄弟看门狗互拉 + 心跳告警）+ 4 健康信号（防挂起 `suspected_suspend` / 防遮蔽 `screenshot_obscured` / 防降权限 `capability_degraded` / 服务保活）。见 [docs/m5-agent-hardening.md](docs/m5-agent-hardening.md)。
+- ✅ **M5 采集端硬化**（纯检测 = 检测 + 上报 + 看板健康告警·不做内核对抗）：三层保活（Windows 服务 LocalSystem + 兄弟看门狗互拉 + 心跳告警）+ 4 健康信号（防挂起 `suspected_suspend` / 防遮蔽 `screenshot_obscured` / 防降权限 `capability_degraded` / 服务保活）。见 [m5-agent-hardening.md](m5-agent-hardening.md)。
 
 **会话模型三道门（2026-08-11 完工·随贝塔通 P88/P101）**:
 - ✅ **三道门**：心跳 15min / idle 30min / **absolute 6h**（原 3h）。两张会话表加 `last_heartbeat_at` + `last_seen_at`（幂等迁移，旧行回填 `issued_at`）；心跳端点 `POST /api/heartbeat` → 204（150s 节流，判据按字段分开）。
@@ -82,7 +82,7 @@ status: current
 - **[Low] 归档清理漏 `image_embeddings`**（裸 PK 表无 FK）→ 向量行悬挂指向已删图永久滞留 → 补显式清理（删 images 之前）。
 - **[Low] 视觉临时失败僵尸态**：达 `VisionMaxAttempts` 后卡 `analysis_state=0`（claim/backstop 都按 attempts<上限 过滤·既不重试也不终结）→ 达上限置终态放弃。
 - **[Low] `esc()` 不转义单引号**（防御纵深·当前不可利用）+ **[Low] `OidcTokenValidator` 补 `nbf` 校验**。
-- 审计**验证为非缺陷**（不改）：RS256 验签 / A1 身份强制 / RBAC / 密钥回写 / 常量时间比较 / 归档崩溃安全·幂等 / CLIP center-crop（确用 `ResizeMode.Crop`）/ DNS 标签匹配 F5·F11 / host 裸词假阳（宁可错杀·白名单兜底）。补 **4 项回归测试**（nbf×2 · 向量孤儿清理 · end 状态守卫）。
+- 审计**验证为非缺陷**（不改）：PS256 验签 / A1 身份强制 / 贝塔通平台准入 / 密钥回写 / 常量时间比较 / 归档崩溃安全·幂等 / CLIP center-crop（确用 `ResizeMode.Crop`）/ DNS 标签匹配 F5·F11 / host 裸词假阳（宁可错杀·白名单兜底）。补 **4 项回归测试**（nbf×2 · 向量孤儿清理 · end 状态守卫）。
 
 ## 提交约定
 默认不提交，除非用户明确要求。commit 信息用中文，简洁。
