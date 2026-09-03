@@ -336,6 +336,7 @@ a {
   line-height: 1.5;
   color: rgb(242 237 228 / 45%);
   word-break: break-all;
+  -webkit-user-select: all;
   user-select: all;
 }
 
