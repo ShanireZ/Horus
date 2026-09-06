@@ -1,0 +1,38 @@
+{
+  "id": "horus",
+  "date": "2026-09-06",
+  "status": "preview-awaiting-owner",
+  "purpose": "RootPage 平台卡片装饰背景；左侧为 DOM 标题、说明、域名和状态留白，完整主体置右。",
+  "source": {
+    "file": "horus-card-bg-source.png",
+    "sha256": "4192d332965bf208bb47f10a3f1fa3979cc11ec83bb432f23bdac9e1bc95a598",
+    "width": 1536,
+    "height": 1024
+  },
+  "usage": {
+    "file": "horus-card-bg.webp",
+    "sha256": "927bc662152cef6588d3877a0a8ba01641eb39f9ea23678e07aab5bd7dbc4b60",
+    "width": 1248,
+    "height": 832,
+    "bytes": 104814,
+    "format": "webp",
+    "colourSpace": "srgb",
+    "alpha": false,
+    "position": "90% center"
+  },
+  "generation": {
+    "tool": "Codex built-in image_gen",
+    "model": null,
+    "seed": null,
+    "encoding": {
+      "tool": "sharp",
+      "quality": 86,
+      "effort": 6,
+      "resize": "proportional width 1248"
+    }
+  },
+  "reference": {
+    "path": "D:\\WorkSpace\\RootPage\\public\\brand\\horus-bg.webp",
+    "sha256": "af1d6dc5daddf0673bdc4cb35df5e1c5402f63a00074e99867bfd332ece2d79d"
+  }
+}

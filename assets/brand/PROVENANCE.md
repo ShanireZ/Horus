@@ -26,3 +26,7 @@ Cinzel 用于单行 HORUS 字标；字体按 SIL Open Font License 1.1 使用。
 ## 版本纪律
 
 这里只保留当前采用版本。被否决的生成结果、带 `v1` / `v2` 的过渡命名和旧构建中间图不保留；需要复现时以本目录源图、提示词和 BetaPass 内的脚本为准。
+
+## RootPage 卡片（2026-09-06）
+
+已确认的专用构图、使用版和制作记录见 [card-backgrounds/PROVENANCE.md](card-backgrounds/PROVENANCE.md)，与原横幅/大图分用途保存。
