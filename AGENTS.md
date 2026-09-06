@@ -1,74 +1,51 @@
 # AGENTS.md — Horus
 
-> 本文件遵循并指回工作区根准则 [`../AGENTS.md`](../AGENTS.md)。先读根准则，再读本文件。
+> 继承工作区 [AGENTS.md](../AGENTS.md) 与 [开发守则](../Docs/dev_guide.md)。
 
-## 项目一句话
-**Horus** — 本地局域网**考试监考系统**，防止学员在编程 / OJ 考试中用 AI 做题或联网搜题。学员**本地 IDE 写 C++ + 网页判题**提交；服务器为局域网内 1+ 台笔记本。架构 = **纯检测 + 取证**（已决定不做网络/主机预防层），**元数据优先、图像为辅**，系统只初筛、人工裁决。权威设计见 [docs/architecture-v0.2.md](docs/architecture-v0.2.md)。
+## 项目与权威
 
-## 语言
-所有文档、注释、提交信息一律用中文。
+局域网考试监考系统：本地IDE写C++、网页OJ判题；局域网内笔记本为服务器。**纯检测+取证、元数据优先、系统初筛/人工裁决**，不做网络或主机预防层。所有文档、注释、提交信息用中文。
 
-## 组件与技术栈
-- **共享契约** [contracts/](contracts/)（`Horus.Contracts`，net8.0）：线协议 / canonical / HMAC / 枚举 / 事件模型。Agent 与 Server **共用同一实现**，保证哈希链与签名两端逐字节一致。
-- **采集核心** [agentcore/](agentcore/)（`Horus.Agent.Core`，net8.0）：平台无关的传输（WS/HTTP + 握手/hello/ack + **断线重连指数退避** + **续传**）、断网缓冲、配置、哈希链封装。刻意非 -windows，便于被测试直接引用。
-- **采集端 Agent**（考试机，每台一个）：C#/.NET 单文件 exe，需管理员权限（ETW / UIAutomation / WMI）——exe 内嵌 `requireAdministrator` manifest，**双击即 UAC 提权**（免右键）。Windows 专属部分（抓屏 / 信号源）。代码 [agent/](agent/)（`Horus.Agent`，net8.0-windows，引用 Core）。
-- **监考服务器**（笔记本）：接收 + 分析 + 落库 + Web 看板。**.NET 8 / ASP.NET Core**（minimal API + WebSocket）+ **Microsoft.Data.Sqlite** + 文件系统（+ M3 按图搜图走**本地 ONNX CLIP 暴力余弦·未用 sqlite-vec**）。代码 [server/](server/)（`Horus.Server`，net8.0）。**仅服务器可选对外联网，且只为视觉 LLM 识图**。
-- **监考端 / 复核台**：实时看板 + 可疑队列复核。纯原生单页看板在 [server/wwwroot/](server/wwwroot/)。
-- **测试**：[tests/](tests/)（`Horus.Server.Tests`，xUnit）——端到端覆盖 WS 握手/验签/幂等、图片去重、击键、人工裁决、canonical 黄金格式。
+- [architecture-v0.2](docs/architecture-v0.2.md)是权威设计；§0锁定决策、§5出网、§13归档；[api-contract-m1](docs/api-contract-m1.md)管采集端↔Server协议与数据模型。
+- 改身份先读 [BetaPass RP契约](../BetaPass/docs/rp-contract.md)和 [m4-identity-oidc](docs/m4-identity-oidc.md)开头订正表；采集端硬化见 [m5-agent-hardening](docs/m5-agent-hardening.md)。
+- 里程碑、审计与历史测试计数只看 [status](docs/status.md)；不可回退的行为以本文件硬线和权威设计为准，不把历史全绿当本轮证据。
 
-## 设计铁律（任何改动都必须守）
-1. **预防层为零，检测必须扎实** — 控不了考场网络、也不做主机防火墙，联网搜题 / 网页 AI 只能靠 URL / 进程 / 截图**检测取证**（事后），不可阻断。**浏览器 URL 监控是第一防线**。
-2. **唯一出网 = 视觉 LLM 识图（可选）** — 除 L2 视觉识图外，所有数据（元数据 / 原图 / 向量 / 看板）不出局域网。上云的图必须**最小化上传 + 降采样 + 剥离元数据（EXIF/XMP/IPTC/ICC）**，**原图永不出网**。（★裁剪/打码已于 2026-07-02 按 owner 决策移除：逐考场配矩形负担>收益·供应商=境内云 MiMo·PIPL 无跨境。）见 architecture §5。
-3. **系统只初筛、人工裁决** — 任何风险分 / 命中只是线索，处分由人判。
-4. **元数据优先** — 能用 OS 信号判的不拍图；图只给可疑时刻 + 随机基线（专抓 IDE 插件）留证。
-5. **诚实标注盲区** — 手机 / 第二设备 / Agent 未覆盖的多屏是结构盲区，靠物理监考兜，不假装覆盖。
+## 组件与接口
 
-## 关键决策（已锁定，见 architecture §0）
-网页判题 + 本地 IDE · 无网络预防层 · 无主机防火墙 · C#/.NET Agent · 服务器集中 + 外部视觉 LLM 识图（取代 OCR/Logo） · 1080p WebP q75 随机 30–90s · SQLite + 文件 + 本地 ONNX CLIP 按图搜图（暴力余弦·未用 sqlite-vec） · 留存 30 天后关键数据转 archive。
+- `contracts/`（Horus.Contracts，net8.0）共用线协议/canonical/HMAC/枚举/事件实现；改动须Agent/Server同核逐字节签名与哈希链，不能各写一套。
+- `agentcore/`（Horus.Agent.Core，net8.0）保持平台无关，承载WS/HTTP握手、hello/ack、指数退避重连、续传、断网缓冲、配置、哈希链，供测试直接引用。
+- `agent/`（net8.0-windows）仅Windows采集：ETW/UIAutomation/WMI/抓屏；单文件exe含requireAdministrator manifest，启动会请求管理员权限。
+- `server/`（net8.0/ASP.NET Core minimal API+WS）+Microsoft.Data.Sqlite+文件；`server/wwwroot/`是原生单页看板，无前端打包链。本地ONNX CLIP按图搜图用暴力余弦，未用sqlite-vec。
+- `tests/`是xUnit端到端；改contracts/agentcore/server/schema时核协议黄金格式、握手验签、图片/击键幂等与人工裁决。事件/图片共用seq空间，逐条ack不能改成范围确认；完整形状回查api-contract。
+- live/archive DDL分别在 `schema/schema.sql`、[schema-archive.sql](schema/schema-archive.sql)。
 
-## 留存与归档
-热数据（SQLite live + 文件）保留 **30 天**；30 天后**关键数据**（可疑/已判事件 + 其证据图 + 视觉识图结果（表名沿用 `ocr_results`） + 裁决记录 + 考试元数据 + 哈希锚）转入 archive DB，其余（干净基线图 / 低危例行事件 / 心跳）清理。详见 architecture §13、[schema/schema-archive.sql](schema/schema-archive.sql)。
+## 检测、隐私与身份硬线
 
-## 身份提供方是「贝塔通 BetaPass」，不是问天录（2026-08-07 起）
+- 不控网络、不做主机防火墙、不阻断搜题/AI；URL监控是第一防线，进程/截图留证。风险分/命中只是线索，处分由人判。
+- 能用OS信号判的不拍图；图仅可疑时刻+随机基线（覆盖IDE插件），1080p WebP q75、随机30–90s（architecture §0）。手机/第二设备/未覆盖多屏须如实标盲区，物理监考兜底。
+- **唯一可选出网是服务器视觉LLM识图**；元数据/原图/向量/看板留局域网。送云图最小化、降采样、剥EXIF/XMP/IPTC/ICC，原图永不出网。裁剪/打码已按owner决策移除，供应商与方案以architecture §5为准。
+- 热数据保留30天；随后可疑/已判事件、证据图、视觉结果（表名ocr_results）、裁决、考试元数据、哈希锚转archive；其余干净基线/低危例行事件/心跳清理。不能把“关键数据归档”简化为全删。
+- IdP是BetaPass，非WenTian；签名允许清单只有PS256，端点在根路径；scope为openid profile，不登记horus_profile。身份用sub/name/username，username为座位标识不是显示字段。
+- 姓名/用户名取userinfo `/me`，不从id_token建身份；`OidcTokenValidator`仅给OidcSubject，身份须经 `Userinfo.FetchAsync`。BetaPass无旧conformIdTokenClaims豁免。
+- 看板由BetaPass `horus-admin`平台开关准入，Horus不本地判业务角色。采集端与看板心跳不同，按m4订正表实现，不把浏览器选主套进原生Agent。
 
-★★ 改任何与登录、claims、令牌、端点、撤权有关的东西之前，先读 `../BetaPass/docs/rp-contract.md`（**通用 RP 契约，以它为准**）与本仓 `docs/m4-identity-oidc.md` 首段的现状订正表。
+## 运行与验收
 
-六条最容易照旧文做错的：**PS256 不是 RS256**（允许清单只有一项）· **端点在根路径**不是 `/oauth/*` · **scope 是 `openid profile`**（`horus_profile` 永不登记）· **身份只有 `sub`/`name`/`username` 三项**（`username` 是**座位标识**不是显示字段）· **看板准入不在本地判**（贝塔通 `horus-admin` 平台开关）·
-★★ **姓名与用户名走 userinfo（`/me`），不在 id_token 里** —— 问天录曾专门为本项目设 `conformIdTokenClaims: false`，**贝塔通没有这条豁免**。照旧从 id_token 取的表现是那两项恒为空串、座位号对每个人静默回退成 `sub`，**不报错、不抛异常、测试全绿**（测试令牌是自己签的、手工塞了那两个 claim）。现在 `OidcTokenValidator` 只给得出 `OidcSubject`，要身份必须经 `Userinfo.FetchAsync`。
+.NET 8 SDK，无需Visual Studio；项目目标看 `Horus.sln`和各csproj。构建/测试从仓根执行，运行时的cwd必须是server目录：
 
-## 目录
+| 何时 | 命令 | 前置 / 通过覆盖 |
+|---|---|---|
+| 本地开发运行 | 在 `server/`执行 `dotnet run -c Debug` | 按 [server/README](server/README.md)配置本地样例与隔离dataDir/dbPath；会起服务/看板，不能拿现场配置当测试夹具 |
+| 代码/协议变化 | `dotnet build Horus.sln -c Debug` → `dotnet test Horus.sln -c Debug` | Windows可构建net8.0-windows Agent；依赖需已还原；核退出码及测试零失败，覆盖仓内契约与端到端 |
+| 看板/浏览器变化 | 上述测试 + 实际监考工作站走查 | 机构管理Chrome/Edge当前及前一主版本；登录、座位刷新、复核、灯箱、考试控制逐项验 |
+| 开考前 | 现场走查及权威部署/身份预检 | 不以仓内测试代替真实采集权限、网络、OIDC和硬件条件 |
 
-| 位置 | 是什么 |
-|---|---|
-| [docs/architecture-v0.2.md](docs/architecture-v0.2.md) | 总体架构（**权威设计**） |
-| [docs/api-contract-m1.md](docs/api-contract-m1.md) | Agent↔Server 协议与数据模型 |
-| [docs/m4-identity-oidc.md](docs/m4-identity-oidc.md) · [docs/m5-agent-hardening.md](docs/m5-agent-hardening.md) | 身份层 · 采集端硬化 |
-| [docs/status.md](docs/status.md) | 里程碑与审计记录 |
-| `schema/schema{,-archive}.sql` | live / archive 两个 SQLite DDL |
-| `contracts/` · `agentcore/` · `agent/` · `server/` · `tests/` | 线协议库 · 平台无关采集核心 · Windows 采集端 · 服务器与看板 · 端到端测试 |
+缺SDK、现场硬件/网络/身份条件或有skip时报告未验证；测试绿不证明已部署或可开考。运行配置/发布说明按server/README与对应专档，不读取真实密钥作为文档证据。
 
-## Web Platform Baseline 与 Analytics 硬约束
+## Web与协作
 
-两者都有门守着：Baseline 是 `WebBaselineContractTests`（拦截受监视但未登记、或只在注释里说了却没有真实检测与回退代码的现代 API）；Analytics 是「`.cc` 自动 / `.cn` 手工、统一 token、LAN/IP 零采集、单页最多一个 beacon」的合同测试。六字段与批准窗口在 [`baseline.config.json`](baseline.config.json)。下面只列**无人守卫**的：
-
-- 看板是 `controlled-web`：原生静态资源**没有转译/打包阶段**，`buildTarget` 必须诚实标 `not-applicable`，不许伪造一个构建目标。
-- 受控浏览器合同是机构管理的 Chrome / Edge 当前及前一主版本，**不含 downstream**。★ **开考前必须在实际监考工作站**跑登录、座位刷新、复核、灯箱与考试控制 —— 仓内测试代替不了这一步。
-- ★★ **关键监考操作不得因浏览器缺少 Newly 能力而静默消失**，必须保留现有原生路径。
-- ★★ **本地监考部署不得产生新的分析外联**：hostname 门控必须排除 `.cc`、localhost、IP 与 LAN。
-- 改看板入口 / CSP / 配置下发 / loader 时，**必须保留上述合同测试**；CSP 只能在现有业务来源上追加，不能被 Analytics 改造覆盖。
-
-## 构建 / 测试（需 .NET 8 SDK，无需 VS）
-```
-dotnet build Horus.sln -c Debug      # 全量编译(Agent 走 net8.0-windows)
-dotnet test  Horus.sln -c Debug      # 运行端到端测试
-```
-
-## 状态
-
-里程碑（M1–M5）、三路审计记录与测试计数在 [`docs/status.md`](docs/status.md)。**不许倒退的那几条硬线在上面的「已完成」节**，不在这里。
-
-## Agent skills
-
-- **Issue tracker：本仓 GitHub Issues。**
-- triage 标签、domain 文档布局、OKF 文档系统沿用工作区约定：[`docs/agents/index.md`](docs/agents/index.md)。
-- 进入工作区后必须读取根 [`../Docs/dev_guide.md`](../Docs/dev_guide.md) 的环节守则、完成判据与技能对照；Claude 由根 `CLAUDE.md` 显式导入，其他运行时不得假定自动加载。
+- [baseline.config.json](baseline.config.json)：controlled-web、机构管理Chrome/Edge当前及前一主版本，不含downstream；静态资源无转译，buildTarget必须not-applicable。
+- `WebBaselineContractTests`守现代API登记、真实检测/回退；关键监考操作不得因缺Newly能力静默消失，保留原生路径。
+- Analytics合同：.cc自动/.cn手工、统一token、每页最多一个beacon；本地部署的hostname门排除.cc/localhost/IP/LAN，不新增分析出网。
+- 改看板入口/CSP/配置下发/loader保留Baseline与Analytics合同测试；CSP只追加既有业务来源，不被Analytics改造覆盖。
+- Tracker为本仓GitHub Issues；标签/domain/OKF入口 [docs/agents/index.md](docs/agents/index.md)。
