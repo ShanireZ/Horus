@@ -21,6 +21,8 @@ dotnet run -c Debug                                # 或运行已发布 exe
 ```
 看板：浏览器打开 `http://<服务器IP>:8080/`。
 
+灯箱的按图搜图按钮和结果条样式归 `wwwroot/styles.css`；显示状态继续由 `hidden` 属性和现有脚本控制。
+
 ### 配置（`server.config.json`，见 sample）
 | 键 | 说明 |
 |---|---|

@@ -156,11 +156,8 @@
     <button class="lightbox__close" id="lightboxClose" aria-label="关闭">✕</button>
     <img class="lightbox__img" id="lightboxImg" alt="证据图放大" />
     <!-- M3 按图搜图：以当前图为查询捞全场相似帧（嵌入器已配时显示） -->
-    <button class="btn btn--ghost" id="searchSimilarBtn" hidden
-      style="position:absolute;top:.8rem;left:.8rem">按图搜图</button>
-    <div id="similarResults" hidden
-      style="position:absolute;bottom:0;left:0;right:0;background:rgba(15,17,21,.92);padding:.6rem;
-      display:flex;gap:.5rem;overflow-x:auto"></div>
+    <button class="btn btn--ghost lightbox__search" id="searchSimilarBtn" hidden>按图搜图</button>
+    <div class="lightbox__results" id="similarResults" hidden></div>
   </div>
 
   <script defer src="/cloudflare-web-analytics-config.js"></script>

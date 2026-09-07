@@ -862,6 +862,23 @@ body {
   cursor: pointer;
 }
 
+.lightbox__search {
+  position: absolute;
+  top: .8rem;
+  left: .8rem;
+}
+.lightbox__results {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(15,17,21,.92);
+  padding: .6rem;
+  display: flex;
+  gap: .5rem;
+  overflow-x: auto;
+}
+
 /* 加载中占位 */
 .loading {
   padding: 24px;
