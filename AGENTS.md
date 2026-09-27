@@ -1,6 +1,6 @@
 # AGENTS.md — Horus
 
-> 继承工作区 [AGENTS.md](../AGENTS.md) 与 [开发守则](../Docs/dev_guide.md)。
+> 继承工作区 [AGENTS.md](../AGENTS.md)。
 
 ## 项目与权威
 
