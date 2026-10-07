@@ -10,6 +10,8 @@
 - 改身份先读 [BetaPass RP契约](../BetaPass/docs/rp-contract.md)和 [m4-identity-oidc](docs/m4-identity-oidc.md)开头订正表；采集端硬化见 [m5-agent-hardening](docs/m5-agent-hardening.md)。
 - 里程碑、审计与历史测试计数只看 [status](docs/status.md)；不可回退的行为以本文件硬线和权威设计为准，不把历史全绿当本轮证据。
 
+P147/P149：当前 issuer pass.betaoi.cc，公开静态主页 hr.betaoi.cc；cn 休眠。LAN/原生 loopback 与两用途受众保持，决定见 architecture §0 D10。
+
 ## 组件与接口
 
 - `contracts/`（Horus.Contracts，net8.0）共用线协议/canonical/HMAC/枚举/事件实现；改动须Agent/Server同核逐字节签名与哈希链，不能各写一套。

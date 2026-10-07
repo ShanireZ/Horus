@@ -1,4 +1,4 @@
-# web/ —— Horus 主页（`hr.betaoi.cn`）
+# web/ —— Horus 主页（`hr.betaoi.cc`）
 
 两屏静态页：首屏定位，第二屏下载 + 页脚。**没有构建链** —— Caddy 直接 `file_server` 这几个文件。
 
@@ -8,6 +8,8 @@
 | `styles.css` | 全部样式（含窄屏取舍，见文件里那段注释） |
 | `main.js` | 两件事：下载链接、Cloudflare Web Analytics 的 hostname 门控 |
 | `assets/` | ★ **装配出来的，不入库**（见下） |
+
+P147/P149 当前仅 cc 主域，cn 休眠；共享主配置仍归 betai，本站不挂彩排门。现有下载指向历史 Windows 构建，本轮未发布新包；迁移上线前须核新产物/摘要与实际下载，见 architecture §0 D10。
 
 站点块在 [`../deploy/hr.caddy`](../deploy/hr.caddy)。
 
@@ -62,4 +64,4 @@ rsync -a --delete web/ root@47.104.190.255:/opt/horus-web/
 | # | 事 | 卡在哪 |
 | --- | --- | --- |
 | 1 | 下载按钮指向真实产物 | owner 2026-08-27 定：放 **Cloudflare R2**。落地只改 `main.js` 顶部 `DOWNLOADS` 一处；在那之前 `url` 保持 `null`，页面显式把按钮置灰并写「即将开放」 |
-| 2 | Cloudflare Web Analytics 回传 | ⏳ **owner 控制台**：线上实测 beacon 加载得到但回传被 CORS 拦（`cdn-cgi/rum` 无 `Access-Control-Allow-Origin`），最可能是 `hr.betaoi.cn` 还没登记进那个 Web Analytics 站点。★ 代码有意不关掉 —— 登记做上那一刻它自己就好，**而在那之前控制台那两条报错就是这件事唯一活着的提示** |
+| 2 | Cloudflare Web Analytics 回传 | ⏳ **owner 控制台**：2026-08-27 历史 cn 实测 beacon 加载得到但回传被 CORS 拦（`cdn-cgi/rum` 无 `Access-Control-Allow-Origin`），最可能是 `hr.betaoi.cn` 还没登记进那个 Web Analytics 站点。★ 代码有意不关掉 —— 登记做上那一刻它自己就好，**而在那之前控制台那两条报错就是这件事唯一活着的提示** |

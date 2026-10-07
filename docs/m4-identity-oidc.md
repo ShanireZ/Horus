@@ -5,6 +5,8 @@ title: M4 身份层 —— OIDC 接入 · 取代共享 PSK（设计与任务计�
 
 # M4 身份层 —— OIDC 接入 · 取代共享 PSK（设计与任务计划）
 
+> **2026-10-07 P147/P149 当前入口**：issuer 为 pass.betaoi.cc，hr.betaoi.cc 仅公开静态下载页，cn 休眠；LAN 与动态 loopback、P101 和下表的用途边界保持。具体决定见 architecture §0 D10，状态见 status。以下日期段保留历史会话模型及订正依据。
+>
 > ## ★★★ 2026-08-11 会话模型订正 —— 这一段最新，先读它
 >
 > 贝塔通**取消了 SSO**、会话判定从单一超时改成**三道门**、撤权重投改成**永不放弃**
@@ -158,16 +160,16 @@ title: M4 身份层 —— OIDC 接入 · 取代共享 PSK（设计与任务计�
 >
 > ### 与下文相比，实际已经变成这样
 >
-> | 项 | 本文原写 | 现在（2026-08-07） | 依据 |
+> | 项 | 本文原写 | 当前（P147/P149，2026-10-07） | 依据 |
 > |---|---|---|---|
-> | IdP | 问天录 `betaoi.cc` | **贝塔通**，issuer `https://pass.betaoi.cn`（★ **2026-08-26 订正**，原写 `https://betaoi.cn`） | 贝塔通 M7 → **P110 / P116** |
+> | IdP | 问天录 `betaoi.cc` | **贝塔通**，issuer `https://pass.betaoi.cc` | 贝塔通 **P147/P149** |
 > | 签名算法 | RS256（RSA-PKCS1） | **PS256（RSA-PSS）**，允许清单**只有一项** | 贝塔通 P58 |
 > | 协议端点 | `/oauth/authorize`、`/oauth/token`、`/.well-known/jwks.json` | **根路径**：`/auth`、`/token`、`/jwks`、`/session/end` | 贝塔通 `docs/oidc-mounting.md` |
-> | 备用域 | 无 | `OidcEndpointBase` —— **端点整套换入口而 issuer 不变**；现值 `https://pass.betaoi.cc` | 贝塔通 P72 → **P116** |
+> | 备用域 | 无 | `OidcEndpointBase` 保留独立配置能力；cn 当前休眠，无活动备用入口 | 贝塔通 **P147/P149** |
 >
 > ⚠ ★★★ **2026-08-26 的教训（这张表自己就是那个形态）**：上面那行 issuer 从 2026-08-23
 > 起就是错的，**而没有任何东西会红** —— 贝塔通 **P110** 把 issuer 从根域搬到 `pass.` 子域，
-> Horus 与成均两家 RP 的配置一处都没跟上。★★ **失效形态不是 404**：`betaoi.cn` 现在解析到
+> Horus 与成均两家 RP 的配置一处都没跟上。★★ **失效形态不是 404**：`betaoi.cn` 当时解析到
 > Fulcrum 那台机器，`/.well-known/openid-configuration` 回一个 **`200 text/plain`**。
 > ⇒ ★ 契约（`../BetaPass/docs/rp-contract.md`「双域（P116）」）明写
 > 「★★★ **别把它抄进任何代码或写死进配置的字面量里**」——

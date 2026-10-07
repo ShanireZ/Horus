@@ -1,4 +1,4 @@
-# Horus 主页 —— hr.betaoi.cn（静态两屏页，无后端）
+# Horus 主页 —— hr.betaoi.cc（静态两屏页，无后端）
 #
 # ★★★ **装法：落到 `/etc/caddy/sites/hr.caddy`，不要碰 `/etc/caddy/Caddyfile`。**
 #   这台机器（`47.104.190.255`）上跑着三个项目：betai（拥有主 Caddyfile）、
@@ -15,16 +15,18 @@
 # ★ 改完必须 `caddy validate` —— **reload 失败时旧配置仍在跑**，
 #   那意味着「改了没生效」而站点看上去一切正常。
 #
-# ★★★ 怎么验它（没有任何 CI 门能验这一份，所以写清）：
-#   1. curl -sSI https://hr.betaoi.cn/ | head -1
+# ★★★ 上线后仍须现场验证（本地模板门不证明线上配置已生效）：
+#   1. curl -sSI https://hr.betaoi.cc/ | head -1
 #        ★ 拿得到响应行 = 证书已签发（此前这个主机名在 Caddy 里根本没有站点块，
 #          A 记录指过来但 **TLS 握手直接失败**，而 80 端口上给的是一个 308）
-#   2. curl -sS -o /dev/null -w '%{http_code}\n' https://hr.betaoi.cn/
+#   2. curl -sS -o /dev/null -w '%{http_code}\n' https://hr.betaoi.cc/
 #        ★ 应是 200
 #   3. ★★ **换一个不在彩排名单里的出口再打一次，应当仍是 200** ——
 #        本站有意**不挂闸门**，而隔壁两个站挂着；只验「我这台能开」证明不了这件事。
 
-hr.betaoi.cn {
+hr.betaoi.cc {
+	# Cloudflare Tunnel 到本机 Caddy，源站内部 CA；不在本片段覆盖共享主配置。
+	tls internal
 	# ══════════════════════════════════════════════════════════════════════
 	# ★★★ **本站有意不 import /etc/caddy/rehearsal/*.caddy。**
 	#
@@ -56,9 +58,7 @@ hr.betaoi.cn {
 		#   ★ form-action 'none'：本页没有任何表单。
 		Content-Security-Policy "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
 
-		# ★ `.cn` 是境内直连、**Cloudflare 不在路径上** ⇒ HSTS 只能由这里发。
-		#   ★ 不带 preload、不带 includeSubDomains：preload 一旦进列表就很难退，
-		#     而 includeSubDomains 会替 betaoi.cn 下**别人的子域**做决定。
+		# HSTS 保持当前站点范围，不替其他子域决定 includeSubDomains/preload。
 		Strict-Transport-Security "max-age=31536000"
 
 		X-Content-Type-Options "nosniff"

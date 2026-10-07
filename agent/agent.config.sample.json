@@ -22,6 +22,7 @@
   // ⚠★★★ **「留空」与「不写」不是一回事**:JSON 里写 "oidcIssuer": "" 会把内置默认
   //   **覆盖成空串**(反序列化只认「键在不在」,不认「值是不是空」),
   //   ★ 表现是开考时 OidcLoginFlow 抛「oidc 模式需配 oidcIssuer」。⇒ 要用默认就**别写这个键**。
+  // P147/P149：装机样例继续继承已迁移的内置 issuer；现场 LAN 和动态 loopback 不变。
   "authMode": "oidc",
   "oidcClientId": "horus-client",
 

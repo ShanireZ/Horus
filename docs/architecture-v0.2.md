@@ -27,6 +27,7 @@ title: 监考系统架构设计文档（v0.2 · 完整版）
 | D8 | 截图参数 | **1080p · WebP q75 · 随机 30–90s** |
 | D9 | 存储后端 | SQLite + 文件系统（图像向量存普通 image_embeddings 表 + C# 暴力余弦检索） |
 | — | 留存 | **30 天**，到期关键数据转 archive，其余清理 |
+| D10 | P147/P149 主域迁移 | owner 已批准本地顺序实施与最终独立评审：BetaPass issuer 为 pass.betaoi.cc，公开主页/下载入口 hr.betaoi.cc；cn 休眠，LAN 与原生动态 loopback 接线保持 |
 
 ### 0.1 Web Platform Baseline 合同
 
@@ -35,6 +36,12 @@ title: 监考系统架构设计文档（v0.2 · 完整版）
 - 看板是 ASP.NET Core 直接提供的原生 HTML/CSS/JavaScript，没有转译或打包阶段，因此构建目标标记为 `not-applicable`，不以一份虚假的 Browserslist 配置冒充兼容性保证。
 - 引入 Newly 能力时必须在 `baseline.config.json` 登记检测与回退的源码标记，且注释中的标记不算活动实现；关键登录、座位刷新、复核、证据灯箱和考试控制不得静默降级。
 - `WebBaselineContractTests` 检查策略、原生资源和已监视现代 API；开考前仍须在实际工作站完成浏览器预检。
+
+### 0.2 P147/P149 域名迁移边界（2026-10-07）
+
+owner 原话“所有betapass相关项目，以betaoi.cc作为主域，betaoi.cn作为备用（且暂时不启动该域相关设置，以后备案通过后再启用）”，并选择“本会话顺序实施，最终独立评审”。本轮只改内置 issuer、当前说明及本仓拥有的公开静态站点片段；Server 仍显式配置 issuer，Agent 样例继承内置值。动态 loopback、现场 LAN/看板 HTTPS 回跳、两客户端、PS256、openid profile、userinfo 身份来源、用途受众与 P101 不主动入站拓扑保持。公共下载页不添加彩排门，共享 Caddy 主配置归 betai；Round1 和公共资产域保持。
+
+本地测试及合成验收不证明现场登录或已发布。具体生产协调切换、新 Windows 产物和公开下载发布另按固定候选审阅；不改设备私有配置，不发送邮件，不开启 cn。issuer 切换后重新登录；恢复使用已验 cc 组合，数据只前滚，不回装旧 cn 整套。公开下载链接目前对应历史构建，迁移发布前须固定新版与摘要并验实际下载，不能只换网页域名。进度在 status，本节只登记决策。
 
 ## 1. 总体架构
 

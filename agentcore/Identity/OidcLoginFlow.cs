@@ -34,7 +34,7 @@ public sealed record OidcSession(string SessionId, byte[] KSess, double ExpiresA
         ExpectedExamMinutes <= 0 || RemainingMinutes(nowUnix) >= ExpectedExamMinutes;
 }
 
-/// M4·A1:Agent 登录流(拓扑 A·Server-Broker)。系统浏览器走 wentian 授权码 + PKCE,回调落本机 loopback,
+/// M4·A1:Agent 登录流(拓扑 A·Server-Broker)。系统浏览器走 BetaPass 授权码 + PKCE,回调落本机 loopback,
 /// 拿 code + PKCE verifier + 自己的 ECDH 公钥 POST 到 **Horus Server /oidc/exchange**(Server 持 secret 换 token+验签),
 /// 得 sessionId + serverEcdhPub → 本地派生 K_sess(私钥不过网)。见 docs/m4-identity-oidc.md §3.1。
 public static class OidcLoginFlow
@@ -52,7 +52,7 @@ public static class OidcLoginFlow
         using ECDiffieHellman agentKey = SessionCrypto.NewEphemeralKey();
         string agentPub = SessionCrypto.ExportPublicKeyB64(agentKey);
 
-        // 2) loopback 监听(动态端口;native app 下 wentian 端口无关匹配)
+        // 2) loopback 监听(动态端口;native app 下 BetaPass 端口无关匹配)
         int port = FreePort();
         string redirectUri = $"http://127.0.0.1:{port}/cb";
         using var listener = new HttpListener();
@@ -123,6 +123,8 @@ public static class OidcLoginFlow
                 : "<html><body style='font-family:sans-serif'>登录失败,请重试。</body></html>");
             hc.Response.ContentType = "text/html; charset=utf-8";
             hc.Response.StatusCode = ok ? 200 : 400;
+            // 明确正文长度，让浏览器在 listener 停止前完成回调页读取。
+            hc.Response.ContentLength64 = page.Length;
             await hc.Response.OutputStream.WriteAsync(page, ct).ConfigureAwait(false);
             hc.Response.Close();
             if (error is not null) throw new InvalidOperationException("OIDC 授权被拒: " + error);

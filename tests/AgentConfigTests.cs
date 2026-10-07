@@ -18,10 +18,10 @@ public class AgentConfigTests
         //   陈旧的字面量**,于是这条断言在那三天里**一直是绿的** —— 自洽的抄件与正确的
         //   抄件长得一模一样。★ **要知道上游现在是什么,只能去打线上 discovery**,
         //   本仓内的判据原理上看不见它(成均那边的对应物是 `pnpm oidc:verify`)。
-        Assert.Equal("https://pass.betaoi.cn", cfg.OidcIssuer);
+        Assert.Equal("https://pass.betaoi.cc", cfg.OidcIssuer);
         // 端点默认跟 issuer 走,且挂在**根路径**(贝塔通不是 /oauth/*)。★ 五条路径 2026-08-26 实测核过。
         Assert.Null(cfg.OidcEndpointBase);
-        Assert.Equal("https://pass.betaoi.cn/auth", cfg.OidcAuthorizeBase);
+        Assert.Equal("https://pass.betaoi.cc/auth", cfg.OidcAuthorizeBase);
         Assert.Equal("horus-client", cfg.OidcClientId);
         Assert.StartsWith("ws://", cfg.ServerWsBase);                // 内置默认服务器地址
         Assert.StartsWith("http://", cfg.ServerHttpBase);
@@ -78,12 +78,10 @@ public class AgentConfigTests
     [Fact]
     public void 填了端点前缀_端点整套换入口_而issuer不变()
     {
-        // ★★ 贝塔通 P72:`.cc` 是**同一个 issuer 的第二条入口**,不是第二个 issuer。
-        //   主域不可达时只改端点前缀 —— issuer 一个字都不动,否则所有令牌的 `iss` 校验会当场失败。
-        //   这条正面锁住它,免得日后有人「顺手」把 issuer 改成 .cc 来走备用域。
-        var cfg = new AgentConfig { OidcEndpointBase = "https://pass.betaoi.cc" };
-        Assert.Equal("https://pass.betaoi.cn", cfg.OidcIssuer);          // 不变
-        Assert.Equal("https://pass.betaoi.cc/auth", cfg.OidcAuthorizeBase);   // 整套换入口
-        Assert.NotEqual(cfg.OidcIssuer, cfg.OidcEndpointBase);          // ★ 要害是两者不同主机
+        // 端点覆盖与 issuer 独立，使用虚构入口证明关系；不启用休眠 cn。
+        var cfg = new AgentConfig { OidcEndpointBase = "https://idp-backup.test" };
+        Assert.Equal("https://pass.betaoi.cc", cfg.OidcIssuer);
+        Assert.Equal("https://idp-backup.test/auth", cfg.OidcAuthorizeBase);
+        Assert.NotEqual(cfg.OidcIssuer, cfg.OidcEndpointBase);
     }
 }

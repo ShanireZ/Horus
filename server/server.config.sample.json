@@ -20,7 +20,7 @@
   "allowInsecure": false,
   // 启动成功自动在默认浏览器打开管理端看板(仅交互式运行的真 exe;服务化/脚本运行不弹)。
   "openDashboard": true,
-  // Cloudflare Web Analytics 的公开 site token。仅 betaoi.cn 正式主机手动加载；LAN/IP 不出网。
+  // Cloudflare Web Analytics 的公开 site token。仅未来启用的 betaoi.cn 正式主机手动加载；LAN/IP 不出网。
   // `.cc` 由 Cloudflare 自动注入，不在这里重复加载。也可用 env HORUS_CLOUDFLARE_WEB_ANALYTICS_TOKEN。
   "cloudflareWebAnalyticsToken": "c113fb69d7e84d38a645c5160f6f1bda",
   // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
@@ -32,6 +32,7 @@
   //   契约明写「别把它抄进任何代码或写死进配置的字面量里」,而一个写在注释里的举例
   //   ★★ **会被人当成可以照抄的值**,然后跟着上游一起腐烂 —— 上面那句就是这么来的。
   //   ⇒ 真要知道现值,打线上 discovery;或看 AgentConfig.OidcIssuer 的内置默认。
+  // P147/P149：Server 仍须由部署配置明确 issuer；不把主域再烤一份到样例。
   "oidcIssuer": "",
   // Horus 在**贝塔通**注册的 client_id。
   "oidcClientId": "horus-client",

@@ -82,9 +82,8 @@ function applyDownloads() {
  *   **完整相等，不是 `endsWith('.betaoi.cn')`** —— 后者会把任何
  *   `xxx.betaoi.cn`（乃至别人控制的 `evil-hr.betaoi.cn`）也算进来。
  *
- * ★ Horus 在 `PLAN.md` §3.9 里**没有备用域**（只有 `hr.betaoi.cn`），
- *   因此这里不存在「.cc 由 Cloudflare 自动注入、源码不得重复加载」那一档。
- *   ⚠ 哪天给它开了 `.cc`，这一行要跟着改：那时手工加载就是一页两个 beacon。
+ * P147/P149 当前公网主页为 hr.betaoi.cc，由 Cloudflare 自动注入，本源码不重复加载。
+ *   ANALYTICS_HOST 保留未来 cn 的确切匹配；cn 站点当前休眠，不新增控制台设置。
  *
  * ★★★ 本机监考部署（局域网、IP、localhost）**必须一个字节都不外联** ——
  *   这是 AGENTS.md 里写死的：「本地监考部署不得产生新的分析外联」。
