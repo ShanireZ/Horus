@@ -12,7 +12,7 @@ status: current
 
 ## P147/P149 本地迁移（2026-10-07）
 
-四项新增用例已在旧配置上实际 RED（4失败/0通过/0skip）：默认/样例、PS256新 issuer、真实原生 loopback 授权地址及 Caddy 主机模板。本地 .NET8.0.424（官方归档 SHA512 校验）构建零警告/错误，完整369项通过、零skip；定向72项通过。实际 Caddy2.10.2 以自有 CA 验三类静态响应、安全/缓存头、无来源门、休眠CN TLS拒绝通过。真实 loopback 新检查连续复现原有正文连接重置，补明确 Content-Length 后完整成功页读取通过，PKCE/动态端口/LAN/ECDH保持。系统8.0.425的首次完整门因 Baseline8.0.424一项失败，不计全绿。真正 BetaPass 签发联调归 Task7，最终独立评审归 Task8；未部署、未改现场私有配置，公开下载仍为历史构建，不能宣称 Windows 发布物已迁移。决策见 architecture §0 D10；未部署、未改现场私有配置，公开下载仍为历史构建。
+四项新增用例已在旧配置上实际 RED（4失败/0通过/0skip）：默认/样例、PS256新 issuer、真实原生 loopback 授权地址及 Caddy 主机模板。本地 .NET8.0.424（官方归档 SHA512 校验）构建零警告/错误，完整369项通过、零skip；定向72项通过。实际 Caddy2.10.2 以自有 CA 验三类静态响应、安全/缓存头、无来源门、休眠CN TLS拒绝通过。真实 loopback 新检查连续复现原有正文连接重置，补明确 Content-Length 后完整成功页读取通过，PKCE/动态端口/LAN/ECDH保持。系统8.0.425的首次完整门因 Baseline8.0.424一项失败，不计全绿。真正 BetaPass signServiceToken 与实际撤权/探活 verifier16项通过；自有CA和正确主机名校验的pass.betaoi.cc隔离实例，实际Agent动态loopback、MapOidc/OidcExchange、userinfo与ECDH会话一致性通过（合成内存SQLite，无现场硬件），最终独立评审归 Task8；未部署、未改现场私有配置，公开下载仍为历史构建，不能宣称 Windows 发布物已迁移。决策见 architecture §0 D10；未部署、未改现场私有配置，公开下载仍为历史构建。
 
 ## 状态
 **M1 最小闭环已实现并通过端到端验证**：
