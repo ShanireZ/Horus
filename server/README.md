@@ -43,7 +43,7 @@ dotnet run -c Debug                                # 或运行已发布 exe
 | 键 | 说明 |
 |---|---|
 | `authMode` | 采集面鉴权模式：`psk`（默认·M1-M3 原样）/ `oidc`（仅 OIDC 会话）/ `both`（共存·迁移期回退网） |
-| `oidcIssuer` / `oidcEndpointBase` / `oidcClientId` / `oidcClientSecret`(→`Enc`) / `oidcJwksJson` / `oidcSessionMinutes` | 贝塔通 OIDC 接入：issuer 固定 `https://pass.betaoi.cn`；备用入口只改 endpoint base；`horus-client`、client_secret（明文自动 DPAPI 加密为 `Enc`；env `HORUS_OIDC_SECRET`）、PS256 JWKS 内联（留空则从根路径 `/jwks` 拉取缓存）、会话 absolute 门默认 360min |
+| `oidcIssuer` / `oidcEndpointBase` / `oidcClientId` / `oidcClientSecret`(→`Enc`) / `oidcJwksJson` / `oidcSessionMinutes` | 贝塔通 OIDC 接入：必须显式配置 issuer `https://pass.betaoi.cc`；活动 endpoint base 同为 `.cc`，`.cn` 当前休眠；`horus-client`、client_secret（明文自动 DPAPI 加密为 `Enc`；env `HORUS_OIDC_SECRET`）、PS256 JWKS 内联（留空则从根路径 `/jwks` 拉取缓存）、会话 absolute 门默认 360min |
 
 **M4·RBAC 管理端 OIDC（监考员登录·取代静态令牌·§10）**
 | 键 | 说明 |

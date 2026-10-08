@@ -12,6 +12,8 @@ status: current
 
 ## P147/P149 本地迁移（2026-10-07）
 
+2026-10-08接续：固定 `215e7a7` 的独立源码副本，官方.NET8.0.424归档SHA512验证后，`dotnet build Horus.sln -c Debug --disable-build-servers -m:1`、`dotnet test Horus.sln -c Debug --no-build`及win-x64自包含单文件发布均成功；369测试、零skip，构建20条NuGet漏洞警告/0错误，保留原依赖未升级。新Agent候选SHA256为`a3c94024cddb383e46dd13b5b68344ec8dba80c74574bf7b6a10ae4fab2a74d8`，只产出未运行采集器，现场设备/真实登录/下载仍未验。最终Spec/Standards独立评审完成，README与当前默认issuer说明已对齐cc；历史英文提交偏差记录保留，不改写历史。未推送/部署，旧公开下载未更换。
+
 四项新增用例已在旧配置上实际 RED（4失败/0通过/0skip）：默认/样例、PS256新 issuer、真实原生 loopback 授权地址及 Caddy 主机模板。本地 .NET8.0.424（官方归档 SHA512 校验）构建零警告/错误，完整369项通过、零skip；定向72项通过。实际 Caddy2.10.2 以自有 CA 验三类静态响应、安全/缓存头、无来源门、休眠CN TLS拒绝通过。真实 loopback 新检查连续复现原有正文连接重置，补明确 Content-Length 后完整成功页读取通过，PKCE/动态端口/LAN/ECDH保持。系统8.0.425的首次完整门因 Baseline8.0.424一项失败，不计全绿。真正 BetaPass signServiceToken 与实际撤权/探活 verifier16项通过；自有CA和正确主机名校验的pass.betaoi.cc隔离实例，实际Agent动态loopback、MapOidc/OidcExchange、userinfo与ECDH会话一致性通过（合成内存SQLite，无现场硬件），最终独立评审归 Task8；未部署、未改现场私有配置，公开下载仍为历史构建，不能宣称 Windows 发布物已迁移。决策见 architecture §0 D10；未部署、未改现场私有配置，公开下载仍为历史构建。
 
 ## 状态
@@ -58,7 +60,7 @@ status: current
 - ✅ **全场远程登出** `POST /api/exams/{id}/logout`(admin 门内):`SessionStore.RevokeByExam` 吊销全部采集会话 + 推 `session_revoked` + **强断在线连接**(吊销会话的旧 WS 不能续用),重连 401;`POST /api/exams/{id}/end` 现在向在线 Agent 推 `exam_ended`(响应带 notified)。
 - ✅ **换场缓冲卫生**:新 OIDC 会话开始即 `LocalBuffer.PurgeSession`(旧 K_sess 已死,残留缓冲必 bad_sig 永不 ack → 每次重连重放-被拒死循环);seq 高水位保留 + hello_ack 对齐不撞旧 seq。
 - ✅ **默认管理员运行**:agent exe 内嵌 `requireAdministrator` manifest(双击即 UAC 提权,免右键);⚠️ requireAdministrator 程序**不能**挂 Run 键自启(系统静默跳过)—— 本就不常驻自启(考试前手动打开),保活场景走 `install-service`(LocalSystem 无 UAC)。看门狗单例键改 `agentId_machineId`(与考试解耦)。
-- ✅ **Agent 近零配置**(owner 决策 2026-07-03):`AgentConfig` 所有字段内置默认,**配置文件整个可选**(缺文件即全默认)。authMode=oidc / issuer=`https://pass.betaoi.cn` / scope=`openid profile` / 采集参数 / 白名单(洛谷 + 常见 IDE)全烤默认;**agentId/machineId 留空由主机名自动推导**(machineId=主机名·agentId="ag-"+主机名·`ApplyIdentityDefaults`);examId/seatId/psk 在 oidc 无需配。**唯一去不掉 = 服务器地址**(Agent 连上前须知道服务器在哪·无法下发)→ owner 拍板烤固定默认 `192.168.32.145:8080`(IP 不符才覆盖);**dist/client 不再带任何配置文件**(纯默认零配置)。★STJ init 集合属性:配置提供的 whitelist **替换**(非合并)内置默认。
+- ✅ **Agent 近零配置**(owner 决策 2026-07-03):`AgentConfig` 所有字段内置默认,**配置文件整个可选**(缺文件即全默认)。authMode=oidc / issuer=`https://pass.betaoi.cc`（P149 修订） / scope=`openid profile` / 采集参数 / 白名单(洛谷 + 常见 IDE)全烤默认;**agentId/machineId 留空由主机名自动推导**(machineId=主机名·agentId="ag-"+主机名·`ApplyIdentityDefaults`);examId/seatId/psk 在 oidc 无需配。**唯一去不掉 = 服务器地址**(Agent 连上前须知道服务器在哪·无法下发)→ owner 拍板烤固定默认 `192.168.32.145:8080`(IP 不符才覆盖);**dist/client 不再带任何配置文件**(纯默认零配置)。★STJ init 集合属性:配置提供的 whitelist **替换**(非合并)内置默认。
 
 **M4 身份层 + M5 采集端硬化（承前·补记状态·功能面见对应 docs）**:
 - ✅ **M4 采集面 OIDC 取代共享 PSK**（闭合 §10.1 A1 跨身份栽赃 / A2 seq 抢占）：学员机使用贝塔通 per-user 身份，事件体身份 == 会话身份强制一致；`both` 灰度共存、预检判据要求全部迁 OIDC 才切。见 [m4-identity-oidc.md](m4-identity-oidc.md)。
