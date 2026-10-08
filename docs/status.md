@@ -14,6 +14,8 @@ status: current
 
 2026-10-08接续：固定 `215e7a7` 的独立源码副本，官方.NET8.0.424归档SHA512验证后，`dotnet build Horus.sln -c Debug --disable-build-servers -m:1`、`dotnet test Horus.sln -c Debug --no-build`及win-x64自包含单文件发布均成功；369测试、零skip，构建20条NuGet漏洞警告/0错误，保留原依赖未升级。新Agent候选SHA256为`a3c94024cddb383e46dd13b5b68344ec8dba80c74574bf7b6a10ae4fab2a74d8`，只产出未运行采集器，现场设备/真实登录/下载仍未验。最终Spec/Standards独立评审完成，README与当前默认issuer说明已对齐cc；历史英文提交偏差记录保留，不改写历史。未推送/部署，旧公开下载未更换。
 
+2026-10-08继续准备：同一固定源码/SDK另执行 `dotnet publish server/Horus.Server.csproj -c Release -r win-x64 --self-contained true --disable-build-servers`，发布exit0，10条既有NuGet漏洞警告。win-x64 Server自包含ZIP共347项，静态闭包核对入口、SQLite原生库和看板资源通过；真实/样例server.config均未随包发布。ZIP SHA256为`41ef670f3e28f5197d480a746d513a04de84c2855dcf65c0fadc27d55dc2593d`，仅本地候选，未启动Server或设备。公开页另组装Linux静态快照，以保留rate_limit模块的共享Caddy2.11.4参与六站隔离入口配置故障/恢复演练；hr根页/字体/CSP及CN TLS拒绝通过，页面保持无来源闸门。公开DNS现查hr.cc不解析、旧共享片段仍只绑定hr.cn；未改变线上或旧下载元数据。上述入口演练不覆盖Server/Agent现场OIDC、设备、机器绑定配置与恢复，不能据此放行开考。
+
 四项新增用例已在旧配置上实际 RED（4失败/0通过/0skip）：默认/样例、PS256新 issuer、真实原生 loopback 授权地址及 Caddy 主机模板。本地 .NET8.0.424（官方归档 SHA512 校验）构建零警告/错误，完整369项通过、零skip；定向72项通过。实际 Caddy2.10.2 以自有 CA 验三类静态响应、安全/缓存头、无来源门、休眠CN TLS拒绝通过。真实 loopback 新检查连续复现原有正文连接重置，补明确 Content-Length 后完整成功页读取通过，PKCE/动态端口/LAN/ECDH保持。系统8.0.425的首次完整门因 Baseline8.0.424一项失败，不计全绿。真正 BetaPass signServiceToken 与实际撤权/探活 verifier16项通过；自有CA和正确主机名校验的pass.betaoi.cc隔离实例，实际Agent动态loopback、MapOidc/OidcExchange、userinfo与ECDH会话一致性通过（合成内存SQLite，无现场硬件），最终独立评审归 Task8；未部署、未改现场私有配置，公开下载仍为历史构建，不能宣称 Windows 发布物已迁移。决策见 architecture §0 D10；未部署、未改现场私有配置，公开下载仍为历史构建。
 
 ## 状态
