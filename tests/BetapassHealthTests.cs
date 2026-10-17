@@ -205,7 +205,7 @@ public class BetapassHealthTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await app.CreateClient().SendAsync(req)).StatusCode);
     }
 
-    // ---- 探活的**實際結果**要被記下來(不是隻報設定) ----
+    // ---- 探活的**實際結果**要被記下來(不是只報設定) ----
 
     [Fact]
     public async Task 探活结果被记下来_通过与被拒都是()

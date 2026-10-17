@@ -88,7 +88,7 @@ public static class Schema
     /// 丟棄舊行至多損失幾分鐘"誰線上"(每 30s 自愈),故遷移直接 DROP+重建(CREATE IF NOT EXISTS 只對新庫建了新 PK)。
     private static void MigrateHeartbeatPk(SqliteConnection conn)
     {
-        // 檢測:舊錶裡 exam_id 不在 PK(pk=0)→ 需遷移;新表 exam_id 在 PK(pk>0)→ 跳過。
+        // 檢測:舊表裡 exam_id 不在 PK(pk=0)→ 需遷移;新表 exam_id 在 PK(pk>0)→ 跳過。
         bool needMigrate;
         using (SqliteCommand q = conn.CreateCommand())
         {

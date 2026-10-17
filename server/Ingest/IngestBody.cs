@@ -16,7 +16,7 @@ internal static class IngestBody
     public static async Task<(byte[]? Body, int? StatusCode, string? Error)> ReadWithLimitAsync(
         HttpRequest req, int maxBytes, bool allowEmpty = false)
     {
-        // 1) 聲明瞭超大 Content-Length 的先拒(不緩衝)——前置到最前,未鑑權者也觸發不了大緩衝。
+        // 1) 聲明了超大 Content-Length 的先拒(不緩衝)——前置到最前,未鑑權者也觸發不了大緩衝。
         if (req.ContentLength is long declared && declared > maxBytes)
             return (null, 413, "too_large");
 

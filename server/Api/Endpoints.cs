@@ -50,7 +50,7 @@ public static class Endpoints
                 SameSite = SameSiteMode.Strict,  // 僅同源請求攜帶 → 防 CSRF
                 Path = "/",
                 IsEssential = true,
-                // 不設 Secure:LAN 走 HTTP,置 Secure 會導致 cookie 不被髮送。HttpOnly+SameSite 仍防竊取與跨站。
+                // 不設 Secure:LAN 走 HTTP,置 Secure 會導致 cookie 不被傳送。HttpOnly+SameSite 仍防竊取與跨站。
             });
             return Results.Json(new { ok = true, authRequired = true });
         });

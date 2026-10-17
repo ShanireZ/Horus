@@ -61,7 +61,7 @@ public class ConfigSampleTests
         string path = Path.Combine(FindRoot(), "agent", "agent.config.sample.json");
         Assert.True(File.Exists(path), "Agent 配置样例不在了 —— 装机文档指着它");
 
-        // ★ 走真正的 Load(而不是隻解析 JSON):它帶 ReadCommentHandling.Skip,
+        // ★ 走真正的 Load(而不是只解析 JSON):它帶 ReadCommentHandling.Skip,
         //   ★★ 因此這條同時鎖住「範例是合法 JSONC」——範例語法壞掉的表現是裝機時一片空白。
         AgentConfig fromSample = AgentConfig.Load(path);
         AgentConfig builtin = AgentConfig.Load(Path.Combine(Path.GetTempPath(), "horus-nonexistent-" + Guid.NewGuid().ToString("N") + ".json"));

@@ -230,5 +230,5 @@ CREATE TABLE IF NOT EXISTS agent_heartbeats (
   -- PK 含 exam/seat:同一 agent_id 換座重複使用 + 同毫秒 ts 時,不同 seat 的心跳不再撞同一行、seat 歸屬不被覆蓋汙染線上判定
   PRIMARY KEY (exam_id, seat_id, agent_id, ts)
 );
--- 看板線上判定按 (exam, ts>=cut) 查,否則全表掃心跳錶
+-- 看板線上判定按 (exam, ts>=cut) 查,否則全表掃心跳表
 CREATE INDEX IF NOT EXISTS ix_hb_exam_ts ON agent_heartbeats(exam_id, ts);
