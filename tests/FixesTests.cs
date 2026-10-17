@@ -130,7 +130,7 @@ public class FixArchiveServerRiskTests
             {
                 using (SqliteCommand c = conn.Cmd("INSERT INTO exams (exam_id,name,status,started_at,ended_at,created_at) VALUES ('E1','x','ended',1000,1000,1000)")) c.ExecuteNonQuery();
                 using (SqliteCommand c = conn.Cmd("INSERT INTO seats (exam_id,seat_id,agent_id) VALUES ('E1','A01','ag')")) c.ExecuteNonQuery();
-                // 學員把"訪問 AI 站"籤成 risk=0,伺服器復判 server_risk=80 → 有效風險 max=80≥閾值 = 關鍵。
+                // 學員把"訪問 AI 站"簽成 risk=0,伺服器復判 server_risk=80 → 有效風險 max=80≥閾值 = 關鍵。
                 using (SqliteCommand c = conn.Cmd(
                     @"INSERT INTO events (exam_id,seat_id,agent_id,machine_id,seq,ts,recv_ts,type,payload,risk,server_risk,hash_self,sig)
                       VALUES ('E1','A01','ag','PC',1,1000,1000,'browser_url','{""url"":""x""}',0,80,'h','s')")) c.ExecuteNonQuery();
@@ -146,7 +146,7 @@ public class FixArchiveServerRiskTests
             c2.CommandText = "SELECT risk, server_risk FROM archive_events WHERE exam_id='E1'";
             using SqliteDataReader r = c2.ExecuteReader();
             Assert.True(r.Read());
-            Assert.Equal(0, r.GetInt32(0));    // risk 存原始 agent 自報(canonicalCore 籤的正是它,錨點可復算)
+            Assert.Equal(0, r.GetInt32(0));    // risk 存原始 agent 自報(canonicalCore 簽的正是它,錨點可復算)
             Assert.Equal(80, r.GetInt32(1));   // server_risk 旁註留證:歸檔庫仍能查證"為何判高危"
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
@@ -277,7 +277,7 @@ public class FixServerApiTests
 public class FixHostMatchTests
 {
     [Theory]
-    // 真命中(應判 AI/搜索):整段標籤 / 域後綴
+    // 真命中(應判 AI/搜尋):整段標籤 / 域後綴
     [InlineData("chat.openai.com", true)]
     [InlineData("openai.com", true)]
     [InlineData("poe.com", true)]
@@ -294,7 +294,7 @@ public class FixHostMatchTests
     [Theory]
     [InlineData("www.google.com", true)]
     [InlineData("google.com", true)]
-    [InlineData("googleusercontent.com", false)]   // 含 "google" 子串但 "googleusercontent" 非整段 → 不誤判搜索
+    [InlineData("googleusercontent.com", false)]   // 含 "google" 子串但 "googleusercontent" 非整段 → 不誤判搜尋
     [InlineData("baidu.com", true)]
     public void 搜索站按标签匹配(string host, bool expected)
         => Assert.Equal(expected, Horus.Server.Analysis.RiskModel.HostMatchesAny(host, Horus.Server.Analysis.RiskModel.SearchHosts));
@@ -317,8 +317,8 @@ public class FixHostMatchTests
     }
 }
 
-/// F9:confidence 整數 1(=1%)不再被 0-1 概率啟發式誤放大成 100;嚴格 (0,1) 才放大。
-/// BUG#2 修復:1.0(小數,=100% 歸一化概率)放大成 100,避免 confidence:1 且 suspicious:true 因 1<閾值而漏報。
+/// F9:confidence 整數 1(=1%)不再被 0-1 機率啟發式誤放大成 100;嚴格 (0,1) 才放大。
+/// BUG#2 修復:1.0(小數,=100% 歸一化機率)放大成 100,避免 confidence:1 且 suspicious:true 因 1<閾值而漏報。
 /// 整數 1 與 1.0 解析後同為 double 1.0,故用原始 token 是否含小數點區分(見 ParseConfidence)。
 public class FixConfidenceBoundaryTests
 {
@@ -327,7 +327,7 @@ public class FixConfidenceBoundaryTests
     [Fact] public void 整数1保持1_不放大()   => Assert.Equal(1, Conf("{\"suspicious\":true,\"confidence\":1}"));
     [Fact] public void 小数09仍放大到90()     => Assert.Equal(90, Conf("{\"suspicious\":true,\"confidence\":0.9}"));
     [Fact] public void 整数95不变()           => Assert.Equal(95, Conf("{\"suspicious\":true,\"confidence\":95}"));
-    // BUG#2:模型以 1.0(歸一化概率)回傳滿分 → 放大成 100,進可疑佇列(原實作保持 1 → 1<閾值漏報)。
+    // BUG#2:模型以 1.0(歸一化機率)回傳滿分 → 放大成 100,進可疑佇列(原實作保持 1 → 1<閾值漏報)。
     [Fact] public void 小数1dot0放大到100()   => Assert.Equal(100, Conf("{\"suspicious\":true,\"confidence\":1.0}"));
 }
 

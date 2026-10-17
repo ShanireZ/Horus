@@ -6,10 +6,10 @@ namespace Horus.Server.Config;
 
 /// M4·RBAC·S8:監考員看板遠端 OIDC 回呼需 https(wentian dashboard client 回呼是 HTTPS)。
 /// 區域網路無公用網路網域/證書,故**啟動時自簽證書**(首用點過瀏覽器警告或預裝證書)。
-/// 僅當 Urls 含 https 時被呼叫;pfx 落 DataDir 重複使用(重新啟動不重籤,SAN 穩定)。
+/// 僅當 Urls 含 https 時被呼叫;pfx 落 DataDir 重複使用(重新啟動不重簽,SAN 穩定)。
 public static class HttpsCert
 {
-    /// 載入已有 pfx;不存在則自籤生成並寫入磁碟。SAN 含 localhost/127.0.0.1/::1/機器名 + 設定的額外主機/IP。
+    /// 載入已有 pfx;不存在則自簽生成並寫入磁碟。SAN 含 localhost/127.0.0.1/::1/機器名 + 設定的額外主機/IP。
     public static X509Certificate2 LoadOrCreate(ServerConfig cfg, string dataDir)
     {
         string path = string.IsNullOrWhiteSpace(cfg.HttpsCertPath)

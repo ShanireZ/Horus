@@ -4,10 +4,10 @@ using Horus.Contracts;   // Json.Wire(線協定共享)
 namespace Horus.Agent.Config;
 
 /// Agent 設定。從 JSON 載入(camelCase);PSK 為 base64 字串,自動轉 byte[]。
-/// **零設定部署(2026-07-03)**:所有欄位都有內置預設,設定檔案**整個可選** —— 缺檔案即全預設。
+/// **零設定部署(2026-07-03)**:所有欄位都有內建預設,設定檔案**整個可選** —— 缺檔案即全預設。
 ///   身分 agentId/machineId 留空 → 由**主機名自動推導**(machineId=主機名·agentId="ag-"+主機名),逐臺免配。
 ///   examId/seatId/psk 在 oidc 模式無需設定(examId 伺服器端派發·seatId 由 OIDC 身分派生·psk 不用)。
-///   唯一常需按現場核對的是 serverWsBase/serverHttpBase(內置預設見下,IP 不符才覆蓋)。
+///   唯一常需按現場核對的是 serverWsBase/serverHttpBase(內建預設見下,IP 不符才覆蓋)。
 public sealed class AgentConfig
 {
     /// 考試與座位:**OIDC 模式不在設定裡出現** —— examId 由伺服器端派發(當前活躍考試)、seatId 由 OIDC 身分派生
@@ -18,7 +18,7 @@ public sealed class AgentConfig
     public string AgentId { get; set; } = "";
     public string MachineId { get; set; } = "";
 
-    // 伺服器位址:內置預設 = 考場伺服器(IP 不符才在設定覆蓋)。唯一常需現場核對的欄位。
+    // 伺服器位址:內建預設 = 考場伺服器(IP 不符才在設定覆蓋)。唯一常需現場核對的欄位。
     public string ServerWsBase { get; init; } = "ws://192.168.32.145:8080";     // ws://host:port
     public string ServerHttpBase { get; init; } = "http://192.168.32.145:8080"; // http://host:port
     public byte[]? Psk { get; init; }                     // 預共享 HMAC 金鑰(base64)。OIDC 模式可省。
@@ -28,7 +28,7 @@ public sealed class AgentConfig
     public string AuthMode { get; init; } = "oidc";
     /// 貝塔通 OIDC issuer。P147/P149 當前主域為 cc；cn 休眠，啟用須另審。
     /// 這是權杖標識符；切換後舊 issuer 的權杖被拒，需重新登入。
-    /// 內置值供零設定部署；整合測試前須核對當前 discovery，裝機樣例不另寫一份。
+    /// 內建值供零設定部署；整合測試前須核對當前 discovery，裝機範例不另寫一份。
     public string? OidcIssuer { get; init; } = "https://pass.betaoi.cc";
     /// 協定端點取回前綴，留空使用 issuer。保留設定覆蓋能力，不據此啟用休眠域。
     public string? OidcEndpointBase { get; init; }
@@ -54,7 +54,7 @@ public sealed class AgentConfig
     // 閾值
     public int LargePasteThreshold { get; init; } = 200;
 
-    // 白名單:內置預設 = 洛谷判題站 + 常見 IDE/編譯器(備援);伺服器下發的白名單會在執行環境覆蓋(以下發為準)。
+    // 白名單:內建預設 = 洛谷判題站 + 常見 IDE/編譯器(備援);伺服器下發的白名單會在執行環境覆蓋(以下發為準)。
     public List<string> WhitelistHosts { get; init; } = new() { "luogu.com.cn", "www.luogu.com.cn" };
     public List<string> WhitelistProcs { get; init; } = new()
     {
@@ -70,13 +70,13 @@ public sealed class AgentConfig
         AllowTrailingCommas = true,
     };
 
-    /// 從路徑載入;**檔案不存在則用全部內置預設**(零設定部署)。載入後補齊主機名自動身分。
+    /// 從路徑載入;**檔案不存在則用全部內建預設**(零設定部署)。載入後補齊主機名自動身分。
     public static AgentConfig Load(string path)
     {
         AgentConfig cfg = File.Exists(path)
             ? JsonSerializer.Deserialize<AgentConfig>(File.ReadAllText(path), ConfigOpt)
               ?? throw new InvalidOperationException("配置解析失败: " + path)
-            : new AgentConfig();   // 無設定檔案 → 全內置預設
+            : new AgentConfig();   // 無設定檔案 → 全內建預設
         cfg.ApplyIdentityDefaults();
         return cfg;
     }

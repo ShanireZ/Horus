@@ -35,7 +35,7 @@ public sealed record OidcSession(string SessionId, byte[] KSess, double ExpiresA
 }
 
 /// M4·A1:Agent 登入流(拓撲 A·Server-Broker)。系統瀏覽器走 BetaPass 授權碼 + PKCE,回呼落本機 loopback,
-/// 拿 code + PKCE verifier + 自己的 ECDH 公鑰 POST 到 **Horus Server /oidc/exchange**(Server 持 secret 換 token+驗籤),
+/// 拿 code + PKCE verifier + 自己的 ECDH 公鑰 POST 到 **Horus Server /oidc/exchange**(Server 持 secret 換 token+驗簽),
 /// 得 sessionId + serverEcdhPub → 本機派生 K_sess(私鑰不過網)。見 docs/m4-identity-oidc.md §3.1。
 public static class OidcLoginFlow
 {
@@ -81,7 +81,7 @@ public static class OidcLoginFlow
         string code = await AwaitCodeAsync(listener, state, ct);
         listener.Stop();
 
-        // 5) 到 Horus Server 換工作階段(Server 持 secret 換 token + 離線驗籤)。
+        // 5) 到 Horus Server 換工作階段(Server 持 secret 換 token + 離線驗簽)。
         //    不再上送 examId/seatId —— examId 伺服器端派發,seatId 由 OIDC 身分派生,二者從回應取回。
         var reqBody = new
         {

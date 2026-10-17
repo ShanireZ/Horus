@@ -128,9 +128,9 @@ public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
         };
     }
 
-    /// confidence 容忍整數 / 小數(95.0)/ 字串("95")/ 0-1 概率(0.95→95),統一鉗到 0-100 整數,避免誤歸零致漏報。
-    /// 0-1 概率放大邊界(BUG#2 修復):用原始 token 是否含小數點區分「整數 1(=1%,保持 F9 不放大以防假陽性)」
-    /// 與「1.0(=100% 歸一化概率,放大防漏報)」—— JSON 解析後二者皆為 double 1.0,無法靠值區分,故看原始文字。
+    /// confidence 容忍整數 / 小數(95.0)/ 字串("95")/ 0-1 機率(0.95→95),統一鉗到 0-100 整數,避免誤歸零致漏報。
+    /// 0-1 機率放大邊界(BUG#2 修復):用原始 token 是否含小數點區分「整數 1(=1%,保持 F9 不放大以防假陽性)」
+    /// 與「1.0(=100% 歸一化機率,放大防漏報)」—— JSON 解析後二者皆為 double 1.0,無法靠值區分,故看原始文字。
     private static int ParseConfidence(JsonElement o, string k)
     {
         if (!o.TryGetProperty(k, out JsonElement e)) return 0;
@@ -148,7 +148,7 @@ public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
             hasDecimal = (e.GetString() ?? "").IndexOf('.') >= 0;
         }
         else return 0;
-        // 嚴格 (0,1) 概率 → 放大成百分比;恰好 1.0 且為小數(token 含 '.')→ 視為歸一化概率放大成 100(修復漏報);
+        // 嚴格 (0,1) 機率 → 放大成百分比;恰好 1.0 且為小數(token 含 '.')→ 視為歸一化機率放大成 100(修復漏報);
         // 整數 1(無小數點)保持 1(=1%,F9:避免把"1%"誤放大成 100% 致假陽性)。
         if (d > 0 && (d < 1 || (d == 1.0 && hasDecimal))) d *= 100;
         return (int)Math.Clamp(Math.Round(d), 0, 100);

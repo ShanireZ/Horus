@@ -1,6 +1,6 @@
 # 維度五 · 缺失審查（Missing）
 
-> 審查口徑：未實作的功能、未處理的異常、缺失的測試、缺失的對接文件/示例。
+> 審查口徑：未實作的功能、未處理的異常、缺失的測試、缺失的對接文件/範例。
 
 ---
 
@@ -19,8 +19,10 @@
 ## M5 〔P3〕視覺分析（Vision）覆蓋偏弱
 **狀態（2026-07-15）**：✅ 已實施。新增 `tests/VisionTests.cs`：`VisionVerdict.Kind()` 全分支映射（web_ai/search/ide_plugin→ide_plugin_suspect、remote_tool/other|none→suspect）、Susicious 標記、以及 `VisionAnalysisService.Enqueue` → `ocr_results` 寫入資料庫 + `analysis_state=1` 被輪詢拾回（visionMock:true）。
 
-## M6 〔P3〕KSK 擊鍵旁路缺乏對接文件 / 示例
-**狀態（2026-07-15）**：✅ 已實施。新增 `docs/ksk-keystroke-integration.md`：簽名建構 `HMAC(KSK,"keystroke\n"+sha256(body))`、冪等 `submission_id` 語義、欄位映射表、Python/Node/curl 最小示例、伺服器打分/入隊規則、設定與安全檢查清單。
+<a id="m6-p3ksk-擊鍵旁路缺乏對接文件--示例"></a>
+
+## M6 〔P3〕KSK 擊鍵旁路缺乏對接文件 / 範例
+**狀態（2026-07-15）**：✅ 已實施。新增 `docs/ksk-keystroke-integration.md`：簽名建構 `HMAC(KSK,"keystroke\n"+sha256(body))`、冪等 `submission_id` 語義、欄位映射表、Python/Node/curl 最小範例、伺服器打分/入隊規則、設定與安全檢查清單。
 
 ## M7 〔P3〕預檢未覆蓋 CLIP 模型存在性
 **狀態（2026-07-15）**：✅ 已實施（聯動 03-D4）。`/api/preflight` 新增 `clip_model` 檢查項：嵌入器關時為 `ok`；onnx provider 但 `model.onnx`（按 `EmbedOnnxModelPath` 或 `DataDir/model.onnx`）缺失時為 `fail`；remote provider 為 `ok`。看板據以提示「按圖搜圖不可用原因」。

@@ -46,7 +46,7 @@ X-Horus-KSig: <hex hmac>              // 配了 KSK 时必带；未配 KSK 通�
 | `timeline` | array\<number\> | 否 | keydown 相對毫秒陣列（可降取樣）。**僅存檔，不參與打分**。 |
 | `features` | object | 否 | 判題前端算好的特徵，**唯一決定風險分**。見 §4。 |
 
-示例：
+範例：
 
 ```json
 {
@@ -74,9 +74,11 @@ ksig         = 小写 hex( HMAC-SHA256(KSK_bytes, "keystroke\n" + body_sha256) )
 - `KSK_bytes` = `keystrokeSecretBase64` 經 base64 解碼得到的原始位元組（與 `server.config.json` 中的 `keystrokeSecretBase64` 一致）。
 - 分隔串是 `"keystroke\n"`（`keystroke` 後跟**一個換行符 `\n`** UTF-8）。
 - 大小寫：**hex 全小寫**（與 `Crypto.HmacHex` 輸出一致）。
-- 注意：`sha256(body)` 是對**位元組**取雜湊，不是對字串；JSON 字串化必須穩定（與傳送位元組完全一致），否則驗籤失敗。
+- 注意：`sha256(body)` 是對**位元組**取雜湊，不是對字串；JSON 字串化必須穩定（與傳送位元組完全一致），否則驗簽失敗。
 
-### 3.1 最小示例
+<a id="31-最小示例"></a>
+
+### 3.1 最小範例
 
 **Python：**
 
@@ -149,7 +151,7 @@ curl -X POST http://<server>:8080/ingest/keystroke \
 
 | 情形 | HTTP | body |
 |---|---|---|
-| 驗籤失敗（配 KSK 卻 `ksig` 錯/缺） | 401 | `{"error":"bad_ksig"}` |
+| 驗簽失敗（配 KSK 卻 `ksig` 錯/缺） | 401 | `{"error":"bad_ksig"}` |
 | 體過大（> 512 KB） | 413 | `{"error":"too_large"}` |
 | JSON 非法 | 400 | `{"error":"bad_json"}` |
 | 首存成功 | 200 | `{"stored":true,"risk":<n>}` |

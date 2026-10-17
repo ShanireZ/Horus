@@ -12,7 +12,7 @@ namespace Horus.Server.Tests;
 /// 貝塔通撤權通知接收端(`/internal/revoke`)的契約迴歸。
 ///
 /// 判據逐條來自 BetaPass `docs/rp-contract.md`,**全部落在行為上**:
-/// 驗籤(含 `aud` 是不是自己)、按 `jti` 冪等、三種 reason 處置相同、認不出的 reason 照清、
+/// 驗簽(含 `aud` 是不是自己)、按 `jti` 冪等、三種 reason 處置相同、認不出的 reason 照清、
 /// 按 `aud` 分別處置(撤監考臺不動採集面)。
 public class BetapassRevokeTests
 {
@@ -32,7 +32,7 @@ public class BetapassRevokeTests
         });
     }
 
-    /// 按貝塔通真實形態籤,claims 含 `jti` 與 `purpose`。
+    /// 按貝塔通真實形態簽,claims 含 `jti` 與 `purpose`。
     /// ★ 演算法與 JWKS 裡的 `alg` 都**從生產常數派生**,不再寫死字面值 —— 見 OidcTests 裡同款說明。
     private static string SignNotice(RSA rsa, string aud, string jti, string sub, string purpose)
     {
@@ -235,7 +235,7 @@ public class BetapassRevokeTests
     [Fact]
     public async Task aud不是本机任何client_拒()
     {
-        // ★ 不驗 `aud` 就等於開了一個「誰都能踢人下線」的端點。這裡用**同一把真私鑰**籤一枚
+        // ★ 不驗 `aud` 就等於開了一個「誰都能踢人下線」的端點。這裡用**同一把真私鑰**簽一枚
         //   除 `aud` 外一切合法的權杖 —— 必須被拒,才證明擋的是 `aud` 而不是簽名。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));

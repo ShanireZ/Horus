@@ -6,9 +6,9 @@ using Horus.Contracts;
 
 namespace Horus.Agent.Signals;
 
-/// 剪貼板更新監聽。大段粘貼(文字長度/行數超閾值)→ 高風險 + 觸發抓圖。
-/// 隱私:**預設只記中繼資料(長度/行數),不上傳剪貼板明文**。
-/// 實作:自帶一個 STA 執行緒 + message-only 隱藏視窗接收 WM_CLIPBOARDUPDATE(剪貼板訪問要求 STA)。
+/// 剪貼簿更新監聽。大段粘貼(文字長度/行數超閾值)→ 高風險 + 觸發抓圖。
+/// 隱私:**預設只記中繼資料(長度/行數),不上傳剪貼簿明文**。
+/// 實作:自帶一個 STA 執行緒 + message-only 隱藏視窗接收 WM_CLIPBOARDUPDATE(剪貼簿訪問要求 STA)。
 public sealed class ClipboardWatcher : ISignalSource
 {
     public string Name => "clipboard";
@@ -53,7 +53,7 @@ public sealed class ClipboardWatcher : ISignalSource
                 TriggerCapture: large,
                 CaptureReason: large ? "large_paste" : null));
         }
-        catch { /* 剪貼板被佔用,跳過本次 */ }
+        catch { /* 剪貼簿被佔用,跳過本次 */ }
     }
 
     public void Stop()

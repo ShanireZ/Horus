@@ -14,11 +14,11 @@ namespace Horus.Server.Identity;
 ///   為本專案設了 `conformIdTokenClaims: false`,註解寫著「Horus Server 純區域網路靠離線驗
 ///   id_token 拿富畫像」。指向貝塔通後照舊從 id_token 取,表現是:`Name` 與 `Username` 恆為空串 →
 ///   <see cref="ExamDispatch.SeatFrom"/> 對**每一個**學生退回成 `sub`,座位號全變成不可讀的 id,
-///   看板與取證也沒有姓名。**不回報錯誤、不拋異常、測試全綠** —— 因為測試裡的 id_token 是自己籤的,
+///   看板與取證也沒有姓名。**不回報錯誤、不拋異常、測試全綠** —— 因為測試裡的 id_token 是自己簽的,
 ///   手動塞了那兩個 claim。這正是「本機/測試自己造的權杖與真 IdP 不一樣」那一類。
 ///
 /// ★ **多一次線上往返不破壞 R5 拓撲**(docs/m4-identity-oidc.md §10.3):換 token 本來就是線上動作,
-///   userinfo 緊隨其後走同一條連接。真正離線的是**驗籤**(預置 JWKS),不是取身分。
+///   userinfo 緊隨其後走同一條連接。真正離線的是**驗簽**(預置 JWKS),不是取身分。
 ///
 /// ★ **取不到就是登入失敗,不退回到空身分**。fail-closed 與 R3 同一取向:貝塔通不可達時寧可登不進去,
 ///   也不要一個「進得去但誰也認不出是誰」的考場 —— 後者的取證材料是廢的,而它看上去一切正常。
@@ -69,7 +69,7 @@ public static class Userinfo
             Sub: subject.Sub,
             // `profile` scope 的 `name` = 真實姓名(運營方錄入)。
             Name: Str(root, "name") ?? "",
-            // ★ 座位標識用它(見 ExamDispatch.SeatFrom)。貝塔通對**未設置使用者名的帳號直接省略這個 claim**
+            // ★ 座位標識用它(見 ExamDispatch.SeatFrom)。貝塔通對**未設定使用者名的帳號直接省略這個 claim**
             //   (不發空串),所以這裡恆可能為空 —— SeatFrom 已有退回 sub 的分支,不要在這裡編一個預設值。
             Username: Str(root, "preferred_username") ?? "");
     }

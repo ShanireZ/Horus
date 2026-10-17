@@ -143,13 +143,13 @@ X-Horus-KSig: <hex hmac>              // M2:会话鉴权(配了 KSK 时必带),�
 | `browser_url` | 瀏覽器位址變化 | `process`, `url`, `whitelisted`；或 `url:null,note:"url_unreadable"` | 白名單 0 / 非白名單 80 / 讀不到 40 |
 | `process_start` | 處理程序啟動 | `name`, `pid`, `cmd`, `whitelisted` | 白名單 0 / 非白名單 70 |
 | `process_exit` | 處理程序退出 | `name`, `pid` | 0 |
-| `clipboard` | 剪貼板更新 | `len`, `lines`, `large`（**不含明文**） | 大段 60 |
+| `clipboard` | 剪貼簿更新 | `len`, `lines`, `large`（**不含明文**） | 大段 60 |
 | `alt_tab_burst` | 切窗爆發 | `count`, `windowSec` | 40（M2） |
 | `usb` | 可行動裝置到達 | `drive` | 50 |
 | `screenshot` | 顯式截圖事件（可選） | `trigger`, `imageId` | — |
 | `heartbeat` | 30s 心跳 | `status` | 0 |
 
-> `risk` 由 Agent 本機初判。**伺服器不採信該自報值作最終判據**（M2）：伺服器憑獨立黑名單（AI 站 / 搜索引擎 / 遠控工具）+ 該考試**已下發**白名單重算 `server_risk`，以**有效風險 = max(agentRisk, serverRisk)** 決定是否入 `suspicious_queue`；`serverRisk ≥ 阈值` 而 `agentRisk < 阈值` 時,佇列條目 `note` 記 `agent_risk_understated`（篡改逃逸取證）。L2/L3 後續再疊加。閉合 architecture §10.1 頭號殘留（持 PSK 學員機把「訪問 AI 站」籤成 `risk=0` 逃逸）。
+> `risk` 由 Agent 本機初判。**伺服器不採信該自報值作最終判據**（M2）：伺服器憑獨立黑名單（AI 站 / 搜尋引擎 / 遠控工具）+ 該考試**已下發**白名單重算 `server_risk`，以**有效風險 = max(agentRisk, serverRisk)** 決定是否入 `suspicious_queue`；`serverRisk ≥ 阈值` 而 `agentRisk < 阈值` 時,佇列條目 `note` 記 `agent_risk_understated`（篡改逃逸取證）。L2/L3 後續再疊加。閉合 architecture §10.1 頭號殘留（持 PSK 學員機把「訪問 AI 站」簽成 `risk=0` 逃逸）。
 
 ## 4. 資料模型（live DB，權威 DDL = schema.sql）
 

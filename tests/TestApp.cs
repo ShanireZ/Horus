@@ -22,11 +22,11 @@ public sealed class TestApp : WebApplicationFactory<Program>
 
     private readonly string _dataDir;
 
-    // M4:一份最小合法 JWKS(內聯·讓 OIDC 模式啟動不去拉 issuer)。ingest 測試直接建工作階段,不走真驗籤。
+    // M4:一份最小合法 JWKS(內聯·讓 OIDC 模式啟動不去拉 issuer)。ingest 測試直接建工作階段,不走真驗簽。
     private const string DummyJwks = "{\"keys\":[{\"kty\":\"RSA\",\"use\":\"sig\",\"alg\":\"RS256\",\"kid\":\"test\",\"n\":\"sXchDaQebHnPiGvyDOAT4saGEUetSyo9MKLOoWFsueri23bOdgWp4Dy1WlUzewbgBHod5pcM9H5UGVn9YMcJDp5c\",\"e\":\"AQAB\"}]}";
 
-    /// ★ `jwks`:注入一份**真能驗籤**的 JWKS —— 撤權通知那類案例要用真私鑰籤權杖打進來。
-    /// 留空則用 <see cref="DummyJwks"/>,它只保證「能建構出驗證器」,籤不出也驗不過任何真權杖。
+    /// ★ `jwks`:注入一份**真能驗簽**的 JWKS —— 撤權通知那類案例要用真私鑰簽權杖打進來。
+    /// 留空則用 <see cref="DummyJwks"/>,它只保證「能建構出驗證器」,簽不出也驗不過任何真權杖。
     /// ★ `healthLegacyAud`:探活是否**額外**收舊口徑(`aud` = client_id 本身)。預設 **false**,
     ///   與生產預設一致(對側 P100 之後只發 `&lt;client_id&gt;#health`);傳 true 用來驗那個逃生口。
     public TestApp(bool adminAuth = false, bool keystrokeAuth = false, bool visionMock = false, string? authMode = null, bool adminOidc = false, bool embedMock = false, string? jwks = null, bool healthLegacyAud = false, bool expectRevokePush = false)

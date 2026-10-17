@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// Agent 零設定(2026-07-03):設定檔案可選、內置預設、主機名自動身分。
+/// Agent 零設定(2026-07-03):設定檔案可選、內建預設、主機名自動身分。
 public class AgentConfigTests
 {
     [Fact]
@@ -23,11 +23,11 @@ public class AgentConfigTests
         Assert.Null(cfg.OidcEndpointBase);
         Assert.Equal("https://pass.betaoi.cc/auth", cfg.OidcAuthorizeBase);
         Assert.Equal("horus-client", cfg.OidcClientId);
-        Assert.StartsWith("ws://", cfg.ServerWsBase);                // 內置預設伺服器位址
+        Assert.StartsWith("ws://", cfg.ServerWsBase);                // 內建預設伺服器位址
         Assert.StartsWith("http://", cfg.ServerHttpBase);
         Assert.False(string.IsNullOrWhiteSpace(cfg.MachineId));      // 主機名自動推導
         Assert.Equal("ag-" + cfg.MachineId, cfg.AgentId);
-        Assert.Contains("luogu.com.cn", cfg.WhitelistHosts);         // 內置洛谷白名單備援
+        Assert.Contains("luogu.com.cn", cfg.WhitelistHosts);         // 內建洛谷白名單備援
     }
 
     [Fact]

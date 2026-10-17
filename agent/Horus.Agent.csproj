@@ -13,7 +13,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
     <!-- UIAutomation(System.Windows.Automation, 讀瀏覽器位址欄) 需 WPF 程式集;
-         隱藏訊息視窗(剪貼板) + Screen 資訊 需 WinForms。兩者在 net*-windows 下可共存。 -->
+         隱藏訊息視窗(剪貼簿) + Screen 資訊 需 WinForms。兩者在 net*-windows 下可共存。 -->
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
 

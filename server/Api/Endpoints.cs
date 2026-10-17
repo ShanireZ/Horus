@@ -496,7 +496,7 @@ public static class Endpoints
                         suspiciousCount = r.GetInt32(9),
                         // OIDC 身分畫像(未登入/PSK 模式為 null)
                         // ★ 身分只剩三項(貝塔通 P81):sub / 真實姓名 / 使用者名。
-                        //   道號 / 頭像 / 境界 / 戰力是問天錄的業務欄位,身分中心不散布;
+                        //   道號 / 頭像 / 境界 / 戰力是問天錄的業務欄位,身分中心不散佈;
                         //   `userType` 更是隨 P83 整個消失 —— 看板存取資格已由 `horus-admin` 平台開關回答。
                         identity = sub is null ? null : new
                         {

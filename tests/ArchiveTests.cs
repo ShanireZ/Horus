@@ -43,7 +43,7 @@ public class ArchiveTests
     private static async Task SendEventAsync(WebSocket ws, SignalType type, Dictionary<string, object?> payload,
         int risk, long seq, string? evidenceImageId = null)
     {
-        // 各事件獨立自洽(hashPrev=GENESIS),足以過 ingest 驗籤 + 雜湊複驗(歸檔不看鏈連續)。
+        // 各事件獨立自洽(hashPrev=GENESIS),足以過 ingest 驗簽 + 雜湊複驗(歸檔不看鏈連續)。
         string json = Ws.SignedEvent(Exam, Seat, Agent, Machine, type, payload, risk, seq, evidenceImageId: evidenceImageId);
         await Ws.SendAsync(ws, json);
         await Ws.ReceiveAsync(ws);   // ack

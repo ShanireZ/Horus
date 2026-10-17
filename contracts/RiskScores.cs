@@ -10,15 +10,15 @@ public static class RiskScores
 {
     // ---- 瀏覽器 URL ----
     public const int BrowserUrlAi = 80;            // 命中 AI 站黑名單(伺服器獨立復判)
-    public const int BrowserUrlSearch = 70;        // 命中搜索引擎黑名單
-    public const int BrowserUrlNonWhitelist = 80;  // 非白名單站(無 AI/搜索標籤,但確非白名單)
+    public const int BrowserUrlSearch = 70;        // 命中搜尋引擎黑名單
+    public const int BrowserUrlNonWhitelist = 80;  // 非白名單站(無 AI/搜尋標籤,但確非白名單)
     public const int BrowserUrlUnreadable = 40;    // 位址欄讀不到 → 降級:強制抓圖交人工看
 
     // ---- 處理程序 / 遠控 ----
     public const int RemoteTool = 70;              // 遠控工具處理程序(teamviewer/anydesk/…)
     public const int NonWhitelistProc = 70;        // 非白名單處理程序
 
-    // ---- 剪貼板 / 粘貼 ----
+    // ---- 剪貼簿 / 粘貼 ----
     public const int LargePaste = 60;              // 大段粘貼
 
     // ---- 設備 ----

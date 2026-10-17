@@ -142,7 +142,7 @@ public class HealthSignalServerTests
         await CreateExam(http);
         using WebSocket ws = await HelloAsync(app);
 
-        // Agent 把遮屏事件籤成 risk=0 試圖壓住,伺服器獨立賦分 60 → 入隊。
+        // Agent 把遮屏事件簽成 risk=0 試圖壓住,伺服器獨立賦分 60 → 入隊。
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.ScreenshotObscured,
             new() { ["reason"] = "solid", ["metric"] = 0.4 }, 0, seq: 1));
         Assert.Equal("ack", (await Ws.ReceiveAsync(ws)).GetProperty("type").GetString());

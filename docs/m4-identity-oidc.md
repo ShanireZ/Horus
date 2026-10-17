@@ -52,7 +52,7 @@ title: M4 身分層 —— OIDC 接入 · 取代共享 PSK（設計與任務計�
 >
 > | 端點 | 幹什麼 |
 > |---|---|
-> | `GET /internal/health` | 貝塔通每 5 分鐘探活（其 P94）。**必須驗籤**（與 `/internal/revoke` 同一套）。★★ **「不實作 = 撤權通知永遠送不到」那條舊理由已不成立**（對側 `5bb16b6` 之後任何 HTTP 應答都算線上，包括沒實作時框架回的 404）；仍要實作的三條理由見 `BetapassHealthEndpoint` 類註解 |
+> | `GET /internal/health` | 貝塔通每 5 分鐘探活（其 P94）。**必須驗簽**（與 `/internal/revoke` 同一套）。★★ **「不實作 = 撤權通知永遠送不到」那條舊理由已不成立**（對側 `5bb16b6` 之後任何 HTTP 應答都算線上，包括沒實作時框架回的 404）；仍要實作的三條理由見 `BetapassHealthEndpoint` 類註解 |
 > | `POST /api/heartbeat` | 看板心跳，收 `{ active }` 回 204 |
 > | `GET /api/me` | 「當前登入：XXX」用 |
 > | `GET /admin/logout` | RP-Initiated Logout：★ **先清本機，再跳**貝塔通的退出範圍二選一頁 |
@@ -64,7 +64,7 @@ title: M4 身分層 —— OIDC 接入 · 取代共享 PSK（設計與任務計�
 > 連帶：探活位址按撤權回呼**同源推導**，沒登記就**不在探活名單裡** ——
 > `/internal/revoke` 與 `/internal/health` **目前一次都不會被呼叫**。
 >
-> - ★★ **判據不是「懶得開隧道」**：Horus Server 是監考電腦上的**區域網路筆記本**（自籤 HTTPS、無公用網路網域），
+> - ★★ **判據不是「懶得開隧道」**：Horus Server 是監考電腦上的**區域網路筆記本**（自簽 HTTPS、無公用網路網域），
 >   而那兩個端點都要求**貝塔通主動撥進來**。★ **出站 ≠ 可入站** —— 換 token / 取 userinfo / 拉 JWKS
 >   全是出站、一直好用；這兩條是入站，方向反了。**這是架構選擇，不是填個表。**
 > - ★★ **殘餘是有界的，而這個界是三道門削出來的**：撤權後最長 **≤ absolute（6 小時）**、
@@ -73,7 +73,7 @@ title: M4 身分層 —— OIDC 接入 · 取代共享 PSK（設計與任務計�
 >   **口徑變過之後，掛在舊口徑上的風險評估要回頭重算**，否則會為一個已經縮小十倍的風險付舊價錢。
 > - ★ **觸發條件**：真需要**分鐘級**撤權時**上拉取模型**（Horus 主動去取），**不是開隧道** ——
 >   拉取順著本機出站-only 的拓撲，隧道方向是逆的。⏳ 那個拉取端點目前不存在。
-> - ★ **實作一個字都不刪**：兩個端點、兩道防線（驗籤 + 「權杖 `sub` == 訊息 `sub`」）與它們的迴歸
+> - ★ **實作一個字都不刪**：兩個端點、兩道防線（驗簽 + 「權杖 `sub` == 訊息 `sub`」）與它們的迴歸
 >   **全部保留**，走拉取模型那天要用同一套。兩個端點的類註解裡都標了「目前不會被呼叫」。
 > - **設定**：`betapassRevokePushExpected`（預設 `false`）。它**只改預檢怎麼說話**，不關任何實作。
 >
@@ -193,21 +193,21 @@ title: M4 身分層 —— OIDC 接入 · 取代共享 PSK（設計與任務計�
 >    §10 整章的 `user_type` RBAC 更是被明確點名為**要清除的反面案例**。
 > 3. ★★ **D5「只認 ID Token」的演算法那一半仍成立**：RS256 與 PS256 用**同一把 RSA 公鑰**
 >    都驗得通 —— 所以「順手放寬成兩種都收」不是相容性而是**安全問題**，
->    貝塔通根本籤不出 RS256，多出來那條路只服務於攻擊者。
+>    貝塔通根本簽不出 RS256，多出來那條路只服務於攻擊者。
 > 4. ★★ **但 D5 的「身分從 ID Token 取」那一半已經不成立**（2026-08-07 修，見下）。
 >    wentian 是**專門為本專案**設了 `conformIdTokenClaims: false`（其 `server/oidc/provider.js`，
 >    註解寫著「Horus Server 純區域網路靠離線驗 id_token 拿富畫像」）；**貝塔通沒有這條豁免** ——
 >    它留在上游預設值 `true`，授權碼流下 id_token 只帶 `sub` 與協定 claims。
 >    照舊從 id_token 取的表現是：`Name` / `Username` **恆為空串** → `SeatFrom` 對每一個學生
 >    靜默退回成 `sub`，看板與取證也沒有姓名。**不回報錯誤、不拋異常、測試全綠**
->    （測試的 id_token 是自己籤的，手動塞了那兩個 claim）。
+>    （測試的 id_token 是自己簽的，手動塞了那兩個 claim）。
 >    ★ 現在 `OidcTokenValidator.Validate` 只給得出 `OidcSubject`（一個 `sub`），
 >    姓名與使用者名**只能**經 `Userinfo.FetchAsync` 拿 —— 把它變成類型上做不到的事，而不是靠註解提醒。
->    ★ **多一次線上往返不破壞 R5 拓撲**：換 token 本來就是線上動作，離線的是**驗籤**不是取身分。
+>    ★ **多一次線上往返不破壞 R5 拓撲**：換 token 本來就是線上動作，離線的是**驗簽**不是取身分。
 >
 > ### 當前實作落點（讀程式碼從這幾處進）
 >
-> - `server/Identity/OidcTokenValidator.cs` —— PS256 離線驗籤 + `SigningAlg` 常數；★ 產物只有 `OidcSubject`
+> - `server/Identity/OidcTokenValidator.cs` —— PS256 離線驗簽 + `SigningAlg` 常數；★ 產物只有 `OidcSubject`
 > - `server/Identity/Userinfo.cs` —— ★ **身分 claims 的唯一來源**（含 OIDC Core 5.3.2 的 `sub` 比對）
 > - `server/Identity/AdminOidcFlow.cs` —— 監考臺登入；**存取資格判據已整個移除**，見其行內說明
 > - `server/Identity/BetapassRevokeEndpoint.cs` + `BetapassRevokeVerifier.cs` —— 撤權接收端
@@ -239,7 +239,7 @@ M4 用 **wentian OIDC 的 per-user 身分**取代 Horus 現有的**全場共享 
 
 ## 1. 已鎖定決策（owner 2026-07-02）
 
-> ★ **D1 / D4 / D5 已被上面那張表取代**：IdP 換成貝塔通、富畫像整套不再散布、演算法改 PS256。
+> ★ **D1 / D4 / D5 已被上面那張表取代**：IdP 換成貝塔通、富畫像整套不再散佈、演算法改 PS256。
 > **D2（Server-Broker，secret 只在伺服器）與 D3（以 `sub` 為權威身分）仍然成立且更硬了。**
 
 | # | 決策點 | 選定 | 理由 |
@@ -248,7 +248,7 @@ M4 用 **wentian OIDC 的 per-user 身分**取代 Horus 現有的**全場共享 
 | D2 | 用戶端拓撲 | **拓撲 A：Server-Broker** | secret 只在可信 Server、永不進學員機 exe；wentian 改動最小（不必放開 public client） |
 | D3 | 身分映射 | **直接用 wentian 身分**（無座位/學號） | 考場無座位號；`sub`(UUID) 為權威身分，`seatId` 欄位改承載 wentian 帳戶名/物理機標籤 |
 | D4 | 富展示資料 | **首版即富資料**：使用者名 + 暱稱 + 道號 + 境界 + 戰力 + 頭像 | 看板直接呈現真實學員畫像；需 wentian 端加自訂 claim |
-| D5 | Token 使用 | **只認 ID Token（RS256 JWT，離線驗籤）** | wentian access_token 是 opaque 無 introspection；ID token 是唯一可離線驗的身分錨（Round1 亦如此） |
+| D5 | Token 使用 | **只認 ID Token（RS256 JWT，離線驗簽）** | wentian access_token 是 opaque 無 introspection；ID token 是唯一可離線驗的身分錨（Round1 亦如此） |
 
 ---
 
@@ -265,7 +265,7 @@ M4 用 **wentian OIDC 的 per-user 身分**取代 Horus 現有的**全場共享 
 | 流程 | **僅** `authorization_code` + **強制 PKCE(S256)**；無 device_code/ROPC/client_credentials/refresh | `config/oauth.js:4,52-53`·`provider.js:161-165` |
 | client | **僅 confidential**（`client_secret_post`/`basic`），**不支援 public(`none`)**；寫死單 `round1` | `config/oauth.js:6,54`·`provider.js:99` |
 | redirect | 精確 HTTPS 網域白名單，**無 loopback** | `config/oauth.js:8-19`·`.env.production:71` |
-| ID Token | **RS256 JWT，可離線驗籤**；JWKS 端點 `/.well-known/jwks.json` | `provider.js:72-96,169` |
+| ID Token | **RS256 JWT，可離線驗簽**；JWKS 端點 `/.well-known/jwks.json` | `provider.js:72-96,169` |
 | access_token | **opaque**（無 introspection，僅 `/oauth/userinfo`） | `provider.js:147-151`（features 只開 revocation/userinfo） |
 | claims | 僅 `sub`(隨機 UUID) / `name`(nickname‖username) / `email`(空未實作) | `server/oidc/claims.js`·`account.js:11-33` |
 | 缺口 | **無 role/道號/境界/戰力/頭像 claim**；`users` 表無這些的 claim 映射 | `server/oidc/claims.js:1-19` |
@@ -346,23 +346,23 @@ M4 用 **wentian OIDC 的 per-user 身分**取代 Horus 現有的**全場共享 
 **✅ 單測**：wentian 全量 `test:server` 全綠（**75 unit + 65 integration = 585 測試**·外部倉）+ Horus **142 測試**（S1–S7 階段·含 A1/A2 端到端閉合·累計 **225 全綠**）。
 **✅ 本機 live smoke 已通過（2026-07-02·真元件端到端）**：本機起真 wentian（`OAUTH_ISSUER=http://127.0.0.1:3939` 全 HTTP 免證書·載入 C1–C5）+ 真 Horus Server（authMode=oidc·啟動即從 wentian 拉 JWKS）+ **真 Horus.Agent.exe**。實測連線路徑全綠：
 > - wentian 真 oidc-provider 簽發的 **id_token 內含 `horus_profile` 富 claim**（`username/nickname/dao_name/realm/combat_power` 等）——**`conformIdTokenClaims:false` 執行環境確認**（最大未知項已消除）；`aud=horus-client`、`iss`、`nonce` 均正確。
-> - Agent（native·loopback 動態連接埠 56510）授權碼 + PKCE → 回呼收 code → Horus `/oidc/exchange`：**真 token 交換 + RS256 驗籤一枚真 wentian id_token + ECDH 派生 K_sess + 建工作階段**。
-> - Agent 以 K_sess 握手連 WS、上報 115 事件(工作階段驗籤)；看板 `/api/exams/{id}/seats` 呈現 **`identity{sub,username,combatPower:86,realm,…}`** + `online:true`。
+> - Agent（native·loopback 動態連接埠 56510）授權碼 + PKCE → 回呼收 code → Horus `/oidc/exchange`：**真 token 交換 + RS256 驗簽一枚真 wentian id_token + ECDH 派生 K_sess + 建工作階段**。
+> - Agent 以 K_sess 握手連 WS、上報 115 事件(工作階段驗簽)；看板 `/api/exams/{id}/seats` 呈現 **`identity{sub,username,combatPower:86,realm,…}`** + `online:true`。
 > 唯一 harness 折衷：wentian dev node 直連 :3939 只發佔位頁(登入/同意 SPA 由 Caddy 託管)，故 login+consent 用指令碼按 Round1 既有交互 API 走(login-interaction finalize→consent confirm→resume)——**該交互機制是 Round1 生產既有、非 M4 改動**;loopback 收 code→exchange→session 全由**真 Agent** 完成。生產走真瀏覽器+SPA 無此折衷。
 
 ---
 
 ## 5. Horus 端任務（✅ S1–S7 + A1–A3 已實作 · 142 測試全綠含 12 項 M4 新增·累計 225 全綠）
 
-**已實作總覽**：`server/Identity/`(OidcTokenValidator·SessionStore·OidcExchange·OidcEndpoints·IngestAuth·OidcSecret/OidcJwks) + `contracts/SessionCrypto.cs`(ECDH) + ingest 改造(EventIngest/ImageIngest 工作階段驗籤 + 身分強制) + 看板富畫像;`agentcore/Identity/OidcLoginFlow.cs`(loopback 登入) + UplinkClient 工作階段簽名 + Agent Program 登入串接。**金鑰選型最終定案**:①id_token 驗籤 = **純 BCL RSA-PKCS1-SHA256**(無 JWT 相依·預置 JWKS 離線驗)②工作階段金鑰 = **ECDH-P256(BCL)→ SHA256 KDF → K_sess**,重複使用既有 HMAC 雜湊鏈(只換金鑰源·私鑰不過網)。**A1/A2 閉合已端到端鎖定**(OidcIngestAuthTests:本人事件接受 / 拿自己工作階段給他人栽贓拒 / 改 agentId 搶 seq 拒 / both 模式 PSK 共存)。
+**已實作總覽**：`server/Identity/`(OidcTokenValidator·SessionStore·OidcExchange·OidcEndpoints·IngestAuth·OidcSecret/OidcJwks) + `contracts/SessionCrypto.cs`(ECDH) + ingest 改造(EventIngest/ImageIngest 工作階段驗簽 + 身分強制) + 看板富畫像;`agentcore/Identity/OidcLoginFlow.cs`(loopback 登入) + UplinkClient 工作階段簽名 + Agent Program 登入串接。**金鑰選型最終定案**:①id_token 驗簽 = **純 BCL RSA-PKCS1-SHA256**(無 JWT 相依·預置 JWKS 離線驗)②工作階段金鑰 = **ECDH-P256(BCL)→ SHA256 KDF → K_sess**,重複使用既有 HMAC 雜湊鏈(只換金鑰源·私鑰不過網)。**A1/A2 閉合已端到端鎖定**(OidcIngestAuthTests:本人事件接受 / 拿自己工作階段給他人栽贓拒 / 改 agentId 搶 seq 拒 / both 模式 PSK 共存)。
 
 ### 5.1 Server（`Horus.Server`）
 
 | # | 任務 | 要點 |
 |---|---|---|
-| S1 | **OIDC 用戶端模組** | 換 token = 向 wentian `/token` POST（client_secret_post）;ID token 驗籤用 `Microsoft.IdentityModel.Tokens`（RS256）+ **預置 wentian JWKS 公鑰**（啟動時可從公用網路 wentian 拉 JWKS 快取 + kid 檢核;離線備援用設定內嵌公鑰）。檢核 iss/aud(=horus client_id)/exp/nonce |
+| S1 | **OIDC 用戶端模組** | 換 token = 向 wentian `/token` POST（client_secret_post）;ID token 驗簽用 `Microsoft.IdentityModel.Tokens`（RS256）+ **預置 wentian JWKS 公鑰**（啟動時可從公用網路 wentian 拉 JWKS 快取 + kid 檢核;離線備援用設定內嵌公鑰）。檢核 iss/aud(=horus client_id)/exp/nonce |
 | S2 | **工作階段儲存** | `sessionId → {sub, profile, agentPubKey, examId, machineId, issuedAt, expiresAt}`;有效期 = 考試時長上限;寫入資料庫（重新啟動存活）或記憶體+持久化。**考試派發(2026-07-03)**:新增 `RevokeByExam`（全場遠程登出即 DELETE 工作階段） |
-| S3 | **`/oidc/exchange` 端點** | 收 `{code, code_verifier, agentPubKey, agentId, machineId}` → 換 token → 驗籤 → 建工作階段 → 回 `{sessionId, examId, seatId, profile}`。一次性 code 防重放。**考試派發(2026-07-03)**:examId 伺服器端指派（當前活躍考試,無則 `no_active_exam` 拒,且先於 token 交換,不白耗授權碼）;seatId := username（不安全/空退回 sub,`ExamDispatch.SeatFrom`）;配套 `GET /oidc/active-exam`（待命輪詢·公開）與 `GET /oidc/session`（工作階段探針·sessionId 即憑證） |
+| S3 | **`/oidc/exchange` 端點** | 收 `{code, code_verifier, agentPubKey, agentId, machineId}` → 換 token → 驗簽 → 建工作階段 → 回 `{sessionId, examId, seatId, profile}`。一次性 code 防重放。**考試派發(2026-07-03)**:examId 伺服器端指派（當前活躍考試,無則 `no_active_exam` 拒,且先於 token 交換,不白耗授權碼）;seatId := username（不安全/空退回 sub,`ExamDispatch.SeatFrom`）;配套 `GET /oidc/active-exam`（待命輪詢·公開）與 `GET /oidc/session`（工作階段探針·sessionId 即憑證） |
 | S4 | **ingest 鑑權改造** | 握手/事件/圖片/擊鍵改驗**工作階段公鑰簽名**（Ed25519）而非 PSK;**強制事件體身分 == 工作階段 sub**;seq 歸屬工作階段 → 閉合 A1/A2 |
 | S5 | **authMode 門** | 設定 `authMode: psk \| oidc \| both`（遷移用，見 §6）;`both` 相容舊 PSK 連接與新 OIDC 工作階段 |
 | S6 | **座位/身分模型** | `seats`/`events.seat_id` 語義改為 wentian 帳戶標識;`seats` 存 `sub` + 富 profile 快照;看板展示使用者名/暱稱/道號/境界/戰力/頭像 |
@@ -380,7 +380,7 @@ M4 用 **wentian OIDC 的 per-user 身分**取代 Horus 現有的**全場共享 
 ### 5.3 測試
 
 - **Mock OIDC provider**（仿 wentian `providerShim`）:簽發可控 ID token（RS256 測試金鑰）。
-- 案例：登入流端到端;ID token 驗籤（有效/過期/錯 aud/錯 iss/壞簽名 → 拒）;工作階段綁定;**ingest 強制身分==工作階段（栽贓事件被拒 → 鎖定 A1 閉合）**;**seq 搶佔被拒（A2 閉合）**;authMode both 共存;富 claim 透傳到看板。
+- 案例：登入流端到端;ID token 驗簽（有效/過期/錯 aud/錯 iss/壞簽名 → 拒）;工作階段綁定;**ingest 強制身分==工作階段（栽贓事件被拒 → 鎖定 A1 閉合）**;**seq 搶佔被拒（A2 閉合）**;authMode both 共存;富 claim 透傳到看板。
 
 ---
 
@@ -411,7 +411,7 @@ M4 用 **wentian OIDC 的 per-user 身分**取代 Horus 現有的**全場共享 
 ## 8. 里程碑內建議順序
 
 1. **wentian 側**（可先行，獨立）：C1→C2→C3→C4→C5，起測試 client。
-2. **Horus Server**：S1（驗籤）→S2/S3（工作階段）→S6（身分模型）→S4/S5（ingest 改造 + authMode both）→S7。
+2. **Horus Server**：S1（驗簽）→S2/S3（工作階段）→S6（身分模型）→S4/S5（ingest 改造 + authMode both）→S7。
 3. **Horus Agent**：A1（登入流）→A2（憑證）→A3。
 4. **測試**：Mock provider + 端到端 + A1/A2 鎖定案例。
 5. **灰度**：`both` 上線一場 → 驗收 → `oidc` 強制。
@@ -442,7 +442,7 @@ M4 用 **wentian OIDC 的 per-user 身分**取代 Horus 現有的**全場共享 
 > 而此前撤 `horus` 是採集端與看板一起斷。
 >
 > **下文保留原文**，記著當時的時序與踩過的坑（§10.3 的 R5 拓撲仍然有效且重要：
-> 監考伺服器跑在監考電腦上、自籤 HTTPS、`redirect_uri` 每臺一條）。
+> 監考伺服器跑在監考電腦上、自簽 HTTPS、`redirect_uri` 每臺一條）。
 
 M4 的 OIDC 只把身分用在**採集面防栽贓**（A1/A2）；身分的**授權語義**（誰是考生、誰是監考員）此前為零——看板/管理端仍靠**獨立的靜態 `adminToken`**，與 wentian 身分無任何關聯。M4·RBAC 補上這層。
 

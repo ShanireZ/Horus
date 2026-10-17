@@ -1,12 +1,14 @@
-# Horus · RootPage 卡片资源
+<a id="horus--rootpage-卡片资源"></a>
 
-日期：2026-09-06。用户要求本轮卡片背景保存在各自项目，本目录为自包含候选包。
+# Horus · RootPage 卡片資源
 
-状态：待用户确认具体预览，尚未覆盖正式品牌资产。
+日期：2026-09-06。使用者要求本輪卡片背景保存在各自專案，本目錄為自包含候選包。
 
-- 原生源图：horus-card-bg-source.png
+狀態：待使用者確認具體預覽，尚未覆蓋正式品牌資產。
+
+- 原生源圖：horus-card-bg-source.png
 - Web 使用版：horus-card-bg.webp
-- 制作参数与哈希：manifest.json
-- 完整提示词与来源：generation-record.md
+- 製作參數與雜湊：manifest.json
+- 完整提示詞與來源：generation-record.md
 
-用途是 RootPage 的平台导航卡。正文、Logo 与交互仍由 DOM 承担。采用后放入本项目 assets/brand/，与 BetaPass/std/brand/horus/ 镜像，RootPage 只消费 WebP。
+用途是 RootPage 的平台導覽卡。正文、Logo 與交互仍由 DOM 承擔。採用後放入本專案 assets/brand/，與 BetaPass/std/brand/horus/ 鏡像，RootPage 只消費 WebP。

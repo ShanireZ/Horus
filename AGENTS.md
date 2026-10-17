@@ -20,7 +20,7 @@ P147/P149：當前 issuer pass.betaoi.cc，公開靜態主頁 hr.betaoi.cc；cn 
 - `agentcore/`（Horus.Agent.Core，net8.0）保持平台無關，承載WS/HTTP握手、hello/ack、指數退避重連、續傳、斷網緩衝、設定、雜湊鏈，供測試直接引用。
 - `agent/`（net8.0-windows）僅Windows採集：ETW/UIAutomation/WMI/抓屏；單檔案exe含requireAdministrator manifest，啟動會請求管理員權限。
 - `server/`（net8.0/ASP.NET Core minimal API+WS）+Microsoft.Data.Sqlite+檔案；`server/wwwroot/`是原生單頁看板，無前端打包鏈。本機ONNX CLIP按圖搜圖用暴力餘弦，未用sqlite-vec。
-- `tests/`是xUnit端到端；改contracts/agentcore/server/schema時核協定黃金格式、握手驗籤、圖片/擊鍵冪等與人工裁決。事件/圖片共用seq空間，逐條ack不能改成範圍確認；完整形狀回查api-contract。
+- `tests/`是xUnit端到端；改contracts/agentcore/server/schema時核協定黃金格式、握手驗簽、圖片/擊鍵冪等與人工裁決。事件/圖片共用seq空間，逐條ack不能改成範圍確認；完整形狀回查api-contract。
 - live/archive DDL分別在 `schema/schema.sql`、[schema-archive.sql](schema/schema-archive.sql)。
 
 ## 檢測、隱私與身分硬線
@@ -29,7 +29,7 @@ P147/P149：當前 issuer pass.betaoi.cc，公開靜態主頁 hr.betaoi.cc；cn 
 - 能用OS信號判的不拍圖；圖僅可疑時刻+隨機基線（覆蓋IDE外掛），1080p WebP q75、隨機30–90s（architecture §0）。手機/第二設備/未覆蓋多屏須如實標盲區，物理監考備援。
 - **唯一可選出網是伺服器視覺LLM識圖**；中繼資料/原圖/向量/看板留區域網路。送雲圖最小化、降取樣、剝EXIF/XMP/IPTC/ICC，原圖永不出網。裁剪/打碼已按owner決策移除，供應商與方案以architecture §5為準。
 - 熱資料保留30天；隨後可疑/已判事件、證據圖、視覺結果（表名ocr_results）、裁決、考試中繼資料、雜湊錨轉archive；其餘乾淨基線/低危例行事件/心跳清理。不能把“關鍵資料歸檔”簡化為全刪。
-- IdP是BetaPass，非WenTian；簽名允許清單隻有PS256，端點在根路徑；scope為openid profile，不登記horus_profile。身分用sub/name/username，username為座位標識不是顯示欄位。
+- IdP是BetaPass，非WenTian；簽名允許清單只有PS256，端點在根路徑；scope為openid profile，不登記horus_profile。身分用sub/name/username，username為座位標識不是顯示欄位。
 - 姓名/使用者名取userinfo `/me`，不從id_token建身分；`OidcTokenValidator`僅給OidcSubject，身分須經 `Userinfo.FetchAsync`。BetaPass無舊conformIdTokenClaims豁免。
 - 看板由BetaPass `horus-admin`平台開關存取資格，Horus不本機判業務角色。採集端與看板心跳不同，按m4訂正表實作，不把瀏覽器選主套進原生Agent。
 
@@ -39,7 +39,7 @@ P147/P149：當前 issuer pass.betaoi.cc，公開靜態主頁 hr.betaoi.cc；cn 
 
 | 何時 | 命令 | 前置 / 通過覆蓋 |
 |---|---|---|
-| 本機開發執行 | 在 `server/`執行 `dotnet run -c Debug` | 按 [server/README](server/README.md)設定本機樣例與隔離dataDir/dbPath；會起服務/看板，不能拿現場設定當測試夾具 |
+| 本機開發執行 | 在 `server/`執行 `dotnet run -c Debug` | 按 [server/README](server/README.md)設定本機範例與隔離dataDir/dbPath；會起服務/看板，不能拿現場設定當測試夾具 |
 | 程式碼/協定變化 | `dotnet build Horus.sln -c Debug` → `dotnet test Horus.sln -c Debug` | Windows可建置net8.0-windows Agent；相依需已還原；核結束代碼及測試零失敗，覆蓋倉內契約與端到端 |
 | 看板/瀏覽器變化 | 上述測試 + 實際監考工作站走查 | 機構管理Chrome/Edge當前及前一主版本；登入、座位刷新、複核、燈箱、考試控制逐項驗 |
 | 開考前 | 現場走查及權威部署/身分預檢 | 不以倉內測試代替真實採集權限、網路、OIDC和硬體條件 |

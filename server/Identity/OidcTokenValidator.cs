@@ -4,12 +4,12 @@ using System.Text.Json;
 
 namespace Horus.Server.Identity;
 
-/// 貝塔通 OIDC **id_token 離線驗籤**(**PS256** JWT)。**純 BCL,無第三方 JWT 相依**——
+/// 貝塔通 OIDC **id_token 離線驗簽**(**PS256** JWT)。**純 BCL,無第三方 JWT 相依**——
 /// 區域網路伺服器預置貝塔通 JWKS(RSA 公鑰)後即可離線驗,不必每次回呼 IdP(見 docs/m4-identity-oidc.md §5 S1)。
 ///
-/// ★★ **演算法固定為 PS256(RSA-PSS · SHA-256 · 鹽長 = 摘要長 32B)**,這是**允許清單隻有一項**,
+/// ★★ **演算法固定為 PS256(RSA-PSS · SHA-256 · 鹽長 = 摘要長 32B)**,這是**允許清單只有一項**,
 ///   不是「優先 PS256」。判據有兩條:
-///   ① 貝塔通的金鑰集**只有 PS256**(其 P58),別的演算法它一枚都籤不出來;
+///   ① 貝塔通的金鑰集**只有 PS256**(其 P58),別的演算法它一枚都簽不出來;
 ///   ② 允許清單越窄越好 —— 讓權杖自己挑填充方案等於把選擇權交給攻擊者。
 ///   ★ 此前這裡寫死 RS256(RSA-PKCS1),那是對著舊 wentian 的。指向貝塔通後**每一枚 id_token
 ///   都會在 alg 那一行被拒**,而回報錯誤只說「alg 非 …」,很容易被當成權杖壞了去查 IdP。
@@ -50,26 +50,26 @@ public sealed class OidcTokenValidator
         return new OidcSubject(Str(payload, "sub")!);   // ValidatePayload 已確認 sub 非空
     }
 
-    /// 只驗籤與協定 claims,回傳原始 payload。
+    /// 只驗簽與協定 claims,回傳原始 payload。
     /// ★ 抽出來是給**撤權通知**用的(見 <see cref="BetapassRevokeEndpoint"/>):那枚權杖走同一套
     ///   公鑰與同樣的 iss/aud/exp/alg 檢核,但載荷是 `jti`/`purpose` 而不是身分 claims,
-    ///   且**沒有 nonce**(不是登入流程)。**共用這一段而不是另寫一份驗籤**,是為了不讓
-    ///   「兩處各有一套驗籤」這種最容易分家的形態出現。
+    ///   且**沒有 nonce**(不是登入流程)。**共用這一段而不是另寫一份驗簽**,是為了不讓
+    ///   「兩處各有一套驗簽」這種最容易分家的形態出現。
     public JsonElement ValidatePayload(string idToken, string? expectedNonce, double nowUnix)
     {
         string[] parts = idToken.Split('.');
         if (parts.Length != 3) throw new OidcValidationException("id_token 结构非法(非 3 段 JWT)");
 
         JsonElement header = ParseSegment(parts[0], "header");
-        // ★ 允許清單隻有 PS256。**不要改成「RS256 或 PS256 都收」** —— 同一把 RSA 公鑰兩種填充都驗得通,
-        //   放寬等於憑空多一條路,而貝塔通根本籤不出 RS256(其 P58),多出來的那條只服務於攻擊者。
+        // ★ 允許清單只有 PS256。**不要改成「RS256 或 PS256 都收」** —— 同一把 RSA 公鑰兩種填充都驗得通,
+        //   放寬等於憑空多一條路,而貝塔通根本簽不出 RS256(其 P58),多出來的那條只服務於攻擊者。
         if (Str(header, "alg") != SigningAlg)
             throw new OidcValidationException($"id_token alg 非 {SigningAlg}(收到 {Str(header, "alg") ?? "null"});贝塔通只签 {SigningAlg}");
         string? kid = Str(header, "kid");
         if (kid is null || !_keysByKid.TryGetValue(kid, out RSA? rsa))
             throw new OidcValidationException($"id_token kid 未命中 JWKS(kid={kid ?? "null"});密钥可能已轮换,需同步新 JWKS");
 
-        // 驗籤:RSA-PSS-SHA256 over ASCII("header.payload")。
+        // 驗簽:RSA-PSS-SHA256 over ASCII("header.payload")。
         // ★ .NET 的 RSASignaturePadding.Pss 鹽長恆 = 摘要長(SHA-256 → 32B),與 JOSE 對 PS256 的規定一致,
         //   因此這裡不需要也無法另行指定鹽長。
         byte[] signed = Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]);
@@ -151,7 +151,7 @@ public sealed class OidcTokenValidator
 
 }
 
-/// id_token 驗籤通過後**能拿到的全部東西**:一個 `sub`。
+/// id_token 驗簽通過後**能拿到的全部東西**:一個 `sub`。
 ///
 /// ★★ **故意不含姓名與使用者名。** 貝塔通把 `conformIdTokenClaims` 留在上游預設值 `true`,
 ///   授權碼流下 id_token 只帶 `sub` 與協定 claims —— 身分 claims 一律只在 userinfo 出現

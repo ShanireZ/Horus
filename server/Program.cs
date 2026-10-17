@@ -256,7 +256,7 @@ builder.Services.AddSingleton<Horus.Server.Identity.SessionStore>();   // both/o
 // ★ 無條件註冊 —— 預檢在兩條 OIDC 連線路徑都沒開時也會讀它,而那時它如實報「從未探過」。
 builder.Services.AddSingleton<Horus.Server.Identity.BetapassProbeState>();
 
-// 撤權通知的驗籤器:要按**兩個** client_id 分別試 aud(採集面 / 監考臺),而 OidcTokenValidator
+// 撤權通知的驗簽器:要按**兩個** client_id 分別試 aud(採集面 / 監考臺),而 OidcTokenValidator
 // 建構時綁死單一 aud,故按候選各備一個。★ **單例** —— 每次請求現 new 等於每一發通知都重新
 // 解析 JWKS 並 RSA.Create 若干把,而那些句柄從不 Dispose;端點頻率低不會立刻出事,
 // 正因如此也不會有人來修。
@@ -441,7 +441,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     {
         string? url = app.Urls
             .Select(u => u.Replace("0.0.0.0", "127.0.0.1").Replace("[::]", "127.0.0.1").Replace("//+", "//127.0.0.1").Replace("//*", "//127.0.0.1"))
-            .OrderBy(u => u.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? 1 : 0)   // http 優先:自籤 https 首開有瀏覽器告警
+            .OrderBy(u => u.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? 1 : 0)   // http 優先:自簽 https 首開有瀏覽器告警
             .FirstOrDefault();
         if (string.IsNullOrEmpty(url)) return;
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });

@@ -3,7 +3,7 @@ using Horus.Contracts;
 namespace Horus.Agent.Integrity;
 
 /// 事件雜湊鏈的**有狀態**封裝(維護 _prev)。實際 canonical / 雜湊 / 簽名邏輯在
-/// Horus.Contracts.EventCanonical,與伺服器驗籤共用同一實作。
+/// Horus.Contracts.EventCanonical,與伺服器驗簽共用同一實作。
 /// 非執行緒安全:呼叫方需串行化 Seal(保證鏈順序與 seq 一致)。
 public sealed class HashChain
 {

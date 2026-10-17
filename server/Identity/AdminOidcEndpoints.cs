@@ -110,7 +110,7 @@ public static class AdminOidcEndpoints
                 return Results.Content(ErrorPage("登录失败，请重试。", retryLink: true), "text/html; charset=utf-8", statusCode: 400);
             }
 
-            // 種管理工作階段 cookie(HttpOnly·SameSite=Lax 便於登入後 top-level 跳轉攜帶;不設 Secure 因自籤 https 亦可,瀏覽器對 https 會發)。
+            // 種管理工作階段 cookie(HttpOnly·SameSite=Lax 便於登入後 top-level 跳轉攜帶;不設 Secure 因自簽 https 亦可,瀏覽器對 https 會發)。
             ctx.Response.Cookies.Append("horus_admin", res.Session.SessionId, new CookieOptions
             {
                 HttpOnly = true,

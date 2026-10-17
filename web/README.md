@@ -29,7 +29,7 @@ cp assets/brand/fonts/OFL-1.1.txt web/assets/Cinzel-OFL-1.1.txt
 ```
 
 ★ `Cinzel-OFL-1.1.txt` 必須跟著字體一起走：Cinzel 按 SIL OFL 1.1 使用，
-**散布字體檔案時授權文字要在旁邊**。
+**散佈字體檔案時授權文字要在旁邊**。
 
 ## 本機預覽
 

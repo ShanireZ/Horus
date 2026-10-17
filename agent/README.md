@@ -6,7 +6,7 @@
 
 ## 執行環境
 - .NET 8 SDK，目標 `net8.0-windows`（Windows-only：UIAutomation / WMI / System.Drawing 抓屏）。
-- **需管理員權限**執行：WMI 取 `CommandLine`、ETW、全域剪貼板監聽都相依提權。
+- **需管理員權限**執行：WMI 取 `CommandLine`、ETW、全域剪貼簿監聽都相依提權。
 
 ## 建置 / 執行
 ```powershell
@@ -64,7 +64,7 @@ Program.cs                         装配 + 管线 + 待命/基线/心跳循环
 ## 設計要點（與 architecture / api-contract 對齊）
 - **URL 監控是第一防線**：判題站走白名單，瀏覽器出現任何非白名單 URL → risk 80 + 抓圖。讀不到 URL（隱身/冷門瀏覽器）→ 降級 risk 40 + 強制抓圖。
 - **隨機基線截圖不去重**：專為抓 IDE AI 外掛（補全不觸發處理程序/網路事件，只能靠定期看屏）。觸發型截圖才做 pHash 去重（漢明 ≤3）。
-- **隱私**：剪貼板只記長度/行數，**不上傳明文**。截圖原圖發伺服器（區域網路內），**視覺 LLM 識圖**（已取代 OCR）由伺服器側按收口策略（降取樣 + 剝中繼資料·原圖永不出網）處理，Agent 不直連雲。
+- **隱私**：剪貼簿只記長度/行數，**不上傳明文**。截圖原圖發伺服器（區域網路內），**視覺 LLM 識圖**（已取代 OCR）由伺服器側按收口策略（降取樣 + 剝中繼資料·原圖永不出網）處理，Agent 不直連雲。
 - **防篡改**：每條事件入雜湊鏈 + 簽名（`psk` 模式=HMAC-PSK / `oidc` 模式=工作階段金鑰·私鑰不過網）；`Handle` 用鎖串行化蓋章，保證鏈序與 seq 一致。
 
 ## 已知殘留 / 後續（誠實標註）
@@ -75,4 +75,4 @@ Program.cs                         装配 + 管线 + 待命/基线/心跳循环
 
 ## 建置排錯
 - 若 `System.Windows.Automation` 找不到：確認 `<UseWPF>true</UseWPF>`，必要時保留 `UIAutomationClient`/`UIAutomationTypes` 的 `<Reference>`。
-- 若剪貼板無回呼：確認以**桌面工作階段**（非服務 Session 0）執行；`ClipboardWatcher` 的 STA 執行緒訊息泵需桌面。
+- 若剪貼簿無回呼：確認以**桌面工作階段**（非服務 Session 0）執行；`ClipboardWatcher` 的 STA 執行緒訊息泵需桌面。

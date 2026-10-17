@@ -103,7 +103,7 @@ public sealed class AdminOidcFlow
         if (string.IsNullOrEmpty(idToken)) return new Result(false, "no_id_token", null);
         if (string.IsNullOrEmpty(accessToken)) return new Result(false, "no_access_token", null);
 
-        // 離線驗籤(dashboard aud·nonce)→ 只得到 sub
+        // 離線驗簽(dashboard aud·nonce)→ 只得到 sub
         OidcSubject subject;
         try { subject = _validator.Validate(idToken!, p.Nonce, now); }
         catch (OidcValidationException ex) { _log.LogWarning("监考员 id_token 验证失败:{Msg}", ex.Message); return new Result(false, "invalid_id_token", null); }

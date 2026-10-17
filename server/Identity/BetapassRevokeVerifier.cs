@@ -3,7 +3,7 @@ using Horus.Server.Config;
 
 namespace Horus.Server.Identity;
 
-/// 撤權通知權杖的驗籤器。
+/// 撤權通知權杖的驗簽器。
 ///
 /// ★★ **為什麼單獨一個類、且做成單例**:撤權權杖的 `aud` 可能是本機兩個 client_id 中的**任意一個**
 ///   (`horus-client` 採集面 / `horus-dashboard` 監考臺,貝塔通 P83),而
@@ -19,7 +19,7 @@ namespace Horus.Server.Identity;
 /// ★★ **它同時服務兩個入站端點**:`/internal/revoke`(撤權通知)與 `/internal/health`(探活,其 P94)。
 ///   兩者的權杖是**同一套簽名金鑰、同一個 `aud`(本機 client_id)、同一段 `signServiceToken`**
 ///   簽出來的(BetaPass `src/main.ts` 的 `signToken` 與 `revocation/notifier.ts` 並排可見),
-///   因此**驗籤這一層共用**,區別只在呼叫方還要不要訊息語義 —— 見 <see cref="Verify"/> 與
+///   因此**驗簽這一層共用**,區別只在呼叫方還要不要訊息語義 —— 見 <see cref="Verify"/> 與
 ///   <see cref="VerifyProbe"/>。
 ///   ★ 這一點與 rp-contract「多個入站端點按 `aud` 區分」**不衝突**:那條說的是
 ///   「撤權權杖」與「資源 audience 的推送權杖」之間要互斥,而探活權杖與撤權權杖本就
@@ -58,7 +58,7 @@ public sealed class BetapassRevokeVerifier
     /// 本機登記了幾個可接收撤權通知的用戶端。0 表示這臺機器根本收不了通知。
     public int CandidateCount => _candidates.Length;
 
-    /// 驗籤並取出訊息三要素。
+    /// 驗簽並取出訊息三要素。
     ///
     /// ★ `aud` 必須是**本機登記的 client_id 之一**;不是就拒 —— 這一條就是
     ///   「誰都能踢人下線」與「只有貝塔通能踢」的全部差別。
@@ -82,7 +82,7 @@ public sealed class BetapassRevokeVerifier
     /// ★ 與 <see cref="Verify"/> 的唯一差別是**不讀任何訊息語義** —— 探活權杖的 claims 只有
     ///   `iss` / `aud` / `sub`(= client_id 自己)/ `jti` / `iat` / `exp`,沒有 `purpose`,
     ///   也沒有要處置的物件。**簽名 / `alg` / `iss` / `aud` / `exp` 五項一個不少**,
-    ///   因為「驗不驗籤」就是「這份接入拓撲是不是白送給任何能打到這個位址的人」的全部差別(其 P94)。
+    ///   因為「驗不驗簽」就是「這份接入拓撲是不是白送給任何能打到這個位址的人」的全部差別(其 P94)。
     ///
     /// ★★ **探活權杖走的是自己的候選集** <see cref="_probeCandidates"/>,與撤權分開。
     ///   owner 2026-08-11 拍板:由貝塔通給探活權杖一個**專屬 `aud`**(`&lt;client_id&gt;#health`),
@@ -102,7 +102,7 @@ public sealed class BetapassRevokeVerifier
     ///   語義約束**、不相依對側保持任何欄位 —— 而這次改動恰恰相依對側。兩道都留著。
     public string VerifyProbe(string token) => VerifyCore(token, "探活", _probeCandidates).ClientId;
 
-    /// 共用的驗籤核心:逐個候選 `aud` 試,全部試完仍不過才算失敗。
+    /// 共用的驗簽核心:逐個候選 `aud` 試,全部試完仍不過才算失敗。
     /// ★ `expectedNonce: null` —— 這兩類權杖都不是登入流程,本就沒有 nonce。
     /// ★★ **候選集由呼叫方傳入**,不再讀某個欄位 —— 「撤權用哪一份、探活用哪一份」
     ///   因此是**呼叫點上看得見的事實**,而不是要去讀建構函式才知道的約定。

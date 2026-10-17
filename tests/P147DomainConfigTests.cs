@@ -12,7 +12,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// P147：已批准的主域遷移，真實設定、驗籤與原生回呼串接。
+/// P147：已批准的主域遷移，真實設定、驗簽與原生回呼串接。
 public class P147DomainConfigTests
 {
     private const string Issuer = "https://pass.betaoi.cc";

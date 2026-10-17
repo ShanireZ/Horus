@@ -6,8 +6,8 @@ namespace Horus.Server.Analysis;
 /// 伺服器側風險復判(L1 重算)。**不信任 Agent 自報的 risk** —— 從 type + payload 獨立推導伺服器風險,
 /// 與 Agent 自報取 max 作為「有效風險」用於入隊 / 看板。
 ///
-/// 閉合 architecture §10.1 頭號殘留:持 PSK 的學員機即便把「訪問 AI 站」事件籤成 risk=0,
-/// 伺服器憑獨立黑名單(AI 站 / 搜索引擎 / 遠控工具)仍判高危、照樣入隊,並記錄 agent_risk_understated
+/// 閉合 architecture §10.1 頭號殘留:持 PSK 的學員機即便把「訪問 AI 站」事件簽成 risk=0,
+/// 伺服器憑獨立黑名單(AI 站 / 搜尋引擎 / 遠控工具)仍判高危、照樣入隊,並記錄 agent_risk_understated
 /// 作為篡改取證信號。判據只用伺服器自持的黑名單 + 該考試**已下發**白名單,絕不採信 Agent 的 whitelisted 自報。
 public static class RiskModel
 {
@@ -16,7 +16,7 @@ public static class RiskModel
         { "openai", "chatgpt", "doubao", "deepseek", "gemini", "bard", "claude", "anthropic",
           "kimi", "moonshot", "tongyi", "qwen", "wenxin", "yiyan", "perplexity", "copilot", "poe", "you.com" };
 
-    // 搜索引擎(命中即中高危)。
+    // 搜尋引擎(命中即中高危)。
     public static readonly string[] SearchHosts =
         { "google", "baidu", "bing", "sogou", "so.com", "360.cn", "duckduckgo", "yandex" };
 
@@ -46,7 +46,7 @@ public static class RiskModel
                     // 真實 Agent 的內部頁本走 url_unreadable,此為伺服器側縱深)。
                     if (host.Length == 0) return 0;
                     if (HostMatchesAny(host, AiHosts)) return RiskScores.BrowserUrlAi;           // 獨立判定:AI 站
-                    if (HostMatchesAny(host, SearchHosts)) return RiskScores.BrowserUrlSearch;    // 獨立判定:搜索引擎
+                    if (HostMatchesAny(host, SearchHosts)) return RiskScores.BrowserUrlSearch;    // 獨立判定:搜尋引擎
                     if (whitelistHosts is not null)
                         return HostWhitelisted(host, whitelistHosts) ? 0 : RiskScores.BrowserUrlNonWhitelist;   // 有白名單可判:非白名單站高危
                 }
@@ -60,7 +60,7 @@ public static class RiskModel
                 return 0;
 
             case SignalType.Clipboard:
-                // **不信任 Agent 的 `large` 自報**:從 payload 的 len/lines 獨立復判(閉合"籤 large=false 低估逃逸")。
+                // **不信任 Agent 的 `large` 自報**:從 payload 的 len/lines 獨立復判(閉合"簽 large=false 低估逃逸")。
                 return IsLargePaste(payload, pasteCharThreshold) ? RiskScores.LargePaste : 0;
 
             case SignalType.Usb:         return RiskScores.Usb;
@@ -143,7 +143,7 @@ public static class RiskModel
     private static string HostOf(string url)
     {
         // 解析失敗回傳**空串**(不再退回回傳整條 URL)—— 否則子串匹配會在 path/query 上跑,
-        // 把 "example.com/search?q=google" 誤判搜索頁(閉合第三輪 F5 的整串匹配假陽性放大器)。
+        // 把 "example.com/search?q=google" 誤判搜尋頁(閉合第三輪 F5 的整串匹配假陽性放大器)。
         try { return new Uri(url).Host.ToLowerInvariant(); }
         catch { return ""; }
     }

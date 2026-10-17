@@ -7,7 +7,7 @@ namespace Horus.Server.Identity;
 ///
 /// ⏳★★ **本端目前不會被呼叫**(貝塔通 **P101**,owner 2026-08-11):Horus Server 是區域網路機、
 ///   **沒有可撥位址**,因此**有意不給它登記 `revoke_callback_url`** —— 而探活位址按撤權回呼
-///   同源推導,沒登記就**不在探活名單裡**。★ 實作照舊保留:走拉取模型那天要用**同一套驗籤與處置**,
+///   同源推導,沒登記就**不在探活名單裡**。★ 實作照舊保留:走拉取模型那天要用**同一套驗簽與處置**,
 ///   刪了將來還得重寫。判據與殘餘風險見 <see cref="Config.ServerConfig.BetapassRevokePushExpected"/>。
 ///
 /// 以下描述的是**連線路徑真的通起來時**的口徑(即 `betapassRevokePushExpected=true` 的部署):
@@ -31,7 +31,7 @@ namespace Horus.Server.Identity;
 ///    ★ 那正是他們用來發現「這家 RP 壓根沒實作探活」的信號(見其 `probe.ts` 對 `error` 的說明)。
 ///
 /// 三條硬要求,逐條落在下面:
-/// ① **必須驗籤**(與 `/internal/revoke` 同一套:拉 `/jwks`、按 `kid` 取公鑰、`PS256`、`aud` 是不是自己)。
+/// ① **必須驗簽**(與 `/internal/revoke` 同一套:拉 `/jwks`、按 `kid` 取公鑰、`PS256`、`aud` 是不是自己)。
 ///    不驗就等於把「貝塔通接了哪些站」這份接入拓撲白送給任何能打到這個位址的人。
 /// ② 回 **204 無回應體**。
 ///    ⚠ **判據以對側程式碼為準,不以其契約文字為準**:`docs/rp-contract.md` 裡
@@ -57,7 +57,7 @@ public static class BetapassHealthEndpoint
         {
             ServerConfig cfg = ctx.RequestServices.GetRequiredService<ServerConfig>();
 
-            // 兩條連線路徑都沒開 OIDC:本機根本不是貝塔通的 RP,也沒有可驗籤的公鑰。
+            // 兩條連線路徑都沒開 OIDC:本機根本不是貝塔通的 RP,也沒有可驗簽的公鑰。
             // 回 410 與 `/internal/revoke` 同口徑 = 「別再當我是接入方」。
             // ★ 它**不會**把本站判成離線(見類註解②:對側只有連不上才判離線),
             //   而是被如實記成一條 `HTTP 410` 擺在其後台 —— 這正是要的:

@@ -1,7 +1,7 @@
 namespace Horus.Server.Analysis.Vision;
 
 /// 視覺 LLM 對一張截圖的判定 —— **L2:視覺 LLM 取代 OCR + L3 Logo,合併為單一視覺級**(owner 拍板)。
-/// 一次「看懂畫面」同時做:文字提取 + AI 對話介面 / 搜索頁 / IDE 幽靈補全 / 遠控工具識別 + 分類。
+/// 一次「看懂畫面」同時做:文字提取 + AI 對話介面 / 搜尋頁 / IDE 幽靈補全 / 遠控工具識別 + 分類。
 /// 只作一條**線索**(是否可疑 + 類別 + 信賴度 + 人話證據 + 可選文字),由人裁決(架構鐵律 §3)。
 public sealed record VisionVerdict
 {

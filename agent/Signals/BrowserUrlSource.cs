@@ -25,7 +25,7 @@ public sealed class BrowserUrlSource : ISignalSource
     private string _lastUrl = "";
 
     // 位址欄元素快取(BUG#3 加固):同前台視窗(hwnd)重複使用已定位的位址欄 AutomationElement,
-    // 跳過每次全樹 UIA 遍歷,降低 CPU 開銷與讀錯概率;視窗切換/快取失效才重新探測。
+    // 跳過每次全樹 UIA 遍歷,降低 CPU 開銷與讀錯機率;視窗切換/快取失效才重新探測。
     private IntPtr _cachedHwnd;
     private AutomationElement? _addressBarCache;
 

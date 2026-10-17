@@ -20,7 +20,7 @@ internal static class IngestBody
         if (req.ContentLength is long declared && declared > maxBytes)
             return (null, 413, "too_large");
 
-        // 2) 緩衝整條 body(既用於驗籤也用於解析);流讀一次即耗盡,故先整段讀入。
+        // 2) 緩衝整條 body(既用於驗簽也用於解析);流讀一次即耗盡,故先整段讀入。
         using var ms = new MemoryStream();
         await req.Body.CopyToAsync(ms);
 

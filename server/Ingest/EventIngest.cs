@@ -130,7 +130,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         if (!frame.TryGetProperty("event", out JsonElement e) || e.ValueKind != JsonValueKind.Object) return;
 
         // BUG#6:信封外層 seq 與內層 @event.seq 冗餘(線協定)。Agent 用內層 e.Seq 簽名,故**以內層為權威**;
-        // 若外層與內層不一致(協定被中間改寫 / 版本錯配)記告警,但不阻斷(仍按內層權威 seq 驗籤與寫入資料庫)。
+        // 若外層與內層不一致(協定被中間改寫 / 版本錯配)記告警,但不阻斷(仍按內層權威 seq 驗簽與寫入資料庫)。
         long seq = e.TryGetProperty("seq", out JsonElement eSeqEl) && eSeqEl.TryGetInt64(out long eSeq)
             ? eSeq
             : (frame.TryGetProperty("seq", out JsonElement sq) && sq.TryGetInt64(out long s) ? s : 0);
@@ -144,7 +144,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         string machineId = Str(e, "machineId") ?? "";
 
         // M4·閉合 A1:OIDC 路徑下,事件體自報身分**必須 == 工作階段綁定身分**,否則是拿自己工作階段給他人栽贓 —— 拒收。
-        // (K_sess 只證明「是本工作階段所籤」,不證明「身分為真」;身分真偽靠此強制 + OIDC 認證。)seq 空間歸屬本工作階段 agent → 閉合 A2。
+        // (K_sess 只證明「是本工作階段所簽」,不證明「身分為真」;身分真偽靠此強制 + OIDC 認證。)seq 空間歸屬本工作階段 agent → 閉合 A2。
         if (session is not null && !session.IdentityMatches(examId, seatId, agentId))
         {
             await link.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "error", code = "identity_mismatch", seq }), ct);
@@ -159,7 +159,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         string? hashSelf = Str(e, "hashSelf");
         string payloadRaw = e.TryGetProperty("payload", out JsonElement pe) ? pe.GetRawText() : "{}";
 
-        // 驗籤:sig = HMAC(key, hashSelf + "\n" + seq)。key = PSK 或 OIDC 工作階段 K_sess(見 IngestAuth)。僅相依 hashSelf 字串。
+        // 驗簽:sig = HMAC(key, hashSelf + "\n" + seq)。key = PSK 或 OIDC 工作階段 K_sess(見 IngestAuth)。僅相依 hashSelf 字串。
         if (authKey is not null)
         {
             string want = EventCanonical.Sig(authKey, hashSelf ?? "", seq);
@@ -188,7 +188,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         double recvTs = Now();
 
         // 伺服器側風險復判(**不信任 Agent 自報 risk**):憑獨立黑名單 + 該考試已下發白名單重算。
-        // 有效風險 = max(agentRisk, serverRisk);持 PSK 學員機把「訪問 AI 站」籤成 risk=0 也壓不住入隊。
+        // 有效風險 = max(agentRisk, serverRisk);持 PSK 學員機把「訪問 AI 站」簽成 risk=0 也壓不住入隊。
         // 策略取 AgentHub **已解析快取**(下發時重建),免每事件熱路徑重複 JsonDocument.Parse + 建 HashSet。
         SignalType sigType = ParseType(typeStr);
         JsonElement payloadEl = e.TryGetProperty("payload", out JsonElement pEl) ? pEl : default;

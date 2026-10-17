@@ -308,7 +308,7 @@ public sealed class ArchiveService : BackgroundService
                 @"INSERT INTO archive_events (id,exam_id,seat_id,agent_id,machine_id,seq,ts,type,payload,risk,server_risk,evidence_image_id,hash_prev,hash_self,sig)
                   VALUES (@id,@e,@seat,@agent,@machine,@seq,@ts,@type,@payload,@risk,@srisk,@ev,@hp,@hs,@sig)
                   ON CONFLICT(id) DO NOTHING",
-                // risk 存**原始 agent 自報值**(canonicalCore 籤的正是它)——歸檔後憑 machine_id + 原始 risk + payload 可獨立逐位元組復算 hash_self。
+                // risk 存**原始 agent 自報值**(canonicalCore 簽的正是它)——歸檔後憑 machine_id + 原始 risk + payload 可獨立逐位元組復算 hash_self。
                 // server_risk 另存旁註:有效風險 max(risk,server_risk) 用於 LoadSnapshot 關鍵性判定但**不入錨點**(否則 server_risk>risk 時錨點不可複驗);
                 // 留 server_risk 列使歸檔庫仍能查證"伺服器為何判高危/多少分"(閉合 risk=0/server_risk=80 事件歸檔後無從溯源)。
                 ("@id", ev.Id), ("@e", examId), ("@seat", ev.SeatId), ("@agent", ev.AgentId), ("@machine", ev.MachineId), ("@seq", ev.Seq),

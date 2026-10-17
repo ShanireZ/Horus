@@ -417,7 +417,7 @@ public class IngestTests
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);
 
-        // 學員機持 PSK,把"訪問 AI 站"事件合法籤成 risk=0 + whitelisted=true 試圖逃逸可疑佇列
+        // 學員機持 PSK,把"訪問 AI 站"事件合法簽成 risk=0 + whitelisted=true 試圖逃逸可疑佇列
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.BrowserUrl,
             new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = true }, 0, seq: 1));
         JsonElement ack = await Ws.ReceiveAsync(ws);
@@ -491,7 +491,7 @@ public class IngestTests
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);
 
-        // agent 把 5000 字元大段粘貼籤成 large=false, risk=0;伺服器從 len/lines 獨立復判 → 60 入隊 + 篡改標記
+        // agent 把 5000 字元大段粘貼簽成 large=false, risk=0;伺服器從 len/lines 獨立復判 → 60 入隊 + 篡改標記
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.Clipboard,
             new() { ["len"] = 5000, ["lines"] = 80, ["large"] = false }, 0, seq: 1));
         await Ws.ReceiveAsync(ws);

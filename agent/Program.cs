@@ -12,7 +12,7 @@ using Horus.Contracts;   // AgentEvent / SignalType / Envelope(線協定共享)
 
 namespace Horus.Agent;
 
-/// 採集端入口。預設 MTA(利於 UIAutomation 用戶端);剪貼板監聽自帶 STA 執行緒。
+/// 採集端入口。預設 MTA(利於 UIAutomation 用戶端);剪貼簿監聽自帶 STA 執行緒。
 /// 考試派發(owner 決策 2026-07-03):OIDC 模式 = **常態待命循環** —— 設定裡沒有 examId/seatId;
 /// 輪詢伺服器「有無活躍考試」→ 有則彈瀏覽器 OIDC 登入(examId 伺服器端派發·seatId 由身分派生)→ 採集;
 /// 收到 exam_ended / session_revoked(或工作階段探針發現失效)→ 停採、棄工作階段,回待命等下一場。
@@ -31,7 +31,7 @@ internal static class Program
             ea.SetObserved();
         };
 
-        // ---- M5 保活模式散布(採集模式 = 無這些首參)----
+        // ---- M5 保活模式散佈(採集模式 = 無這些首參)----
         if (args.Length > 0)
         {
             switch (args[0])
@@ -194,7 +194,7 @@ internal static class Program
         CancellationToken ct = sessionCts.Token;
 
         var buffer = new LocalBuffer(Path.Combine(AppContext.BaseDirectory, "buffer"));
-        // OIDC 換場/重登:舊工作階段 K_sess 已死,殘留緩衝永不可驗籤(bad_sig)→ 清掉,防每次重連重放-被拒。
+        // OIDC 換場/重登:舊工作階段 K_sess 已死,殘留緩衝永不可驗簽(bad_sig)→ 清掉,防每次重連重放-被拒。
         // seq 高水位保留(seq.state),且 hello_ack 會按伺服器 MAX(seq) 對齊,不會撞舊 seq。
         if (cred.SessionId is not null) buffer.PurgeSession();
 

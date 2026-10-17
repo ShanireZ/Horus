@@ -26,11 +26,11 @@ dotnet run -c Debug                                # 或執行已發佈 exe
 ### 設定（`server.config.json`，見 sample）
 | 鍵 | 說明 |
 |---|---|
-| `urls` | Kestrel 綁定，如 `http://0.0.0.0:8080`（預設 8080，與 Agent 內置預設 / dist 成品 / 部署文件一致） |
+| `urls` | Kestrel 綁定，如 `http://0.0.0.0:8080`（預設 8080，與 Agent 內建預設 / dist 成品 / 部署文件一致） |
 | `dataDir` | 資料根目錄（SQLite 檔案 + 截圖原圖都在此下） |
 | `dbPath` | SQLite 檔案；`:memory:` 走記憶體（測試） |
-| `pskBase64` | 採集面預共享 HMAC 金鑰（base64），**與各 Agent 一致**。留空=關閉驗籤（僅整合測試） |
-| `keystrokeSecretBase64` | 擊鍵旁路金鑰（base64），判題後端籤 `X-Horus-KSig`。留空=關閉擊鍵鑑權（僅整合測試）。防同網學員機偽造/栽贓擊鍵 |
+| `pskBase64` | 採集面預共享 HMAC 金鑰（base64），**與各 Agent 一致**。留空=關閉驗簽（僅整合測試） |
+| `keystrokeSecretBase64` | 擊鍵旁路金鑰（base64），判題後端簽 `X-Horus-KSig`。留空=關閉擊鍵鑑權（僅整合測試）。防同網學員機偽造/栽贓擊鍵 |
 | `adminToken` | 管理/看板權杖。瀏覽器經 `POST /api/login` 換 **HttpOnly cookie**；指令碼用戶端用 `X-Horus-Admin` 頭（圖片位元組相容 `?t=`）。留空=關閉管理鑑權（僅整合測試）。**生產必配**，防學員機下發設定關檢測/拉證據圖/抹裁決 |
 | `riskThreshold` | **有效風險** ≥ 此值入可疑佇列（預設 50）。有效風險 = max(Agent 自報 risk, 伺服器獨立復判 server_risk) |
 | `onlineWindowSeconds` / `recentRiskWindowSeconds` | 座位線上判定 / 熱力風險統計視窗 |
@@ -50,7 +50,7 @@ dotnet run -c Debug                                # 或執行已發佈 exe
 |---|---|
 | `adminAuthMode` | 管理端鑑權：`token`（預設·靜態 `adminToken`）/ `oidc`（貝塔通 `horus-admin` 平台開關已存取資格的帳號；Horus 本機不判角色、無權杖後門） |
 | `oidcDashboardClientId` / `oidcDashboardClientSecret`(→`Enc`) / `oidcDashboardRedirectUri` / `adminSessionMinutes` | dashboard web client（`horus-dashboard`·env `HORUS_OIDC_DASHBOARD_SECRET`）、回呼（須與貝塔通登記值精確一致·如 `https://<服务器>/cb`）、管理工作階段 absolute 門預設 360min |
-| `httpsCertPath` / `httpsCertPassword` / `httpsSanHosts` | 自籤 HTTPS（遠端監考工作站 OIDC 回呼須 https；留空自動生成·SAN 自動含 localhost/127.0.0.1·`httpsSanHosts` 補伺服器 LAN IP/主機名）。僅 `urls` 含 https 時生效 |
+| `httpsCertPath` / `httpsCertPassword` / `httpsSanHosts` | 自簽 HTTPS（遠端監考工作站 OIDC 回呼須 https；留空自動生成·SAN 自動含 localhost/127.0.0.1·`httpsSanHosts` 補伺服器 LAN IP/主機名）。僅 `urls` 含 https 時生效 |
 
 **M3 CLIP 按圖搜圖（provider-agnostic 嵌入器·C# 暴力餘弦·**未用** sqlite-vec·見 [../docs/architecture-v0.2.md §8](../docs/architecture-v0.2.md)）**
 | 鍵 | 說明 |
@@ -76,7 +76,7 @@ dotnet run -c Debug                                # 或執行已發佈 exe
 **看板 / 複核（唯讀 + 寫）**
 - `GET  /api/exams` · `/api/exams/{examId}/seats` · `/{examId}/suspicious?status=` · `/{examId}/events?seatId=&limit=`
 - `GET  /api/images/{imageId}`（webp 位元組）· `/api/images/{imageId}/meta` — live 未命中**自動回落 archive 庫 + 冷存**（歸檔考試證據仍可取證）。
-- `GET  /api/exams/{examId}/integrity` — 雜湊鏈完整性離線稽核（`sigVerified` 標註是否驗籤；psk 未配時 `ok` 僅表錨點自洽+鏈連續）。
+- `GET  /api/exams/{examId}/integrity` — 雜湊鏈完整性離線稽核（`sigVerified` 標註是否驗簽；psk 未配時 `ok` 僅表錨點自洽+鏈連續）。
 - `GET  /api/archive/exams/{examId}` — 歸檔考試唯讀複核（彙總 + 裁決 + 關鍵事件 + 證據圖列表）。
 - `POST /api/exams/{examId}/search-image` — **CLIP 按圖搜圖**（上傳一張圖，C# 暴力餘弦 top-N 相似證據圖；需 `embedProvider` 啟用）。
 - `POST /api/exams`（建考試+座位）· `/api/exams/{examId}/end` · `/api/suspicious/{id}/decide`（人工裁決）
@@ -95,10 +95,10 @@ dotnet run -c Debug                                # 或執行已發佈 exe
 - `GET  /cb` — 貝塔通回呼：換 token → 僅按 PS256 驗 id_token subject → 從 userinfo `/me` 取姓名/使用者名 → 建管理工作階段 → 種 HttpOnly cookie → 跳看板。沒有 `horus-admin` 平台權限的帳號在貝塔通授權階段即被拒，Horus 不再檢查 `user_type`。
 
 ## 實作進度（見 architecture §15）
-- **M1 已實作**：ingest 寫入資料庫 / 冪等去重 / 圖片存盤去重 / HMAC 驗籤 / 可疑佇列 / 看板 + 人工裁決 + Agent 採集/握手/續傳/斷線重連。
+- **M1 已實作**：ingest 寫入資料庫 / 冪等去重 / 圖片存盤去重 / HMAC 驗簽 / 可疑佇列 / 看板 + 人工裁決 + Agent 採集/握手/續傳/斷線重連。
 - **M2 已實作**：**L2 視覺 LLM 識圖**(取代 OCR+Logo·provider-agnostic·小米 MiMo-V2.5)+ 伺服器側 `server_risk` 復判 + keystroke KSK 工作階段簽名 + admin HttpOnly cookie + DB 讀寫分離。
 - **M3 已實作**：**雜湊鏈完整性複驗**(ingest 復算 `bad_hash` 拒收 + 離線 `GET /api/exams/{id}/integrity` 稽核:錨點/sig/鏈連續/重新啟動邊界) + **歸檔作業** `ArchiveService`(到齡考試關鍵資料轉 archive 庫 + 清理 live + VACUUM) + **CLIP 按圖搜圖已完成實作**(provider-agnostic 嵌入器·本機 ONNX CLIP·**C# 暴力餘弦·未用 sqlite-vec**·僅嵌證據圖·`POST /api/exams/{id}/search-image` + 看板燈箱)。
-- **M4 已實作**：**採集面 OIDC**(貝塔通 per-user 身分取代共享 PSK·閉合事件通道栽贓 + seq 搶佔·`authMode=psk|oidc|both`) + **管理端平台存取資格**(`horus-admin` 開關在授權階段判定·管理端 OIDC 取代靜態權杖·`adminAuthMode=token|oidc`·自籤 HTTPS) + **考前預檢** `/api/preflight`。
+- **M4 已實作**：**採集面 OIDC**(貝塔通 per-user 身分取代共享 PSK·閉合事件通道栽贓 + seq 搶佔·`authMode=psk|oidc|both`) + **管理端平台存取資格**(`horus-admin` 開關在授權階段判定·管理端 OIDC 取代靜態權杖·`adminAuthMode=token|oidc`·自簽 HTTPS) + **考前預檢** `/api/preflight`。
 - **M5 已實作**：**採集端硬化**(保活三層看門狗 + 遮蔽/掛起/能力降級/異常重新啟動四類健康信號·伺服器獨立賦分入隊 + 座位健康度)——純檢測·不做核心對抗。
 - **考試派發（2026-07-03）**：examId 伺服器端派發（`/oidc/exchange` 指派活躍考試）· seatId=username · Agent 待命輪詢（`/oidc/active-exam`）· 全場遠程登出（`/api/exams/{id}/logout`）。
-- **待做**：擊鍵前端埋點已撤（判題走外部洛谷、無本機判題頁可埋點，核心"粘貼外部程式碼"信號由 Agent OS 級剪貼板檢測覆蓋；server 側 KSK 旁路保留待未來自控提交頁）。啟動時按權威 `schema.sql` 建表，跳過 `vec0` 虛表（CLIP 暴力餘弦不相依 sqlite-vec 擴充）。
+- **待做**：擊鍵前端埋點已撤（判題走外部洛谷、無本機判題頁可埋點，核心"粘貼外部程式碼"信號由 Agent OS 級剪貼簿檢測覆蓋；server 側 KSK 旁路保留待未來自控提交頁）。啟動時按權威 `schema.sql` 建表，跳過 `vec0` 虛表（CLIP 暴力餘弦不相依 sqlite-vec 擴充）。

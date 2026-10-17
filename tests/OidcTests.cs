@@ -15,11 +15,11 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// M4·S1 + 工作階段金鑰:id_token 離線驗籤(RS256)與 ECDH K_sess 協商的迴歸鎖定。
+/// M4·S1 + 工作階段金鑰:id_token 離線驗簽(RS256)與 ECDH K_sess 協商的迴歸鎖定。
 public class OidcTokenValidatorTests
 {
-    /// ★★★ 驗籤用的 issuer 夾具:**虛構網域**。
-    /// ★ 本組測的是驗籤器的行為(iss 不符要拒 / aud 不符要拒 / kid 輪換……),
+    /// ★★★ 驗簽用的 issuer 夾具:**虛構網域**。
+    /// ★ 本組測的是驗簽器的行為(iss 不符要拒 / aud 不符要拒 / kid 輪換……),
     ///   ★★ **與貝塔通此刻的 issuer 是什麼完全無關** —— 寫真實網域只會讓它跟著上游一起腐爛,
     ///   而 2026-08-26 實測:那種腐爛是**自洽的**,一道判據都不會紅。
     private const string Issuer = "https://idp.test";
@@ -42,7 +42,7 @@ public class OidcTokenValidatorTests
     [Fact]
     public void 验签器给不出姓名与用户名_那两项只在userinfo()
     {
-        // ★★ **直接斷言不變數本身**:驗籤的產物**只有** sub 一項。
+        // ★★ **直接斷言不變數本身**:驗簽的產物**只有** sub 一項。
         //   貝塔通把 `conformIdTokenClaims` 留在上游預設 `true`,授權碼流下 id_token 里根本沒有
         //   `name` / `preferred_username`(其 docs/rp-contract.md)。把它們從 id_token 取會恆得空串,
         //   而空的 Username 讓 ExamDispatch.SeatFrom 對每個人退回成 sub —— 不回報錯誤、不拋異常。
@@ -54,7 +54,7 @@ public class OidcTokenValidatorTests
     public void id_token里混进身份claim也不被采信()
     {
         // 貝塔通 P81:即便權杖裡混進了那些 claim(例如對著舊 IdP 跑),也一律不進身分 ——
-        // 判據是「驗籤的出口只有 sub」,而不是「我們沒請求所以不會有」。
+        // 判據是「驗簽的出口只有 sub」,而不是「我們沒請求所以不會有」。
         using RSA rsa = RSA.Create(2048);
         var v = new OidcTokenValidator(BuildJwks(rsa, Kid), Issuer, Audience);
         string payload = JsonSerializer.Serialize(new
@@ -85,7 +85,7 @@ public class OidcTokenValidatorTests
     [Fact]
     public void 未设用户名的账号_preferred_username缺失_取空串而不是编一个()
     {
-        // ★ 貝塔通對**未設置使用者名的帳號直接省略** `preferred_username`(不發空串,見其 rp-contract)。
+        // ★ 貝塔通對**未設定使用者名的帳號直接省略** `preferred_username`(不發空串,見其 rp-contract)。
         //   這裡必須取到空串,好讓 ExamDispatch.SeatFrom 走它那條退回 sub 的分支 ——
         //   在這裡編一個預設值會讓「沒設使用者名的人」共用同一個座位號。
         OidcClaims c = Userinfo.Parse("""{"sub":"sub-x"}""", new OidcSubject("sub-x"));
@@ -183,8 +183,8 @@ public class OidcTokenValidatorTests
     public void RS256签名的令牌_拒_不接受算法降级()
     {
         // ★ 同一把 RSA 公鑰,PKCS1 與 PSS **兩種填充都驗得通** —— 所以「放寬成兩種都收」
-        //   不是相容性問題而是安全問題:貝塔通根本籤不出 RS256(其 P58),
-        //   多出來的那條路只服務於攻擊者。這裡用**同一把真私鑰**按 RS256 籤一枚合法權杖,必須被拒。
+        //   不是相容性問題而是安全問題:貝塔通根本簽不出 RS256(其 P58),
+        //   多出來的那條路只服務於攻擊者。這裡用**同一把真私鑰**按 RS256 簽一枚合法權杖,必須被拒。
         using RSA rsa = RSA.Create(2048);
         var v = new OidcTokenValidator(BuildJwks(rsa, Kid), Issuer, Audience);
         string token = SignJwt(rsa, Kid, Payload(nonce: "n1"), alg: "RS256");
@@ -262,7 +262,7 @@ public class OidcTokenValidatorTests
         using RSA rsa = RSA.Create(2048);
         var v = new OidcTokenValidator(BuildJwks(rsa, Kid), Issuer, Audience);
         string token = SignJwt(rsa, Kid, Payload(nonce: "n1"));
-        // 改 payload 段但不重籤 → 簽名對不上
+        // 改 payload 段但不重簽 → 簽名對不上
         string[] p = token.Split('.');
         string tampered = p[0] + "." + B64Url(Encoding.UTF8.GetBytes(Payload(nonce: "n1", sub: "sub-EVIL"))) + "." + p[2];
         Assert.Throws<OidcValidationException>(() => v.Validate(tampered, "n1", Now()));
@@ -274,7 +274,7 @@ public class OidcTokenValidatorTests
         using RSA good = RSA.Create(2048);
         using RSA evil = RSA.Create(2048);
         var v = new OidcTokenValidator(BuildJwks(good, Kid), Issuer, Audience);
-        string token = SignJwt(evil, Kid, Payload(nonce: "n1"));   // 用 evil 私鑰籤、但 kid 冒充 good
+        string token = SignJwt(evil, Kid, Payload(nonce: "n1"));   // 用 evil 私鑰簽、但 kid 冒充 good
         Assert.Throws<OidcValidationException>(() => v.Validate(token, "n1", Now()));
     }
 
@@ -310,7 +310,7 @@ public class OidcTokenValidatorTests
         Assert.Equal(EventCanonical.Sig(kA, "hashself", 5), EventCanonical.Sig(kS, "hashself", 5));
     }
 
-    // ---- 小工具:建構 JWKS / 籤 JWT ----
+    // ---- 小工具:建構 JWKS / 簽 JWT ----
     private static double Now() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
 
     private static string BuildJwks(RSA rsa, string kid)
@@ -330,8 +330,8 @@ public class OidcTokenValidatorTests
         name = "叶锋", preferred_username = "ye_feng",
     });
 
-    /// 按貝塔通真實的形態籤:**PS256**(RSA-PSS · SHA-256)。
-    /// ★ 替身的形狀就是判據的一部分 —— 這裡若仍按舊 wentian 的 RS256 籤,
+    /// 按貝塔通真實的形態簽:**PS256**(RSA-PSS · SHA-256)。
+    /// ★ 替身的形狀就是判據的一部分 —— 這裡若仍按舊 wentian 的 RS256 簽,
     ///   整套案例會在一個**生產上根本不存在**的演算法下全綠,而真接上貝塔通當場全紅。
     /// ★ 預設演算法**從生產常數派生**(`OidcTokenValidator.SigningAlg`),不是再寫一遍字面值 ——
     ///   兩處各寫一份必然漂,而漂了的表現是「測試在一個生產上不存在的演算法下全綠」。

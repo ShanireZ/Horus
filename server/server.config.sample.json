@@ -1,12 +1,12 @@
 {
-  // 監考伺服器設定**樣例(範本·已提交進 git 公開儲存庫)**。複製為 server.config.json(已 gitignore)後按現場填真值。
+  // 監考伺服器設定**範例(範本·已提交進 git 公開儲存庫)**。複製為 server.config.json(已 gitignore)後按現場填真值。
   // ⚠️ 切勿把真實金鑰 / API key 填進本 sample 檔案 —— 會隨提交洩漏到公開儲存庫。真值只放 server.config.json。
   "urls": "http://0.0.0.0:8080",
   "dataDir": "./data",
   "dbPath": "horus.db",
   // 預共享 HMAC 金鑰(base64),必須與各 Agent 的 psk 一致。
-  // 留空 = 關閉驗籤(僅本機整合測試用;生產務必設定)。
-  // 生成示例(PowerShell): [Convert]::ToBase64String((1..32|%{Get-Random -Max 256}))
+  // 留空 = 關閉驗簽(僅本機整合測試用;生產務必設定)。
+  // 生成範例(PowerShell): [Convert]::ToBase64String((1..32|%{Get-Random -Max 256}))
   "pskBase64": "",
   // 擊鍵旁路金鑰(base64):判題後端持它對 /ingest/keystroke 提交體簽名(X-Horus-KSig)。
   // 留空 = 關閉擊鍵鑑權(僅整合測試)。生產接了判題埋點應設定,否則同網學員機可偽造/栽贓他人擊鍵樣本。與 psk 相互獨立。
@@ -31,8 +31,8 @@
   //   (貝塔通接手後是 betaoi.cn,P110 又搬到 pass. 子域)。★ 這裡**有意不寫現值**:
   //   契約明寫「別把它抄進任何程式碼或寫死進設定的字面值裡」,而一個寫在註解裡的舉例
   //   ★★ **會被人當成可以照抄的值**,然後跟著上游一起腐爛 —— 上面那句就是這麼來的。
-  //   ⇒ 真要知道現值,打線上 discovery;或看 AgentConfig.OidcIssuer 的內置預設。
-  // P147/P149：Server 仍須由部署設定明確 issuer；不把主域再烤一份到樣例。
+  //   ⇒ 真要知道現值,打線上 discovery;或看 AgentConfig.OidcIssuer 的內建預設。
+  // P147/P149：Server 仍須由部署設定明確 issuer；不把主域再烤一份到範例。
   "oidcIssuer": "",
   // Horus 在**貝塔通**註冊的 client_id。
   "oidcClientId": "horus-client",

@@ -39,7 +39,7 @@ public class CanonicalTests
 
         string sig = EventCanonical.Sig(TestApp.Psk, self1, e.Seq);
         Assert.Equal(64, sig.Length);
-        // 伺服器式驗籤:僅憑 hashSelf + seq 復算,不相依 canonical
+        // 伺服器式驗簽:僅憑 hashSelf + seq 復算,不相依 canonical
         Assert.True(Crypto.FixedTimeEquals(sig, EventCanonical.Sig(TestApp.Psk, self1, e.Seq)));
     }
 

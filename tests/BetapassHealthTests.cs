@@ -17,7 +17,7 @@ namespace Horus.Server.Tests;
 ///   任何 HTTP 應答都算線上),仍然要實作的理由見 `BetapassHealthEndpoint` 的類註解。
 ///
 /// 判據逐條來自 BetaPass `docs/rp-contract.md`「`GET /internal/health`:必辦項」:
-/// 必須驗籤(含 `aud` 是不是自己)、任意 2xx 即算線上、不查庫。
+/// 必須驗簽(含 `aud` 是不是自己)、任意 2xx 即算線上、不查庫。
 public class BetapassHealthTests
 {
     private const string Issuer = "https://oidc.test";
@@ -36,7 +36,7 @@ public class BetapassHealthTests
         });
     }
 
-    /// 按**貝塔通真實的探活權杖形態**籤(核對 BetaPass `src/main.ts` 的 `signToken`):
+    /// 按**貝塔通真實的探活權杖形態**簽(核對 BetaPass `src/main.ts` 的 `signToken`):
     /// claims 只有 `iss` / `aud` / `sub`(= client_id 自己)/ `jti` / `exp`,★ **沒有 `purpose`**。
     /// 照撤權權杖的形狀去寫測試就會驗出一個不存在的口徑。
     private static string SignProbe(RSA rsa, string aud, double? exp = null)
@@ -96,7 +96,7 @@ public class BetapassHealthTests
     [Fact]
     public async Task aud不是本机任何client_拒()
     {
-        // ★ 用**同一把真私鑰**籤一枚除 `aud` 外一切合法的權杖 —— 必須被拒,
+        // ★ 用**同一把真私鑰**簽一枚除 `aud` 外一切合法的權杖 —— 必須被拒,
         //   才證明擋的是 `aud` 而不是簽名。不驗 `aud` 就等於把接入拓撲白送出去。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
@@ -118,7 +118,7 @@ public class BetapassHealthTests
     public async Task 过期的令牌_拒()
     {
         // 探活權杖壽命 2 分鐘(與撤權通知同口徑)。放行過期權杖等於把一枚抓到就能永久用的探針留在外面。
-        // ★ 減 300 秒而不是「剛過期一點」:驗籤器有 **60 秒時鐘容差**(`ClockSkewSeconds`),
+        // ★ 減 300 秒而不是「剛過期一點」:驗簽器有 **60 秒時鐘容差**(`ClockSkewSeconds`),
         //   貼著邊界寫出來的案例測的是容差不是過期判定,而且會隨容差調整無聲失效。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));

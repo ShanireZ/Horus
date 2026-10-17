@@ -88,7 +88,7 @@ public static class EventCanonical
         return Crypto.FixedTimeEquals(recomputed, hashSelf);
     }
 
-    /// 事件簽名。**僅相依 hashSelf 字串與 seq**,故伺服器無需重算 canonical 即可驗籤(M1)。
+    /// 事件簽名。**僅相依 hashSelf 字串與 seq**,故伺服器無需重算 canonical 即可驗簽(M1)。
     public static string Sig(byte[] psk, string hashSelf, long seq)
         => Crypto.HmacHex(psk, hashSelf + "\n" + seq);
 
@@ -113,7 +113,7 @@ public static class Auth
         return Crypto.HmacHex(psk, canonicalHeaders + "\n" + bodyHash);
     }
 
-    /// 擊鍵旁路籤名 X-Horus-KSig = HMAC(KSK, "keystroke\n" + sha256(body))。
+    /// 擊鍵旁路簽名 X-Horus-KSig = HMAC(KSK, "keystroke\n" + sha256(body))。
     /// 由**判題後端**(可安全持 KSK,瀏覽器不持)對整條提交體簽名;綁定 seatId/內容,防同網學員機偽造/栽贓。
     /// "keystroke\n" 域分隔前綴:防跨通道簽名重用(圖片/事件簽名不能拿來當擊鍵簽名)。
     public static string KeystrokeSig(byte[] ksk, byte[] body)

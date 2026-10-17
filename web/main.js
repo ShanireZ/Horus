@@ -83,7 +83,7 @@ function applyDownloads() {
  *   `xxx.betaoi.cn`（乃至別人控制的 `evil-hr.betaoi.cn`）也算進來。
  *
  * P147/P149 當前公用網路主頁為 hr.betaoi.cc，由 Cloudflare 自動注入，本原始碼不重複載入。
- *   ANALYTICS_HOST 保留未來 cn 的確切匹配；cn 站台當前休眠，不新增控制檯設置。
+ *   ANALYTICS_HOST 保留未來 cn 的確切匹配；cn 站台當前休眠，不新增控制檯設定。
  *
  * ★★★ 本機監考部署（區域網路、IP、localhost）**必須一個位元組都不外聯** ——
  *   這是 AGENTS.md 裡寫死的：「本機監考部署不得產生新的分析外聯」。

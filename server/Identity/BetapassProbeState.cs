@@ -24,13 +24,13 @@ public sealed class BetapassProbeState
     private double _lastWarnAt;
     private string? _lastRejectReason;
 
-    /// 驗籤通過。
+    /// 驗簽通過。
     public void RecordOk(double now)
     {
         lock (_gate) { _lastOkAt = now; }
     }
 
-    /// 驗籤被拒。@returns 這一發**該不該記 Warning**。
+    /// 驗簽被拒。@returns 這一發**該不該記 Warning**。
     ///
     /// ★ 按分鐘節流:口徑對不上時探活會**每 5 分鐘失敗一次、永遠失敗**,
     ///   照記就是一條永不停止的告警流;但完全不記(此前記的是 Debug)又等於沒有任何主動信號。

@@ -57,7 +57,7 @@ public sealed class ImageEmbedService(
         return n;
     }
 
-    /// 即時嵌入單圖(搜索時查詢圖未嵌入則補嵌)。回傳向量或 null。
+    /// 即時嵌入單圖(搜尋時查詢圖未嵌入則補嵌)。回傳向量或 null。
     public async Task<float[]?> EmbedImageAsync(string imageId, CancellationToken ct)
     {
         if (!Enabled) return null;

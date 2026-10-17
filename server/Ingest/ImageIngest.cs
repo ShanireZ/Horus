@@ -9,7 +9,7 @@ namespace Horus.Server.Ingest;
 
 /// 圖片通道(HTTP POST /ingest/images)。見 api-contract §2.1。
 /// 檢核 X-Horus-Sig;pHash 去重;原圖存盤;DB 存指針;新圖入隊非同步視覺分析(L2)。
-/// M4:驗籤金鑰可為 PSK 或 OIDC 工作階段 K_sess(X-Horus-Session);OIDC 路徑強制頭部身分==工作階段身分。
+/// M4:驗簽金鑰可為 PSK 或 OIDC 工作階段 K_sess(X-Horus-Session);OIDC 路徑強制頭部身分==工作階段身分。
 public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, VisionAnalysisService vision, SessionStore sessions, ILogger<ImageIngest> log)
 {
     public async Task HandleAsync(HttpContext ctx)
@@ -31,7 +31,7 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
             await ctx.Response.WriteAsJsonAsync(new { error = "missing_headers" });
             return;
         }
-        if (clientId.Length > 0 && !IsValidImageId(clientId))   // 畸形 client id 先拒(驗籤前),收斂 canonical 輸入
+        if (clientId.Length > 0 && !IsValidImageId(clientId))   // 畸形 client id 先拒(驗簽前),收斂 canonical 輸入
         {
             ctx.Response.StatusCode = 400;
             await ctx.Response.WriteAsJsonAsync(new { error = "bad_image_id" });
@@ -62,7 +62,7 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
             return;
         }
 
-        // 驗籤(見 §2.1):HMAC(key, canonicalHeaders + "\n" + sha256(body));key = PSK 或工作階段 K_sess;canonical 含 imageId 防篡改
+        // 驗簽(見 §2.1):HMAC(key, canonicalHeaders + "\n" + sha256(body));key = PSK 或工作階段 K_sess;canonical 含 imageId 防篡改
         if (auth.Key is not null)
         {
             string canon = Auth.ImageCanonicalHeaders(examId, seatId, agentId, seq, trigger, phash, tsStr, clientId);

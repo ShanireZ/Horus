@@ -7,15 +7,17 @@ title: Horus 程式碼審查報告（2026-07-21）
 
 審查範圍：`contracts/`(Horus.Contracts)、`agentcore/`(Horus.Agent.Core)、`agent/`(Horus.Agent)、`server/`(Horus.Server) 全部原始碼（約 80 個 .cs 檔案，排除 obj/ 生成物）。
 
-總體結論：專案經過多輪獨立安全/邏輯/效能稽核（225 測試全綠、M1–M5 + 身分層 + 歸檔均已實作），工程品質很高，核心安全不變數（雜湊鏈、HMAC 驗籤、canonical 兩端逐位元組一致、fail-closed、讀寫分離、斷網續傳）完成實作紮實。以下為本次審查發現的剩餘問題，按嚴重程度分級。
+總體結論：專案經過多輪獨立安全/邏輯/效能稽核（225 測試全綠、M1–M5 + 身分層 + 歸檔均已實作），工程品質很高，核心安全不變數（雜湊鏈、HMAC 驗簽、canonical 兩端逐位元組一致、fail-closed、讀寫分離、斷網續傳）完成實作紮實。以下為本次審查發現的剩餘問題，按嚴重程度分級。
 
 ---
 
 ## 一、BUG / 邏輯錯誤
 
-### [中] 1. `ImageIngest` 缺少請求體大小上限，且 body 在驗籤/鑑權前全量讀入記憶體
+<a id="中-1-imageingest-缺少請求體大小上限且-body-在驗籤鑑權前全量讀入記憶體"></a>
+
+### [中] 1. `ImageIngest` 缺少請求體大小上限，且 body 在驗簽/鑑權前全量讀入記憶體
 **檔案**：`server/Ingest/ImageIngest.cs`（HandleAsync，約 41–52 行）
-- 圖片通道把 `req.Body` 完整讀入 `MemoryStream`（`CopyToAsync`）後才做 PSK/OIDC 驗籤。
+- 圖片通道把 `req.Body` 完整讀入 `MemoryStream`（`CopyToAsync`）後才做 PSK/OIDC 驗簽。
 - 全程**沒有**像 `KeystrokeIngest` 那樣的 `MaxBodyBytes` 顯式上限（後者有聲明 `Content-Length` 檢查 + 實際 `ms.Length` 檢查）。
 - 備援僅靠 `Program.cs:172` 的 Kestrel 全域 `MaxRequestBodySize = 2MB`。這意味著：
   - 未鑑權者（LAN 內任意能觸達端點的機器）每次可強制伺服器緩衝最多 2MB；
@@ -27,7 +29,7 @@ title: Horus 程式碼審查報告（2026-07-21）
 ```csharp
 if (d > 0 && d < 1) d *= 100;
 ```
-- 若視覺模型以 0–1 概率回傳 `1.0`（意圖 100%），因 `d < 1` 為 false → 保持 `1` → 被鉗成 1 分。
+- 若視覺模型以 0–1 機率回傳 `1.0`（意圖 100%），因 `d < 1` 為 false → 保持 `1` → 被鉗成 1 分。
 - 後果：`confidence:1` 且 `suspicious:true` 的圖，因 `1 < cfg.VisionConfidenceThreshold(默认 50)` 而**不進可疑佇列、也不標證據**。
 - 屬文件 §F9 已知權衡（刻意不把整數 `1` 放大成 100），但 `1.0` 這一浮點邊界不魯棒。
 - **建議**：prompt 已要求 `0-100`，可在解析層對 `== 1.0` 顯式歸為"整數原樣"（即保持 1）或要求供應商嚴格 0–100；並在真機 smoke 裡確認 MiMo 實際回傳格式。
@@ -56,7 +58,7 @@ if (d > 0 && d < 1) d *= 100;
 ### [低] 6. `Envelope.Serialize` 重複輸出 `seq`
 **檔案**：`contracts/Wire.cs:143-154`
 - 信封同時序列化 `seq = e.Seq`（外層）與 `@event = e`（內層含 `seq`）。兩份 `seq` 值相同、層級不同，無害但冗餘，且人為增加每影格體積。
-- **建議**：外層 `seq` 用於快速路由、內層 `seq` 用於驗籤，可考慮去掉內層 `seq`（伺服器已從 `hashSelf` 復算），或反之。屬可讀性/體積優化，非功能 bug。
+- **建議**：外層 `seq` 用於快速路由、內層 `seq` 用於驗簽，可考慮去掉內層 `seq`（伺服器已從 `hashSelf` 復算），或反之。屬可讀性/體積優化，非功能 bug。
 
 ---
 
@@ -70,7 +72,7 @@ if (d > 0 && d < 1) d *= 100;
 4. **`ForegroundWindowSource` 事件驅動化**：TODO 建議用 `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)` 替代輪詢降開銷（需訊息循環）。
 5. **`ProcessWatcher` 改用 ETW**：TODO 註明低延遲可走 ETW；當前相依 `Process.Start` 事件，`CommandLine` 需管理員權限才非空（影響遠控工具命令行特徵提取）。
 6. **多顯示器抓屏**：見 BUG#4。
-7. **擊鍵前端埋點已移除（N/A）**：判題走外部洛谷、無本機判題頁可埋點；由 Agent OS 級剪貼板/粘貼檢測覆蓋（架構 §6），屬設計決策而非遺漏。
+7. **擊鍵前端埋點已移除（N/A）**：判題走外部洛谷、無本機判題頁可埋點；由 Agent OS 級剪貼簿/粘貼檢測覆蓋（架構 §6），屬設計決策而非遺漏。
 
 ---
 
@@ -100,7 +102,7 @@ if (d > 0 && d < 1) d *= 100;
 - **canonical 兩端一致**：`EventCanonical.Core`(typed) 與 `CoreRaw`(raw text) 欄位順序、類型、null 處理一致；伺服器 `VerifyHashSelf` 能錨定 payload。由 `CanonicalTests` 鎖定的黃金測試覆蓋。
 - **斷網續傳 / seq 高水位**：`LocalBuffer` + `UplinkClient.NextSeq/AlignSeq` 設計正確，無 seq 重複使用；`RecoverCrashedRewrite`/`CleanupOrphans` 崩潰恢復完備。
 - **讀寫分離**：`Db` 單寫連接 + 唯讀連接池 + `:memory:` 退回正確。
-- **OIDC 驗籤**：`OidcTokenValidator` 驗 alg/kid/簽名/iss/aud/exp/nbf/nonce，角色 fail-safe 到 `disciple`，正確。
+- **OIDC 驗簽**：`OidcTokenValidator` 驗 alg/kid/簽名/iss/aud/exp/nbf/nonce，角色 fail-safe 到 `disciple`，正確。
 - **歸檔冪等/崩潰安全**：門禁 + 墓碑 + 複製 + 清理順序正確，`MoveToArchive` 與 `DeleteLive` 冪等。
 - **管理面鑑權**：HttpOnly + SameSite=Strict cookie、FixedTimeEquals、CSP/nosniff/X-Frame-Options/Referrer-Policy 齊備。
 

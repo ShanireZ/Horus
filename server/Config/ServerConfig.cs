@@ -6,7 +6,7 @@ namespace Horus.Server.Config;
 /// 伺服器設定(從 server.config.json 載入,camelCase)。record 便於用 with 施加環境變數覆蓋。
 public sealed record ServerConfig
 {
-    /// Kestrel 綁定位址(可多個,逗號分隔),如 "http://0.0.0.0:8080"。默认 8080 與 Agent 內置預設 / dist 成品 / 部署文件一致。
+    /// Kestrel 綁定位址(可多個,逗號分隔),如 "http://0.0.0.0:8080"。默认 8080 與 Agent 內建預設 / dist 成品 / 部署文件一致。
     public string Urls { get; init; } = "http://0.0.0.0:8080";
 
     /// 資料根目錄:SQLite 檔案與截圖原圖都在此下。
@@ -15,7 +15,7 @@ public sealed record ServerConfig
     /// SQLite 檔案路徑;":memory:" 走記憶體(測試用)。相對路徑相對 DataDir。
     public string DbPath { get; init; } = "horus.db";
 
-    /// 預共享 HMAC 金鑰(base64)。與 Agent 同一把。留空則**關閉驗籤**(僅本機整合測試,生產必須配)。
+    /// 預共享 HMAC 金鑰(base64)。與 Agent 同一把。留空則**關閉驗簽**(僅本機整合測試,生產必須配)。
     public string? PskBase64 { get; init; }
 
     /// 管理/看板權杖。所有 /api/* 請求需帶 X-Horus-Admin 頭(圖片位元組端點可用 ?t= 查詢)。
@@ -133,7 +133,7 @@ public sealed record ServerConfig
     /// 本機**是否期待收到貝塔通的撤權廣播與存活探活**。預設 **false**(貝塔通 **P101**)。
     ///
     /// ★★★ **P101 的判據不是「懶得開隧道」**:Horus Server 是**監考電腦上的區域網路筆記本**
-    ///   (自籤 HTTPS、無公用網路網域),而 `/internal/revoke` 與 `/internal/health` 都要求
+    ///   (自簽 HTTPS、無公用網路網域),而 `/internal/revoke` 與 `/internal/health` 都要求
     ///   **貝塔通主動撥進來** —— ★ **出站 ≠ 可入站**:換 token / 取 userinfo / 拉 JWKS 全是出站,
     ///   一直好用;這兩條是入站,方向反了。**這是架構選擇,不是填個表。**
     ///
@@ -151,7 +151,7 @@ public sealed record ServerConfig
     ///   ⏳ 那個拉取端點**目前不存在**,要走得先在貝塔通側立項。
     ///
     /// ★ **置 false 不會關掉任何實作**:`/internal/revoke`、`/internal/health`、兩道防線與它們的迴歸
-    ///   **全部保留**(走拉取模型那天要用同一套驗籤與處置)。它只改**預檢怎麼說話**。
+    ///   **全部保留**(走拉取模型那天要用同一套驗簽與處置)。它只改**預檢怎麼說話**。
     public bool BetapassRevokePushExpected { get; init; }
 
     /// 探活權杖 `aud` 在 client_id 之後的後綴。**必須與貝塔通簽發時用的字面值一致**。

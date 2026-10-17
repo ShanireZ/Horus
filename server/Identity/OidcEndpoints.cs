@@ -58,7 +58,7 @@ public static class OidcEndpoints
                 examId = s.ExamId,   // 伺服器端派發:Agent 採用此值填事件體(設定裡已無 examId)
                 seatId = s.SeatId,   // OIDC 身分派生(username):Agent 採用此值填事件體(設定裡已無 seatId)
                 // ★ 身分出口只剩三項(貝塔通 P81)。看板此前繪製的道號/境界/戰力與
-                //   監考員/學員標註均已隨之移除 —— 那些是問天錄的業務欄位,不由身分中心散布。
+                //   監考員/學員標註均已隨之移除 —— 那些是問天錄的業務欄位,不由身分中心散佈。
                 profile = new { sub = s.Sub, name = s.Name, username = s.Username },
             });
         });

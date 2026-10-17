@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS archive_events (
   ts                REAL NOT NULL,
   type              TEXT NOT NULL,
   payload           TEXT NOT NULL,
-  risk              INTEGER,                            -- **原始 agent 自報** risk(canonicalCore 籤的正是它,歸檔後憑 machine_id+risk+payload 可獨立復算 hash_self)
+  risk              INTEGER,                            -- **原始 agent 自報** risk(canonicalCore 簽的正是它,歸檔後憑 machine_id+risk+payload 可獨立復算 hash_self)
   server_risk       INTEGER,                            -- 伺服器獨立復判(旁註·不入 canonical):留存"為何被歸檔為關鍵"的取證依據,避免歸檔庫只見 risk=0
   evidence_image_id TEXT,
   hash_prev         TEXT,

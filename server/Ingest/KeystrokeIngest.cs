@@ -12,7 +12,7 @@ namespace Horus.Server.Ingest;
 public sealed class KeystrokeIngest(Db db, ServerConfig cfg)
 {
     // 擊鍵體專用上限(遠小於圖片的全域 2MB):timeline 是 keydown 時間戳陣列,合法體通常幾十 KB。
-    // 超大體先拒,免為明顯非法體緩衝 + 算 SHA256 驗籤(未鑑權者也能觸發)。
+    // 超大體先拒,免為明顯非法體緩衝 + 算 SHA256 驗簽(未鑑權者也能觸發)。
     private const int MaxBodyBytes = 512 * 1024;
 
     public async Task HandleAsync(HttpContext ctx)

@@ -42,7 +42,7 @@ public static class Suspicion
                     if (RiskModel.HostMatchesAny(host, AiHosts)) return "web_ai";
                     if (RiskModel.HostMatchesAny(host, SearchHosts)) return "search";
                 }
-                return "non_whitelist_web";   // 非 AI/非搜索的非白名單站:中性標籤,別誤貼 web_ai
+                return "non_whitelist_web";   // 非 AI/非搜尋的非白名單站:中性標籤,別誤貼 web_ai
             case SignalType.ProcessStart: return "non_whitelist_proc";
             case SignalType.Clipboard:    return "large_paste";
             case SignalType.Usb:          return "usb";
