@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// Agent 零配置(2026-07-03):配置文件可选、内置默认、主机名自动身份。
+/// Agent 零設定(2026-07-03):設定檔案可選、內置預設、主機名自動身分。
 public class AgentConfigTests
 {
     [Fact]
@@ -11,23 +11,23 @@ public class AgentConfigTests
     {
         AgentConfig cfg = AgentConfig.Load(Path.Combine(Path.GetTempPath(), "horus-nonexistent-" + Guid.NewGuid().ToString("N") + ".json"));
 
-        Assert.True(cfg.OidcMode);                                   // 默认 oidc
-// ★ 默认 issuer 是**主力域**(贝塔通 P116:issuer 恒为它,备用域只是第二条入口)。
-        // ⚠★★★ **这一条守得住「默认值被改动了」,守不住「默认值过期了」。**
-        //   2026-08-26 实测:上游 P110(08-23)搬了 issuer,而本行与被测的默认值是**同一个
-        //   陈旧的字面量**,于是这条断言在那三天里**一直是绿的** —— 自洽的抄件与正确的
-        //   抄件长得一模一样。★ **要知道上游现在是什么,只能去打线上 discovery**,
-        //   本仓内的判据原理上看不见它(成均那边的对应物是 `pnpm oidc:verify`)。
+        Assert.True(cfg.OidcMode);                                   // 預設 oidc
+// ★ 預設 issuer 是**主力域**(貝塔通 P116:issuer 恆為它,備用域只是第二條入口)。
+        // ⚠★★★ **這一條守得住「預設值被改動了」,守不住「預設值過期了」。**
+        //   2026-08-26 實測:上游 P110(08-23)搬了 issuer,而本行與被測的預設值是**同一個
+        //   陳舊的字面值**,於是這條斷言在那三天裡**一直是綠的** —— 自洽的抄件與正確的
+        //   抄件長得一模一樣。★ **要知道上游現在是什麼,只能去打線上 discovery**,
+        //   本儲存庫內的判據原理上看不見它(成均那邊的對應物是 `pnpm oidc:verify`)。
         Assert.Equal("https://pass.betaoi.cc", cfg.OidcIssuer);
-        // 端点默认跟 issuer 走,且挂在**根路径**(贝塔通不是 /oauth/*)。★ 五条路径 2026-08-26 实测核过。
+        // 端點預設跟 issuer 走,且掛在**根路徑**(貝塔通不是 /oauth/*)。★ 五條路徑 2026-08-26 實測核過。
         Assert.Null(cfg.OidcEndpointBase);
         Assert.Equal("https://pass.betaoi.cc/auth", cfg.OidcAuthorizeBase);
         Assert.Equal("horus-client", cfg.OidcClientId);
-        Assert.StartsWith("ws://", cfg.ServerWsBase);                // 内置默认服务器地址
+        Assert.StartsWith("ws://", cfg.ServerWsBase);                // 內置預設伺服器位址
         Assert.StartsWith("http://", cfg.ServerHttpBase);
-        Assert.False(string.IsNullOrWhiteSpace(cfg.MachineId));      // 主机名自动推导
+        Assert.False(string.IsNullOrWhiteSpace(cfg.MachineId));      // 主機名自動推導
         Assert.Equal("ag-" + cfg.MachineId, cfg.AgentId);
-        Assert.Contains("luogu.com.cn", cfg.WhitelistHosts);         // 内置洛谷白名单兜底
+        Assert.Contains("luogu.com.cn", cfg.WhitelistHosts);         // 內置洛谷白名單備援
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class AgentConfigTests
         {
             File.WriteAllText(path, """{ "whitelistHosts": ["only.this.lan"] }""");
             AgentConfig cfg = AgentConfig.Load(path);
-            Assert.Equal(new[] { "only.this.lan" }, cfg.WhitelistHosts);   // 替换而非追加(不含 luogu)
+            Assert.Equal(new[] { "only.this.lan" }, cfg.WhitelistHosts);   // 替換而非追加(不含 luogu)
         }
         finally { File.Delete(path); }
     }
@@ -78,7 +78,7 @@ public class AgentConfigTests
     [Fact]
     public void 填了端点前缀_端点整套换入口_而issuer不变()
     {
-        // 端点覆盖与 issuer 独立，使用虚构入口证明关系；不启用休眠 cn。
+        // 端點覆蓋與 issuer 獨立，使用虛構入口證明關係；不啟用休眠 cn。
         var cfg = new AgentConfig { OidcEndpointBase = "https://idp-backup.test" };
         Assert.Equal("https://pass.betaoi.cc", cfg.OidcIssuer);
         Assert.Equal("https://idp-backup.test/auth", cfg.OidcAuthorizeBase);

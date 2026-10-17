@@ -9,14 +9,14 @@ using Horus.Contracts;
 
 namespace Horus.Agent.Transport;
 
-/// 事件走 WebSocket(实时),图片走 HTTP。**含握手鉴权、hello/ack、断线重连(指数退避)、续传**。
-/// 可靠性:每条事件先落缓冲再尽力发送;服务器 ack(upto) 后压实;重连后按 seq 续传(服务器幂等去重)。
-/// WS 连接与 HttpClient 均可注入(默认真实实现;测试注入 TestServer 客户端,实现内存端到端验证)。
+/// 事件走 WebSocket(即時),圖片走 HTTP。**含握手鑑權、hello/ack、斷線重連(指數退避)、續傳**。
+/// 可靠性:每條事件先落緩衝再盡力傳送;伺服器 ack(upto) 後壓實;重連後按 seq 續傳(伺服器冪等去重)。
+/// WS 連接與 HttpClient 均可注入(預設真實實作;測試注入 TestServer 用戶端,實作記憶體端到端驗證)。
 public sealed class UplinkClient : IAsyncDisposable
 {
     private readonly AgentConfig _cfg;
     private readonly LocalBuffer _buffer;
-    private readonly IngestCredential _cred;   // M4:签名密钥(PSK 或 OIDC K_sess)+ 可选 sessionId
+    private readonly IngestCredential _cred;   // M4:簽名金鑰(PSK 或 OIDC K_sess)+ 可選 sessionId
     private readonly HttpClient _http;
     private readonly Func<Uri, CancellationToken, Task<WebSocket>> _wsConnect;
     private readonly Uri _wsUri;
@@ -25,18 +25,18 @@ public sealed class UplinkClient : IAsyncDisposable
 
     private volatile WebSocket? _ws;
     private long _seq;
-    private long _seqCeiling;                          // 已持久化的序号高水位
+    private long _seqCeiling;                          // 已持久化的序號高水位
     private readonly object _seqLock = new();
-    private const long SeqBlock = 256;                 // 每预留 256 个序号才落一次盘
+    private const long SeqBlock = 256;                 // 每預留 256 個序號才落一次盤
 
-    /// 监考员 capture_now → 触发一次抓图(Program 注入)。
-    /// 未注入 → 看板「点名抓图」返回 pushed:true 但 Agent 不抓图(静默失效),故 Program 注入后须保证非空(见 agent/Program.cs 启动断言)。
+    /// 監考員 capture_now → 觸發一次抓圖(Program 注入)。
+    /// 未注入 → 看板「點名抓圖」回傳 pushed:true 但 Agent 不抓圖(靜默失效),故 Program 注入後須保證非空(見 agent/Program.cs 啟動斷言)。
     public Action<string>? OnCaptureNow;
-    /// 服务器下发新配置(热更新)。M1 仅回调,由 Program 决定如何应用。
+    /// 伺服器下發新設定(熱更新)。M1 僅回呼,由 Program 決定如何應用。
     public Action<JsonElement>? OnConfigUpdate;
-    /// 考试结束广播(end 时在线推送 / 离线重连 hello 补发)。Program 应排空缓冲后停采、登出回待命。
+    /// 考試結束廣播(end 時線上推送 / 離線重連 hello 補發)。Program 應排空緩衝後停採、登出回待命。
     public Action? OnExamEnded;
-    /// 全场远程登出广播(会话已在服务器吊销,连接随后被强断)。Program 应立即弃会话回待命(重连必 401)。
+    /// 全場遠程登出廣播(工作階段已在伺服器吊銷,連接隨後被強斷)。Program 應立即棄工作階段回待命(重連必 401)。
     public Action? OnSessionRevoked;
 
     public UplinkClient(AgentConfig cfg, LocalBuffer buffer,
@@ -46,21 +46,21 @@ public sealed class UplinkClient : IAsyncDisposable
     {
         _cfg = cfg;
         _buffer = buffer;
-        // 默认 PSK 模式(既有调用点无感);OIDC 模式由 Program 传入 {K_sess, sessionId}。
+        // 預設 PSK 模式(既有呼叫點無感);OIDC 模式由 Program 傳入 {K_sess, sessionId}。
         _cred = cred ?? new IngestCredential(cfg.Psk ?? Array.Empty<byte>(), null);
         _http = http ?? new HttpClient();
         _wsConnect = wsConnect ?? DefaultConnectAsync;
         _wsUri = new Uri($"{cfg.ServerWsBase}/ingest/events?examId={cfg.ExamId}&seatId={cfg.SeatId}&agentId={cfg.AgentId}");
         _httpUri = new Uri($"{cfg.ServerHttpBase}/ingest/images");
 
-        // 序号从持久化高水位与缓冲最大 seq 之上继续,杜绝重启复用(否则新事件撞旧 seq 被服务器幂等吞掉)。
+        // 序號從持久化高水位與緩衝最大 seq 之上繼續,杜絕重新啟動重複使用(否則新事件撞舊 seq 被伺服器冪等吞掉)。
         long start = Math.Max(buffer.LoadSeqCeiling(), buffer.MaxBufferedSeq());
         _seq = start;
         _seqCeiling = start;
         if (start > 0) buffer.SaveSeqCeiling(start);
     }
 
-    /// 单调递增序号。跨事件与图片共用;每超过高水位就预留一个 block 并落盘,重启后从高水位之上继续。
+    /// 單調遞增序號。跨事件與圖片共用;每超過高水位就預留一個 block 並寫入磁碟,重新啟動後從高水位之上繼續。
     public long NextSeq()
     {
         long s = Interlocked.Increment(ref _seq);
@@ -70,17 +70,17 @@ public sealed class UplinkClient : IAsyncDisposable
         return s;
     }
 
-    /// 默认 WS 连接:带 X-Horus-Auth 握手头的 ClientWebSocket。
+    /// 預設 WS 連接:帶 X-Horus-Auth 握手頭的 ClientWebSocket。
     private async Task<WebSocket> DefaultConnectAsync(Uri uri, CancellationToken ct)
     {
         var ws = new ClientWebSocket();
         ws.Options.SetRequestHeader("X-Horus-Auth", Auth.Handshake(_cred.Key, _cfg.ExamId, _cfg.SeatId, _cfg.AgentId));
-        if (_cred.SessionId is not null) ws.Options.SetRequestHeader("X-Horus-Session", _cred.SessionId);   // M4:OIDC 会话
+        if (_cred.SessionId is not null) ws.Options.SetRequestHeader("X-Horus-Session", _cred.SessionId);   // M4:OIDC 工作階段
         await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
         return ws;
     }
 
-    /// 连接管理循环:连接 → hello → 续传 → 收帧,断线后指数退避重连。直到 ct 取消。
+    /// 連接管理循環:連接 → hello → 續傳 → 收影格,斷線後指數退避重連。直到 ct 取消。
     public async Task RunAsync(CancellationToken ct)
     {
         int backoffMs = 1000;
@@ -91,14 +91,14 @@ public sealed class UplinkClient : IAsyncDisposable
             {
                 ws = await _wsConnect(_wsUri, ct).ConfigureAwait(false);
                 _ws = ws;
-                backoffMs = 1000;                                  // 连接成功,退避归零
+                backoffMs = 1000;                                  // 連接成功,退避歸零
 
                 await SendHelloAsync(ws, ct).ConfigureAwait(false);
-                await ReplayAsync(ws, ct).ConfigureAwait(false);   // 续传缓冲中的事件/图片
-                await ReceiveLoopAsync(ws, ct).ConfigureAwait(false); // 阻塞至断线
+                await ReplayAsync(ws, ct).ConfigureAwait(false);   // 續傳緩衝中的事件/圖片
+                await ReceiveLoopAsync(ws, ct).ConfigureAwait(false); // 阻塞至斷線
             }
             catch (OperationCanceledException) { break; }
-            catch { /* 连接/收发失败 → 退避重连 */ }
+            catch { /* 連接/收發失敗 → 退避重連 */ }
             finally
             {
                 _ws = null;
@@ -106,7 +106,7 @@ public sealed class UplinkClient : IAsyncDisposable
             }
 
             if (ct.IsCancellationRequested) break;
-            int delay = backoffMs / 2 + Random.Shared.Next(backoffMs);   // ±50% 抖动:打散多 Agent 同步重连风暴
+            int delay = backoffMs / 2 + Random.Shared.Next(backoffMs);   // ±50% 抖動:打散多 Agent 同步重連風暴
             try { await Task.Delay(delay, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
             backoffMs = Math.Min(backoffMs * 2, 30_000);           // 上限 30s
@@ -124,15 +124,15 @@ public sealed class UplinkClient : IAsyncDisposable
         await SendRawAsync(ws, hello, ct).ConfigureAwait(false);
     }
 
-    /// 重连后续传:**先补传图片,再重发事件**(与在线时"先传图后发事件"一致,
-    /// 使引用该图的事件在服务器端能命中并标记 is_evidence)。服务器按 (agent,seq,type)/image_id 幂等去重。
+    /// 重連後續傳:**先補傳圖片,再重發事件**(與線上時"先傳圖後發事件"一致,
+    /// 使引用該圖的事件在伺服器端能命中並標記 is_evidence)。伺服器按 (agent,seq,type)/image_id 冪等去重。
     private async Task ReplayAsync(WebSocket ws, CancellationToken ct)
     {
         foreach ((long seq, string? imageId, string trigger, ulong phash, byte[] webp) in _buffer.SnapshotPendingImages())
         {
             if (ct.IsCancellationRequested) return;
             (string? id, bool permanent) = await PostImageAsync(webp, trigger, phash, seq, imageId, ct).ConfigureAwait(false);
-            // 成功 → 删;**永久失败(4xx:签名错/过大/考试已封存)也删**,否则该坏图每次重连都重传、永久滞留占盘。
+            // 成功 → 刪;**永久失敗(4xx:簽名錯/過大/考試已封存)也刪**,否則該壞圖每次重連都重傳、永久滯留佔盤。
             if (id is not null) _buffer.RemoveImage(seq);
             else if (permanent) { _buffer.RemoveImage(seq); Console.Error.WriteLine($"[horus-agent] 图片补传被永久拒收(seq={seq}),丢弃"); }
         }
@@ -148,10 +148,10 @@ public sealed class UplinkClient : IAsyncDisposable
         while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
         {
             string? msg = await ReceiveTextAsync(ws, ct).ConfigureAwait(false);
-            if (msg is null) break;                                // 断线/关闭
+            if (msg is null) break;                                // 斷線/關閉
             try { await HandleFrameAsync(ws, msg, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
-            catch { /* 单帧异常不影响连接 */ }
+            catch { /* 單影格異常不影響連接 */ }
         }
     }
 
@@ -164,11 +164,11 @@ public sealed class UplinkClient : IAsyncDisposable
         {
             case "hello_ack":
                 if (root.TryGetProperty("maxSeq", out JsonElement ms) && ms.TryGetInt64(out long maxSeq))
-                    AlignSeq(maxSeq);                              // 跨重启对齐序号,避免复用
+                    AlignSeq(maxSeq);                              // 跨重新啟動對齊序號,避免重複使用
                 break;
             case "ack":
                 if (root.TryGetProperty("seq", out JsonElement up) && up.TryGetInt64(out long ackedSeq))
-                    _buffer.RemoveEvent(ackedSeq);                 // 逐条精确删除已持久化的 seq
+                    _buffer.RemoveEvent(ackedSeq);                 // 逐條精確刪除已持久化的 seq
                 break;
             case "config_update":
                 if (root.TryGetProperty("config", out JsonElement cfgEl))
@@ -190,7 +190,7 @@ public sealed class UplinkClient : IAsyncDisposable
         }
     }
 
-    /// 发送一条已封装(含 hash/sig)的事件:**先落缓冲(持久),再尽力发送**。ack 到达后压实。
+    /// 傳送一條已封裝(含 hash/sig)的事件:**先落緩衝(持久),再盡力傳送**。ack 到達後壓實。
     public async Task SendEventAsync(string json, long seq, CancellationToken ct)
     {
         await _buffer.EnqueueEventAsync(seq, json).ConfigureAwait(false);
@@ -198,33 +198,33 @@ public sealed class UplinkClient : IAsyncDisposable
         if (ws is { State: WebSocketState.Open })
         {
             try { await SendRawAsync(ws, json, ct).ConfigureAwait(false); }
-            catch { /* 失败留待重连续传 */ }
+            catch { /* 失敗留待重連續傳 */ }
         }
     }
 
-    /// 上传一张 WebP,返回 imageId;失败落缓冲。
-    /// 触发型抓图**预生成客户端 imageId**(事件据此关联,离线也有效,重连补传用同一 id);
-    /// baseline 抓图不预生成,由服务器分配 + pHash 去重。
+    /// 上傳一張 WebP,回傳 imageId;失敗落緩衝。
+    /// 觸發型抓圖**預生成用戶端 imageId**(事件據此關聯,離線也有效,重連補傳用同一 id);
+    /// baseline 抓圖不預生成,由伺服器分配 + pHash 去重。
     public async Task<string?> UploadImageAsync(byte[] webp, string trigger, ulong phash, long seq, CancellationToken ct)
     {
-        trigger = TriggerMap.ToContract(trigger);         // CaptureReason → 契约 trigger(否则落库脏值)
+        trigger = TriggerMap.ToContract(trigger);         // CaptureReason → 契約 trigger(否則寫入資料庫髒值)
         string? clientId = trigger == "baseline_random" ? null : NewImageId();
         (string? confirmed, bool permanent) = await PostImageAsync(webp, trigger, phash, seq, clientId, ct).ConfigureAwait(false);
         if (confirmed is null)
         {
-            // 永久失败(4xx)不缓冲(否则每次重连重传永远失败);仅**临时失败**(网络/5xx)落缓冲待续传。
+            // 永久失敗(4xx)不緩衝(否則每次重連重傳永遠失敗);僅**臨時失敗**(網路/5xx)落緩衝待續傳。
             if (!permanent)
                 await _buffer.EnqueueImageAsync(seq, clientId, trigger, phash, webp).ConfigureAwait(false);
-            return clientId;   // 触发型返回预生成 id(事件关联);baseline 为 null
+            return clientId;   // 觸發型回傳預生成 id(事件關聯);baseline 為 null
         }
         return confirmed;
     }
 
     private static string NewImageId() => "img_" + Guid.NewGuid().ToString("N");
 
-    /// 实际 HTTP 上传(含 X-Horus-Sig 签名;clientId 非空则带 X-Horus-Image-Id 由服务器沿用)。
-    /// 返回 (imageId, permanent):成功 → (id, false);**永久失败(4xx,除 408/429)→ (null, true) 应丢弃**;
-    /// 临时失败(5xx/408/429/网络/异常)→ (null, false) 应缓冲重试。
+    /// 實際 HTTP 上傳(含 X-Horus-Sig 簽名;clientId 非空則帶 X-Horus-Image-Id 由伺服器沿用)。
+    /// 回傳 (imageId, permanent):成功 → (id, false);**永久失敗(4xx,除 408/429)→ (null, true) 應丟棄**;
+    /// 臨時失敗(5xx/408/429/網路/異常)→ (null, false) 應緩衝重試。
     private async Task<(string? id, bool permanent)> PostImageAsync(byte[] webp, string trigger, ulong phash, long seq, string? clientId, CancellationToken ct)
     {
         try
@@ -246,14 +246,14 @@ public sealed class UplinkClient : IAsyncDisposable
             req.Headers.Add("X-Horus-Phash", phashHex);
             req.Headers.Add("X-Horus-Ts", ts);
             req.Headers.Add("X-Horus-Sig", sig);
-            if (_cred.SessionId is not null) req.Headers.Add("X-Horus-Session", _cred.SessionId);   // M4:OIDC 会话
-            if (clientId is not null) req.Headers.Add("X-Horus-Image-Id", clientId);   // 客户端预生成 id,服务器沿用
+            if (_cred.SessionId is not null) req.Headers.Add("X-Horus-Session", _cred.SessionId);   // M4:OIDC 工作階段
+            if (clientId is not null) req.Headers.Add("X-Horus-Image-Id", clientId);   // 用戶端預生成 id,伺服器沿用
 
             using HttpResponseMessage resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
                 int code = (int)resp.StatusCode;
-                bool permanent = code is >= 400 and < 500 and not 408 and not 429;   // 4xx(除超时/限流)= 永久拒收
+                bool permanent = code is >= 400 and < 500 and not 408 and not 429;   // 4xx(除超時/限流)= 永久拒收
                 return (null, permanent);
             }
 
@@ -261,10 +261,10 @@ public sealed class UplinkClient : IAsyncDisposable
             using JsonDocument doc = await JsonDocument.ParseAsync(s, cancellationToken: ct).ConfigureAwait(false);
             return (doc.RootElement.TryGetProperty("imageId", out JsonElement idEl) ? idEl.GetString() : null, false);
         }
-        catch { return (null, false); }   // 网络/取消/解析异常 = 临时,缓冲重试
+        catch { return (null, false); }   // 網路/取消/解析異常 = 臨時,緩衝重試
     }
 
-    // ---- 底层收发 ----
+    // ---- 底層收發 ----
     private async Task SendRawAsync(WebSocket ws, string json, CancellationToken ct)
     {
         await _sendLock.WaitAsync(ct).ConfigureAwait(false);
@@ -272,9 +272,9 @@ public sealed class UplinkClient : IAsyncDisposable
         finally { _sendLock.Release(); }
     }
 
-    private const int MaxFrameBytes = 1 * 1024 * 1024;   // 单条下行消息上限 1MB
-    // 读超时:检测 TCP 半开(拔网线/AP 掉线/NAT 过期,ReceiveAsync 永挂不返回)。心跳每 30s → 服务器 ack 每 30s
-    // 喂给 receive,故健康连接下每次读远快于此;90s 无任何帧 = 连接已死,主动返回 null 触发重连。
+    private const int MaxFrameBytes = 1 * 1024 * 1024;   // 單條下行訊息上限 1MB
+    // 讀超時:檢測 TCP 半開(拔網線/AP 掉線/NAT 過期,ReceiveAsync 永掛不回傳)。心跳每 30s → 伺服器 ack 每 30s
+    // 餵給 receive,故健康連接下每次讀遠快於此;90s 無任何影格 = 連接已死,主動回傳 null 觸發重連。
     private const int ReceiveTimeoutSeconds = 90;
 
     private static async Task<string?> ReceiveTextAsync(WebSocket ws, CancellationToken ct)
@@ -287,10 +287,10 @@ public sealed class UplinkClient : IAsyncDisposable
         {
             WebSocketReceiveResult r;
             try { r = await ws.ReceiveAsync(buf, timeoutCts.Token).ConfigureAwait(false); }
-            catch { return null; }   // 断线 / 半开读超时 / 停机取消 → 视为断开(RunAsync 据 ct 决定重连或退出)
+            catch { return null; }   // 斷線 / 半開讀超時 / 停機取消 → 視為斷開(RunAsync 據 ct 決定重連或退出)
             if (r.MessageType == WebSocketMessageType.Close) return null;
             ms.Write(buf, 0, r.Count);
-            if (ms.Length > MaxFrameBytes) return null;   // 超限 → 断开
+            if (ms.Length > MaxFrameBytes) return null;   // 超限 → 斷開
             if (r.EndOfMessage) break;
         }
         return Encoding.UTF8.GetString(ms.ToArray());
@@ -309,7 +309,7 @@ public sealed class UplinkClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        try { _buffer.Compact(); } catch { /* 关停时把已确认的压实掉 */ }
+        try { _buffer.Compact(); } catch { /* 關停時把已確認的壓實掉 */ }
         WebSocket? ws = _ws;
         if (ws is not null)
         {

@@ -7,11 +7,11 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// **RP-Initiated Logout**(贝塔通 P85)与登出回跳的回归。
+/// **RP-Initiated Logout**(貝塔通 P85)與登出回跳的迴歸。
 ///
-/// ★★ 这一条最容易漏的地方是**「只退出本站」那一支**:上游只撤 grant、
-///   **碰不到 RP 的本地会话**。漏了的表现是「用户点了退出、跳回来了,
-///   然后发现自己还登录着」—— 一屏之内就能看见,但只有真去点才看得见。
+/// ★★ 這一條最容易漏的地方是**「只退出本站」那一支**:上游只撤 grant、
+///   **碰不到 RP 的本機工作階段**。漏了的表現是「使用者點了退出、跳回來了,
+///   然後發現自己還登入著」—— 一屏之內就能看見,但只有真去點才看得見。
 public class AdminLogoutTests
 {
     private static double Now() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
@@ -30,9 +30,9 @@ public class AdminLogoutTests
     [Fact]
     public async Task 退出_先清本地会话_再跳贝塔通的二选一页()
     {
-        // ★★ **先清后跳**是 fail-closed 的落点:贝塔通不可达时跳转会失败,
-        //   而那时用户**本地已经登出了**。反过来「先跳、回来再清」在 IdP 挂掉的那一刻
-        //   就是「点了退出但还登录着」。
+        // ★★ **先清後跳**是 fail-closed 的落點:貝塔通不可達時跳轉會失敗,
+        //   而那時使用者**本機已經登出了**。反過來「先跳、回來再清」在 IdP 掛掉的那一刻
+        //   就是「點了退出但還登入著」。
         using var app = new TestApp(adminOidc: true);
         var store = app.Services.GetRequiredService<AdminSessionStore>();
         AdminSession s = store.Create(Claims(), Now(), 360);
@@ -40,11 +40,11 @@ public class AdminLogoutTests
         HttpResponseMessage resp = await GetCookie(NoRedirect(app), "/admin/logout", s.SessionId);
 
         Assert.Equal(HttpStatusCode.Found, resp.StatusCode);
-        Assert.Null(store.Get(s.SessionId, Now()));   // ★ 跳走之前本地就已经清了
+        Assert.Null(store.Get(s.SessionId, Now()));   // ★ 跳走之前本機就已經清了
 
         string to = resp.Headers.Location!.ToString();
         Assert.StartsWith("https://oidc.test/session/end?", to);
-        // ★ `client_id` 不能省:上游要靠它(或 id_token_hint)才认 post_logout_redirect_uri。
+        // ★ `client_id` 不能省:上游要靠它(或 id_token_hint)才認 post_logout_redirect_uri。
         Assert.Contains("client_id=horus-dashboard", to);
         Assert.Contains("post_logout_redirect_uri=", to);
     }
@@ -65,9 +65,9 @@ public class AdminLogoutTests
     [Fact]
     public async Task 回跳落点再清一次本地会话()
     {
-        // ★★ 「只退出本站」时贝塔通**只撤 grant**,你的本地会话它碰不到 ——
-        //   契约点名这是最容易漏的一步。这里模拟「会话还在、人从贝塔通跳回来」:
-        //   落点必须把它清掉。
+        // ★★ 「只退出本站」時貝塔通**只撤 grant**,你的本機工作階段它碰不到 ——
+        //   契約點名這是最容易漏的一步。這裡模擬「工作階段還在、人從貝塔通跳回來」:
+        //   落點必須把它清掉。
         using var app = new TestApp(adminOidc: true);
         var store = app.Services.GetRequiredService<AdminSessionStore>();
         AdminSession s = store.Create(Claims(), Now(), 360);
@@ -82,7 +82,7 @@ public class AdminLogoutTests
     [Fact]
     public async Task 令牌模式下退出不跳贝塔通()
     {
-        // 静态令牌模式没有 IdP 会话这回事,清完直接给「已退出」页。
+        // 靜態權杖模式沒有 IdP 工作階段這回事,清完直接給「已退出」頁。
         using var app = new TestApp(adminAuth: true);
         HttpResponseMessage resp = await GetCookie(NoRedirect(app), "/admin/logout", null);
 
@@ -96,34 +96,34 @@ public class AdminLogoutTests
         var cfg = new ServerConfig { OidcDashboardRedirectUri = "https://horus.lan:8443/cb" };
         Assert.Equal("https://horus.lan:8443/logout/done", cfg.PostLogoutRedirectUriEffective);
 
-        // 显式配置优先(贝塔通后台登记的那一条未必与回调同源)
+        // 顯式設定優先(貝塔通後台登記的那一條未必與回呼同源)
         var explicitCfg = cfg with { OidcPostLogoutRedirectUri = "https://other.lan/bye" };
         Assert.Equal("https://other.lan/bye", explicitCfg.PostLogoutRedirectUriEffective);
 
-        // 两者都没有 → null;★ 登出仍照走,只是不带 post_logout_redirect_uri
+        // 兩者都沒有 → null;★ 登出仍照走,只是不帶 post_logout_redirect_uri
         Assert.Null(new ServerConfig().PostLogoutRedirectUriEffective);
     }
 
     [Fact]
     public async Task 无权限页不放重新登录按钮()
     {
-        // ★★ 贝塔通 P98:取消 SSO 之后无权限的人**不再「秒回」**,每点一次登录都要
-        //   **完整输一遍密码**才被拒。在那一页上放「重新登录」等于请他再白输一遍。
-        //   owner 明确不做缓解,但措辞与按钮要如实改。
+        // ★★ 貝塔通 P98:取消 SSO 之後無權限的人**不再「秒回」**,每點一次登入都要
+        //   **完整輸一遍密碼**才被拒。在那一頁上放「重新登入」等於請他再白輸一遍。
+        //   owner 明確不做緩解,但措辭與按鈕要如實改。
         using var app = new TestApp(adminOidc: true);
         HttpResponseMessage resp = await NoRedirect(app).GetAsync("/cb?error=access_denied&state=x");
 
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
         string html = await resp.Content.ReadAsStringAsync();
         Assert.DoesNotContain("重新登录", html);
-        Assert.Contains("联系管理员开通", html);   // ★ 仍然要给一句人话,不得显示成「系统错误」
+        Assert.Contains("联系管理员开通", html);   // ★ 仍然要給一句人話,不得顯示成「系統錯誤」
     }
 
     [Fact]
     public async Task 协议出错的那一屏仍然留着重新登录()
     {
-        // ★ 与上一条相反:重试确实可能成功(网络抖动 / token 端点一时不通),链接留着。
-        //   把两屏合并成「一律不给重试」是把 P98 用过了头。
+        // ★ 與上一條相反:重試確實可能成功(網路抖動 / token 端點一時不通),連結留著。
+        //   把兩屏合併成「一律不給重試」是把 P98 用過了頭。
         using var app = new TestApp(adminOidc: true);
         HttpResponseMessage resp = await NoRedirect(app).GetAsync("/cb?error=server_error&state=x");
 

@@ -1,100 +1,100 @@
 ---
 type: status
-title: Horus 里程碑状态（M1–M5）
-description: 从 AGENTS.md 移出的完整里程碑与审计记录；AGENTS.md 只留「已完成，任何改动不许倒退」的硬线。
+title: Horus 里程碑狀態（M1–M5）
+description: 從 AGENTS.md 移出的完整里程碑與稽核記錄；AGENTS.md 只留「已完成，任何改動不許倒退」的硬線。
 tags: [milestone, status, audit]
 status: current
 ---
 
-# Horus 里程碑状态
+# Horus 里程碑狀態
 
-> 这里是**进度与审计记录**；不许倒退的硬线留在 `AGENTS.md` 的「已完成」节。
+> 這裡是**進度與稽核記錄**；不許倒退的硬線留在 `AGENTS.md` 的「已完成」節。
 
-## P147/P149 本地迁移（2026-10-07）
+## P147/P149 本機遷移（2026-10-07）
 
-2026-10-09：owner原话“horus暂缓”，决定见[BetaPass PLAN P151](../../BetaPass/PLAN.md)。本轮不切换Horus现场Server/Agent、私有配置、公开主页、下载或hr.cc DNS，已有本地候选证据保留；后续独立迁移与设备验收。若旧配置仍指向pass.cn，核心单issuer切换后不能沿用旧登录，不开备用issuer，也不能据此称P149整体完成。owner已推送7ef6e99；本仓未配置Actions门，不称CI通过。
+2026-10-09：owner原話“horus暫緩”，決定見[BetaPass PLAN P151](../../BetaPass/PLAN.md)。本輪不切換Horus現場Server/Agent、私有設定、公開主頁、下載或hr.cc DNS，已有本機候選證據保留；後續獨立遷移與設備驗收。若舊設定仍指向pass.cn，核心單issuer切換後不能沿用舊登入，不開備用issuer，也不能據此稱P149整體完成。owner已推送7ef6e99；本儲存庫未設定Actions門，不稱CI通過。
 
-暂缓前已将固定Server ZIP实际解包，以合成配置/内存库只绑定回环运行自包含Horus.Server.exe：共20项检查通过、零skip：真实BetaPass signServiceToken对horus-client/horus-dashboard、新旧issuer及health/revoke用途12项；包入口/看板资源/匿名登录跳转/兑换缺字段8项。未使用现场凭据、未启采集器/视觉出网；Windows测试进程终止不证明Linux优雅关闭。报告仅在本机忽略证据目录，真实配置、设备、登录与下载投递仍未验。
+暫緩前已將固定Server ZIP實際解包，以合成設定/記憶體庫只綁定迴環執行自包含Horus.Server.exe：共20項檢查通過、零skip：真實BetaPass signServiceToken對horus-client/horus-dashboard、新舊issuer及health/revoke用途12項；包入口/看板資源/匿名登入跳轉/兌換缺欄位8項。未使用現場憑證、未啟採集器/視覺出網；Windows測試處理程序終止不證明Linux優雅關閉。報告僅在本機忽略證據目錄，真實設定、設備、登入與下載投遞仍未驗。
 
-2026-10-08接续：固定 `215e7a7` 的独立源码副本，官方.NET8.0.424归档SHA512验证后，`dotnet build Horus.sln -c Debug --disable-build-servers -m:1`、`dotnet test Horus.sln -c Debug --no-build`及win-x64自包含单文件发布均成功；369测试、零skip，构建20条NuGet漏洞警告/0错误，保留原依赖未升级。新Agent候选SHA256为`a3c94024cddb383e46dd13b5b68344ec8dba80c74574bf7b6a10ae4fab2a74d8`，只产出未运行采集器，现场设备/真实登录/下载仍未验。最终Spec/Standards独立评审完成，README与当前默认issuer说明已对齐cc；历史英文提交偏差记录保留，不改写历史。未推送/部署，旧公开下载未更换。
+2026-10-08接續：固定 `215e7a7` 的獨立原始碼副本，官方.NET8.0.424歸檔SHA512驗證後，`dotnet build Horus.sln -c Debug --disable-build-servers -m:1`、`dotnet test Horus.sln -c Debug --no-build`及win-x64自包含單檔案發佈均成功；369測試、零skip，建置20條NuGet漏洞警告/0錯誤，保留原相依未升級。新Agent候選SHA256為`a3c94024cddb383e46dd13b5b68344ec8dba80c74574bf7b6a10ae4fab2a74d8`，只產出未執行採集器，現場設備/真實登入/下載仍未驗。最終Spec/Standards獨立評審完成，README與當前預設issuer說明已對齊cc；歷史英文提交偏差記錄保留，不改寫歷史。未推送/部署，舊公開下載未更換。
 
-2026-10-08继续准备：同一固定源码/SDK另执行 `dotnet publish server/Horus.Server.csproj -c Release -r win-x64 --self-contained true --disable-build-servers`，发布exit0，10条既有NuGet漏洞警告。win-x64 Server自包含ZIP共347项，静态闭包核对入口、SQLite原生库和看板资源通过；真实/样例server.config均未随包发布。ZIP SHA256为`41ef670f3e28f5197d480a746d513a04de84c2855dcf65c0fadc27d55dc2593d`，仅本地候选，未启动Server或设备。公开页另组装Linux静态快照，以保留rate_limit模块的共享Caddy2.11.4参与六站隔离入口配置故障/恢复演练；hr根页/字体/CSP及CN TLS拒绝通过，页面保持无来源闸门。公开DNS现查hr.cc不解析、旧共享片段仍只绑定hr.cn；未改变线上或旧下载元数据。上述入口演练不覆盖Server/Agent现场OIDC、设备、机器绑定配置与恢复，不能据此放行开考。
+2026-10-08繼續準備：同一固定原始碼/SDK另執行 `dotnet publish server/Horus.Server.csproj -c Release -r win-x64 --self-contained true --disable-build-servers`，發佈exit0，10條既有NuGet漏洞警告。win-x64 Server自包含ZIP共347項，靜態閉包核對入口、SQLite原生庫和看板資源通過；真實/樣例server.config均未隨包發佈。ZIP SHA256為`41ef670f3e28f5197d480a746d513a04de84c2855dcf65c0fadc27d55dc2593d`，僅本機候選，未啟動Server或設備。公開頁另組裝Linux靜態快照，以保留rate_limit模組的共享Caddy2.11.4參與六站隔離入口設定故障/恢復演練；hr根頁/字體/CSP及CN TLS拒絕通過，頁面保持無來源閘門。公開DNS現查hr.cc不解析、舊共享片段仍只綁定hr.cn；未改變線上或舊下載中繼資料。上述入口演練不覆蓋Server/Agent現場OIDC、設備、機器綁定設定與恢復，不能據此放行開考。
 
-四项新增用例已在旧配置上实际 RED（4失败/0通过/0skip）：默认/样例、PS256新 issuer、真实原生 loopback 授权地址及 Caddy 主机模板。本地 .NET8.0.424（官方归档 SHA512 校验）构建零警告/错误，完整369项通过、零skip；定向72项通过。实际 Caddy2.10.2 以自有 CA 验三类静态响应、安全/缓存头、无来源门、休眠CN TLS拒绝通过。真实 loopback 新检查连续复现原有正文连接重置，补明确 Content-Length 后完整成功页读取通过，PKCE/动态端口/LAN/ECDH保持。系统8.0.425的首次完整门因 Baseline8.0.424一项失败，不计全绿。真正 BetaPass signServiceToken 与实际撤权/探活 verifier16项通过；自有CA和正确主机名校验的pass.betaoi.cc隔离实例，实际Agent动态loopback、MapOidc/OidcExchange、userinfo与ECDH会话一致性通过（合成内存SQLite，无现场硬件），最终独立评审归 Task8；未部署、未改现场私有配置，公开下载仍为历史构建，不能宣称 Windows 发布物已迁移。决策见 architecture §0 D10；未部署、未改现场私有配置，公开下载仍为历史构建。
+四項新增案例已在舊設定上實際 RED（4失敗/0通過/0skip）：預設/樣例、PS256新 issuer、真實原生 loopback 授權位址及 Caddy 主機範本。本機 .NET8.0.424（官方歸檔 SHA512 檢核）建置零警告/錯誤，完整369項通過、零skip；定向72項通過。實際 Caddy2.10.2 以自有 CA 驗三類靜態回應、安全/快取頭、無來源門、休眠CN TLS拒絕通過。真實 loopback 新檢查連續重現原有正文連接重置，補明確 Content-Length 後完整成功頁讀取通過，PKCE/動態連接埠/LAN/ECDH保持。系統8.0.425的首次完整門因 Baseline8.0.424一項失敗，不計全綠。真正 BetaPass signServiceToken 與實際撤權/探活 verifier16項通過；自有CA和正確主機名檢核的pass.betaoi.cc隔離執行個體，實際Agent動態loopback、MapOidc/OidcExchange、userinfo與ECDH工作階段一致性通過（合成記憶體SQLite，無現場硬體），最終獨立評審歸 Task8；未部署、未改現場私有設定，公開下載仍為歷史建置，不能宣稱 Windows 發佈物已遷移。決策見 architecture §0 D10；未部署、未改現場私有設定，公開下載仍為歷史建置。
 
-## 状态
-**M1 最小闭环已实现并通过端到端验证**：
-- ✅ `Horus.Contracts` + `Horus.Agent.Core` + `Horus.Agent`（编译通过·0 警告）+ `Horus.Server`（WS/HTTP ingest + 落库 + 看板）。
-- ✅ **Agent 端可靠性完成**：握手鉴权、hello/hello_ack、ack、**断线重连（指数退避）**、**断网缓冲 + 续传**（`UplinkClient` + `LocalBuffer`，服务器幂等去重），图片 HMAC 签名 + 补传。
-- ✅ **config_update 热更新**：服务器 `POST /api/exams/{examId}/config` → `AgentHub` 推送给在线 Agent（新连/重连在 hello 时补推）→ Agent `LiveConfig` 原子应用（白名单/阈值/截图参数，下一轮采集即生效）。
-- ✅ **证据图跨重连关联**：触发型抓图**客户端预生成 imageId**（`X-Horus-Image-Id`，服务器沿用、跳过 pHash 去重、幂等），离线缓冲 + 断线重连补传后 `evidenceImageId` 关联不断。
-- ✅ **三路独立审计（安全 / 并发与数据完整性 / 正确性与契约）+ 修复**：修掉两条会丢证据的 Critical（`ack` 改**逐条确认**杜绝空洞误删、**序号高水位持久化**杜绝重启复用）、`trigger` 映射为契约值、`is_evidence` 乱序回填、`url_unreadable` 强制入队、缓冲原子压实 + 崩溃恢复、Schema DDL 切分健壮化；安全加固：**管理令牌 `X-Horus-Admin`（/api 全鉴权）**、图片体/WS 帧大小上限、`X-Horus-Image-Id` 纳入签名、`LiveConfig` 上下限钳制、路径穿越边界、旧连接 Abort、Dispose 竞态。
-- ✅ **第二轮复审（性能/负载/可靠性 · 安全 · 逻辑/回归 三路并行）+ 修复**：修上一轮引入的两条回归——`url_unreadable` 每 2s 刷爆队列（改为只在进入不可读态发一次）、逐条 ack 的 O(N²) 全文件重写（改**攒批压实**）；+ 性能（看板/回填索引、图片体 8→2MB、重连 jitter）+ 安全（**fail-closed** 非 loopback 缺凭证拒启动、`FixedTimeEquals` 不泄漏长度、图片 `?t=` 加 no-referrer/no-store、clientId 验签前校验）+ 逻辑（`LiveConfig` 只下发一端不篡改另一端）。
-- ✅ **41 项测试全绿**（含两轮审计的回归：逐条/攒批 ack · 重启不复用 seq · trigger 映射 · is_evidence 回填 · Schema 分号健壮 · 管理鉴权 401·200·?t= · fail-closed · FixedTimeEquals · LiveConfig 单端下发）+ 真机 curl 验证。
+## 狀態
+**M1 最小閉環已實作並通過端到端驗證**：
+- ✅ `Horus.Contracts` + `Horus.Agent.Core` + `Horus.Agent`（編譯通過·0 警告）+ `Horus.Server`（WS/HTTP ingest + 寫入資料庫 + 看板）。
+- ✅ **Agent 端可靠性完成**：握手鑑權、hello/hello_ack、ack、**斷線重連（指數退避）**、**斷網緩衝 + 續傳**（`UplinkClient` + `LocalBuffer`，伺服器冪等去重），圖片 HMAC 簽名 + 補傳。
+- ✅ **config_update 熱更新**：伺服器 `POST /api/exams/{examId}/config` → `AgentHub` 推送給線上 Agent（新連/重連在 hello 時補推）→ Agent `LiveConfig` 原子應用（白名單/閾值/截圖參數，下一輪採集即生效）。
+- ✅ **證據圖跨重連關聯**：觸發型抓圖**用戶端預生成 imageId**（`X-Horus-Image-Id`，伺服器沿用、跳過 pHash 去重、冪等），離線緩衝 + 斷線重連補傳後 `evidenceImageId` 關聯不斷。
+- ✅ **三路獨立稽核（安全 / 並行與資料完整性 / 正確性與契約）+ 修復**：修掉兩條會丟證據的 Critical（`ack` 改**逐條確認**杜絕空洞誤刪、**序號高水位持久化**杜絕重新啟動重複使用）、`trigger` 映射為契約值、`is_evidence` 亂序回填、`url_unreadable` 強制入隊、緩衝原子壓實 + 崩潰恢復、Schema DDL 切分健壯化；安全加固：**管理權杖 `X-Horus-Admin`（/api 全鑑權）**、圖片體/WS 影格大小上限、`X-Horus-Image-Id` 納入簽名、`LiveConfig` 上下限鉗制、路徑穿越邊界、舊連接 Abort、Dispose 競態。
+- ✅ **第二輪複審（效能/負載/可靠性 · 安全 · 邏輯/迴歸 三路並行）+ 修復**：修上一輪引入的兩條迴歸——`url_unreadable` 每 2s 刷爆佇列（改為只在進入不可讀態發一次）、逐條 ack 的 O(N²) 全檔案重寫（改**攢批壓實**）；+ 效能（看板/回填索引、圖片體 8→2MB、重連 jitter）+ 安全（**fail-closed** 非 loopback 缺憑證拒啟動、`FixedTimeEquals` 不洩漏長度、圖片 `?t=` 加 no-referrer/no-store、clientId 驗籤前檢核）+ 邏輯（`LiveConfig` 只下發一端不篡改另一端）。
+- ✅ **41 項測試全綠**（含兩輪稽核的迴歸：逐條/攢批 ack · 重新啟動不復用 seq · trigger 映射 · is_evidence 回填 · Schema 分號健壯 · 管理鑑權 401·200·?t= · fail-closed · FixedTimeEquals · LiveConfig 單端下發）+ 真機 curl 驗證。
 
-**M2 信任模型加固（已实现 · 50 项测试全绿 · 三路独立审计放行）**：
-- ✅ **服务器侧 risk 重算**（闭合 §10.1 头号残留）：不采信 Agent 自报 `risk`，凭独立黑名单（AI 站 / 搜索引擎 / 远控工具）+ 该考试**已下发**白名单重算 `server_risk`，以**有效风险 = max(agentRisk, serverRisk)** 决定入队；`serverRisk≥阈值` 而 `agentRisk<阈值` 记 `agent_risk_understated` 篡改标记。学员把「访问 AI 站」签成 `risk=0` 也压不住入队（`events` 加 `server_risk` 列 + 幂等迁移）。
-- ✅ **keystroke 会话鉴权**（闭合 §10.1 栽赃）：判题后端持 **KSK** 对整条 body 签名 `X-Horus-KSig=HMAC(KSK,"keystroke\n"+sha256(body))`；改 seatId 栽赃即破签 → 401。域分隔前缀防跨通道重用。
-- ✅ **admin 令牌改 HttpOnly cookie + SameSite=Strict + CSP**：`POST /api/login` 校验后种 cookie（JS 读不到、`<img>` 自动携带、不进 URL）；gate 接受 cookie/头/`?t=`（后二者兼容）；`/api/login /api/logout` 免鉴权；全响应附 CSP/nosniff/X-Frame-Options/Referrer-Policy。
-- ✅ **DB 读写分离**（§10.2 吞吐天花板）：单写连接（写锁串行）+ 独立只读连接（WAL 并发读）；看板 6 个 GET 走只读连接与写路径互不阻塞；`:memory:` 回退单连接（测试无感）；`Pooling=false`。单写者仍用写锁（Channel 因 ack 契约无收益,作规模余量留后续）。
-**M2 分析增强 · 视觉 LLM 引擎（骨架已实现 · 57 项测试全绿）**：
-- ✅ **L2 视觉 LLM 识图取代 OCR + L3 Logo（owner 拍板·合并单一视觉级）**：一次「看懂画面」同时做文字提取 + AI 对话界面/搜索页/IDE 幽灵补全/远控工具识别 + 分类,结构化直出 `{suspicious,category,confidence,evidence}`。**provider-agnostic**:`IVisionAnalyzer` 接口 + `MockVisionAnalyzer`(确定性·测试联调·不出网)+ `OpenAiCompatibleVisionAnalyzer`(DeepSeek-V4 / 小米 MiMo-V2.5 / Qwen-VL / GLM-4V 皆 OpenAI 兼容 → 换 `visionBaseUrl`+`visionModel`+`visionApiKey` 即换供应商)。
-- ✅ **异步后台分析**(`VisionAnalysisService` + `Channel`,**不占 ingest 热路径**):图入库 → 入队 → 判定 → 落 `ocr_results` + 标证据 + 引用事件抬 `server_risk` + 入可疑队列(note=`vision:证据`)。视觉关时整链 no-op。
-- ✅ **供应商已定 = 小米 MiMo-V2.5 托管 API(境内云·OpenAI 兼容)**:`visionProvider=openai` · `visionBaseUrl=https://token-plan-cn.xiaomimimo.com/v1` · `visionModel=MiMo-V2.5`。**API key 不存明文·自动加密**:`SecretProtect`(Windows DPAPI 机器范围)。**UX = 运维直接把明文填进 config 的 `visionApiKey`,启动即自动加密为 `visionApiKeyEnc` 并清空明文(密文回写文件·行内替换保留注释)**;亦可 `Horus.Server protect-secret <key>` 预生成密文,或联调用 `HORUS_VISION_KEY` env 明文注入(优先级最高·不落盘)。启动时 `SecretProtect.Resolve` 解密进内存。真机 E2E 验证过(启动日志「已加密回写·明文已清除」+ 文件密文替换 + 注释保留)。
-- ✅ **真机 smoke 已过**(2026-07-01·真 key):合成 ChatGPT 截图 → MiMo 返回 `{suspicious:true,category:web_ai,confidence:100,hits:[ChatGPT,C++,Dijkstra],evidence:...,text:提取的可见文字}` —— 端点通、key 有效、**adapter 请求格式被接受、MiMo 返回正好是 `Parse` 期望的 JSON schema、一次调用同时界面识别+文字提取+分类**。★**model id = `mimo-v2.5`(小写)**(不是 `MiMo-V2.5`;`/v1/models` 列出 mimo-v2.5 / -pro / -asr / -tts)。成本 ≈717 token/图(448 图 token)。
-- ✅ **§5 派生处理已实现**(`server/Analysis/Vision/VisionImagePrep.cs`·ImageSharp 3.1.12):送云前**降采样**(`visionMaxEdge` 默认 1600·压 token)+ **剥离元数据**(EXIF/XMP/IPTC/ICC)再重编码 WebP;**原图字节只读、永不出网**,只送派生图;`visionMaxEdge≤0` 直通不解码(mock 测试走此路)。★**打码/裁剪已按 owner 决策(2026-07-02)移除**(逐考场配矩形负担>收益·供应商=境内云 MiMo·PIPL 无跨境·已告知学员)。
-- ✅ **基线抽样策略**(收尾):`VisionAnalyzeBaseline=true` 时按 `VisionBaselineSampleRate` 做**确定性 1/N 抽样**(FNV-1a over imageId·跨重启一致),未抽中基线标 `analysis_state=1` 终结、补偿重扫不再拾回,控云成本。默认 1=全分析。
+**M2 信任模型加固（已實作 · 50 項測試全綠 · 三路獨立稽核放行）**：
+- ✅ **伺服器側 risk 重算**（閉合 §10.1 頭號殘留）：不採信 Agent 自報 `risk`，憑獨立黑名單（AI 站 / 搜索引擎 / 遠控工具）+ 該考試**已下發**白名單重算 `server_risk`，以**有效風險 = max(agentRisk, serverRisk)** 決定入隊；`serverRisk≥阈值` 而 `agentRisk<阈值` 記 `agent_risk_understated` 篡改標記。學員把「訪問 AI 站」籤成 `risk=0` 也壓不住入隊（`events` 加 `server_risk` 列 + 冪等遷移）。
+- ✅ **keystroke 工作階段鑑權**（閉合 §10.1 栽贓）：判題後端持 **KSK** 對整條 body 簽名 `X-Horus-KSig=HMAC(KSK,"keystroke\n"+sha256(body))`；改 seatId 栽贓即破籤 → 401。域分隔前綴防跨通道重用。
+- ✅ **admin 權杖改 HttpOnly cookie + SameSite=Strict + CSP**：`POST /api/login` 檢核後種 cookie（JS 讀不到、`<img>` 自動攜帶、不進 URL）；gate 接受 cookie/頭/`?t=`（後二者相容）；`/api/login /api/logout` 免鑑權；全回應附 CSP/nosniff/X-Frame-Options/Referrer-Policy。
+- ✅ **DB 讀寫分離**（§10.2 吞吐天花板）：單寫連接（寫鎖串行）+ 獨立唯讀連接（WAL 並行讀）；看板 6 個 GET 走唯讀連接與寫路徑互不阻塞；`:memory:` 退回單連接（測試無感）；`Pooling=false`。單寫者仍用寫鎖（Channel 因 ack 契約無收益,作規模餘量留後續）。
+**M2 分析增強 · 視覺 LLM 引擎（骨架已實作 · 57 項測試全綠）**：
+- ✅ **L2 視覺 LLM 識圖取代 OCR + L3 Logo（owner 拍板·合併單一視覺級）**：一次「看懂畫面」同時做文字提取 + AI 對話介面/搜索頁/IDE 幽靈補全/遠控工具識別 + 分類,結構化直出 `{suspicious,category,confidence,evidence}`。**provider-agnostic**:`IVisionAnalyzer` 介面 + `MockVisionAnalyzer`(確定性·測試整合測試·不出網)+ `OpenAiCompatibleVisionAnalyzer`(DeepSeek-V4 / 小米 MiMo-V2.5 / Qwen-VL / GLM-4V 皆 OpenAI 相容 → 換 `visionBaseUrl`+`visionModel`+`visionApiKey` 即換供應商)。
+- ✅ **非同步後台分析**(`VisionAnalysisService` + `Channel`,**不佔 ingest 熱路徑**):圖入庫 → 入隊 → 判定 → 落 `ocr_results` + 標證據 + 引用事件抬 `server_risk` + 入可疑佇列(note=`vision:证据`)。視覺關時整鏈 no-op。
+- ✅ **供應商已定 = 小米 MiMo-V2.5 託管 API(境內雲·OpenAI 相容)**:`visionProvider=openai` · `visionBaseUrl=https://token-plan-cn.xiaomimimo.com/v1` · `visionModel=MiMo-V2.5`。**API key 不存明文·自動加密**:`SecretProtect`(Windows DPAPI 機器範圍)。**UX = 維運直接把明文填進 config 的 `visionApiKey`,啟動即自動加密為 `visionApiKeyEnc` 並清空明文(密文回寫檔案·行內替換保留註解)**;亦可 `Horus.Server protect-secret <key>` 預生成密文,或整合測試用 `HORUS_VISION_KEY` env 明文注入(優先級最高·不寫入磁碟)。啟動時 `SecretProtect.Resolve` 解密進記憶體。真機 E2E 驗證過(啟動紀錄「已加密回寫·明文已清除」+ 檔案密文替換 + 註解保留)。
+- ✅ **真機 smoke 已過**(2026-07-01·真 key):合成 ChatGPT 截圖 → MiMo 回傳 `{suspicious:true,category:web_ai,confidence:100,hits:[ChatGPT,C++,Dijkstra],evidence:...,text:提取的可见文字}` —— 端點通、key 有效、**adapter 請求格式被接受、MiMo 回傳正好是 `Parse` 期望的 JSON schema、一次呼叫同時介面識別+文字提取+分類**。★**model id = `mimo-v2.5`(小寫)**(不是 `MiMo-V2.5`;`/v1/models` 列出 mimo-v2.5 / -pro / -asr / -tts)。成本 ≈717 token/圖(448 圖 token)。
+- ✅ **§5 派生處理已實作**(`server/Analysis/Vision/VisionImagePrep.cs`·ImageSharp 3.1.12):送雲前**降取樣**(`visionMaxEdge` 預設 1600·壓 token)+ **剝離中繼資料**(EXIF/XMP/IPTC/ICC)再重編碼 WebP;**原圖位元組唯讀、永不出網**,只送派生圖;`visionMaxEdge≤0` 直通不解碼(mock 測試走此路)。★**打碼/裁剪已按 owner 決策(2026-07-02)移除**(逐考場配矩形負擔>收益·供應商=境內雲 MiMo·PIPL 無跨境·已告知學員)。
+- ✅ **基線抽樣策略**(收尾):`VisionAnalyzeBaseline=true` 時按 `VisionBaselineSampleRate` 做**確定性 1/N 抽樣**(FNV-1a over imageId·跨重新啟動一致),未抽中基線標 `analysis_state=1` 終結、補償重掃不再拾回,控雲成本。預設 1=全分析。
 
-**M3 取证强化(已实现两项 · 三路独立审计放行 · 累计 130 项测试全绿)**:
-- ✅ **哈希链完整性复验**(闭合 §10.1「服务器不重算 canonical」)=①**ingest 时**从原始 payload 文本 + 落库字段逐字节复算 `canonicalCore`(`EventCanonical.CoreRaw`,与 Agent 端 `Core` 逐字节一致·黄金测试锁定 ~20 反例含中文/代理对/U+2028/数字格式)、复算 `hashSelf`,不符 **`bad_hash` 拒收不落库** → `hashSelf`/`sig` 成为**真正锚定 payload** 的取证锚点(此前 sig 只绑 hashSelf 字符串,payload 未被签名覆盖);②**离线审计** `IntegrityAudit` + `GET /api/exams/{id}/integrity`:按 (agent,seq) 复验**锚点自洽**(落库后改 payload → hashMismatch)+ **链连续**(删/插/重排 → continuityBreak)。落 `machine_id` 列(canonicalCore 含 machineId,离线复算必须)。**诚实残留**:持 PSK 者仍可构造自洽伪造链(内容为假·靠截图/视觉/人工兜底)。
-- ✅ **归档/清理作业** `ArchiveService`(后台 `PeriodicTimer` 每 6h + 手动 `POST /api/archive/run`)=扫描结束超 `RetentionDays`(默认30)天考试 → 关键数据(有效风险≥阈值 或 被 suspicious_queue 引用的**事件/证据图/OCR/Logo/击键样本**+裁决+汇总+hash锚)转独立 **archive 库**(证据图移冷存 `archive/<exam>/<seat>/<id>.webp`)→ 就地清理 live → `status='archived'` → VACUUM。**证据不丢**:pending 未裁决**跳过整场**;copy(INSERT OR IGNORE)+文件移动(容忍已迁)幂等,copy 后/delete 前崩溃重跑收敛。
-- ★**三路独立审计(丢证据/安全/正确性契约)+全修**:修 **C1 Critical**=被 confirmed 裁决引用的**击键样本**原会被无条件删且无归档表→定罪证据永久丢失(补 `archive_keystroke_samples`+ParseRefs 认 `keystroke:`+清理前先归档关键击键);修 **High/Med**=`machine_id` 迁移使 M3 前旧事件被离线审计**误报"篡改"**(改归 `unverifiable` 单列·**绝不误报历史数据**);修 **Med**=已归档考试 integrity 端点返回空 `ok:true` 伪装全绿(改 `applicable:false`)。审计**验证为非缺陷**:CoreRaw≡Core 逐字节(实测)·path traversal 双层封堵·新端点 admin gate 全覆盖·hashSelf 复验不误拒合法在线事件·归档幂等/崩溃安全/FK 顺/锁模型均稳。
-- ✅ **CLIP 按图搜图已落地**(见下方 M3 续批·本地 ONNX CLIP·**C# 暴力余弦·未用 sqlite-vec**)。击键节奏**前端埋点**已撤(考试都在外部洛谷·无本地判题页·核心粘贴信号 Agent OS 级剪贴板已覆盖·server 侧 KSK 收 + 归档保留就绪)。
+**M3 取證強化(已實作兩項 · 三路獨立稽核放行 · 累計 130 項測試全綠)**:
+- ✅ **雜湊鏈完整性複驗**(閉合 §10.1「伺服器不重算 canonical」)=①**ingest 時**從原始 payload 文字 + 寫入資料庫欄位逐位元組復算 `canonicalCore`(`EventCanonical.CoreRaw`,與 Agent 端 `Core` 逐位元組一致·黃金測試鎖定 ~20 反例含中文/代理對/U+2028/數字格式)、復算 `hashSelf`,不符 **`bad_hash` 拒收不寫入資料庫** → `hashSelf`/`sig` 成為**真正錨定 payload** 的取證錨點(此前 sig 只綁 hashSelf 字串,payload 未被簽名覆蓋);②**離線稽核** `IntegrityAudit` + `GET /api/exams/{id}/integrity`:按 (agent,seq) 複驗**錨點自洽**(寫入資料庫後改 payload → hashMismatch)+ **鏈連續**(刪/插/重排 → continuityBreak)。落 `machine_id` 列(canonicalCore 含 machineId,離線復算必須)。**誠實殘留**:持 PSK 者仍可建構自洽偽造鏈(內容為假·靠截圖/視覺/人工備援)。
+- ✅ **歸檔/清理作業** `ArchiveService`(後台 `PeriodicTimer` 每 6h + 手動 `POST /api/archive/run`)=掃描結束超 `RetentionDays`(預設30)天考試 → 關鍵資料(有效風險≥閾值 或 被 suspicious_queue 引用的**事件/證據圖/OCR/Logo/擊鍵樣本**+裁決+彙總+hash錨)轉獨立 **archive 庫**(證據圖移冷存 `archive/<exam>/<seat>/<id>.webp`)→ 就地清理 live → `status='archived'` → VACUUM。**證據不丟**:pending 未裁決**跳過整場**;copy(INSERT OR IGNORE)+檔案移動(容忍已遷)冪等,copy 後/delete 前崩潰重跑收斂。
+- ★**三路獨立稽核(丟證據/安全/正確性契約)+全修**:修 **C1 Critical**=被 confirmed 裁決引用的**擊鍵樣本**原會被無條件刪且無歸檔表→定罪證據永久丟失(補 `archive_keystroke_samples`+ParseRefs 認 `keystroke:`+清理前先歸檔關鍵擊鍵);修 **High/Med**=`machine_id` 遷移使 M3 前舊事件被離線稽核**誤報"篡改"**(改歸 `unverifiable` 單列·**絕不誤報歷史資料**);修 **Med**=已歸檔考試 integrity 端點回傳空 `ok:true` 偽裝全綠(改 `applicable:false`)。稽核**驗證為非缺陷**:CoreRaw≡Core 逐位元組(實測)·path traversal 雙層封堵·新端點 admin gate 全覆蓋·hashSelf 複驗不誤拒合法線上事件·歸檔冪等/崩潰安全/FK 順/鎖模型均穩。
+- ✅ **CLIP 按圖搜圖已完成實作**(見下方 M3 續批·本機 ONNX CLIP·**C# 暴力餘弦·未用 sqlite-vec**)。擊鍵節奏**前端埋點**已撤(考試都在外部洛谷·無本機判題頁·核心粘貼信號 Agent OS 級剪貼板已覆蓋·server 側 KSK 收 + 歸檔保留就緒)。
 
-**第三轮独立审查(5 并行 agent)+ 全批修复(owner 拍板全修 · 130 项测试全绿)**:取证锚点核心(canonical 逐字节·验签绑定·ingest 复验·归档崩溃安全/幂等·并发单写者·注入/DoS/密钥)5 路复核**均无新缺陷**;修复集中在视觉链失败态语义/URL 判据边界/归档读路径/文档漂移:
-- **F1(High)**视觉临时云失败→证据图**永久漏析**(占位早置 uploaded_to_ocr、backstop 只捞未占位、失败不重置)→ 拆 `analysis_state`(处理闩锁·0待分析/1终结)与 `analysis_attempts`(重试上限 `visionMaxAttempts`),临时失败**不终结**由补偿重扫按 attempts<上限重试,确定态失败(文件缺失/派生失败)才终结;**F2** `uploaded_to_ocr` 语义拆净=**仅真出网(SendsOffNetwork 成功送出)才置 1**(mock/本地/失败恒 0·不再撒谎),meta 端点加 `analyzed`。
-- **F3** 归档后证据无 HTTP 读路径 → `/api/images/{id}`+`/meta` **回落 archive 库+冷存** + 新增 `GET /api/archive/exams/{id}` 只读复核。
-- **F4** 同一事件重复入队(ingest 一条+视觉一条)→ 视觉命中若已有 pending 引用该 event 则**并入**(score 取 max·note 追加 vision)不另插。
-- **F5** URL 黑名单 `Contains` 子串假阳性(richardbard→bard·foryou.com→you.com)→ `RiskModel.HostMatchesAny` 改**按 DNS 标签**(裸词配整段标签·dotted 配域后缀);进程名保留子串(改名远控)。HostOf 解析失败返空不撞整串。**F11** 空 host(about:blank/data:)不再误判高危。
-- **F6** `LocalBuffer.MaxBufferedSeq` 不再全量读图字节(只解析文件名)。**F7** config 端点补 `IsSafeId`。**F8** no-referrer/no-store 提全局中间件。**F9** ParseConfidence 整数 1 不再放大成 100(仅严格 0<d<1)。**F10** 视觉解码 `Image.Identify` 先探尺寸拒超 4096² 防解码炸弹。
-- **D2** `capture_now` 帧从文档承诺变**真**(`POST /api/agents/{agentId}/capture` 推帧)。**D6** integrity 报告加 `sigVerified`/`note`(psk=null 联调"绿"不伪装取证清白)。文档漂移全清(测试数 130·event:manual·旧术语"云OCR/裁剪打码"·尾部截断诚实残留)。
-- **A1/A2 事件通道跨身份栽赃 + seq 抢占**在共享 PSK 模式下是真实风险；当前贝塔通 OIDC 路径以 per-user 身份和会话绑定闭合它，`psk` / `both` 仅保留为 legacy / 灰度模式。详见 architecture §10.1 与 [m4-identity-oidc.md](m4-identity-oidc.md)。
+**第三輪獨立審查(5 並行 agent)+ 全批修復(owner 拍板全修 · 130 項測試全綠)**:取證錨點核心(canonical 逐位元組·驗籤綁定·ingest 複驗·歸檔崩潰安全/冪等·並行單寫者·注入/DoS/金鑰)5 路複核**均無新缺陷**;修復集中在視覺鏈失敗態語義/URL 判據邊界/歸檔讀路徑/文件漂移:
+- **F1(High)**視覺臨時雲失敗→證據圖**永久漏析**(佔位早置 uploaded_to_ocr、backstop 只撈未佔位、失敗不重置)→ 拆 `analysis_state`(處理閂鎖·0待分析/1終結)與 `analysis_attempts`(重試上限 `visionMaxAttempts`),臨時失敗**不終結**由補償重掃按 attempts<上限重試,確定態失敗(檔案缺失/派生失敗)才終結;**F2** `uploaded_to_ocr` 語義拆淨=**僅真出網(SendsOffNetwork 成功送出)才置 1**(mock/本機/失敗恆 0·不再撒謊),meta 端點加 `analyzed`。
+- **F3** 歸檔後證據無 HTTP 讀路徑 → `/api/images/{id}`+`/meta` **回落 archive 庫+冷存** + 新增 `GET /api/archive/exams/{id}` 唯讀複核。
+- **F4** 同一事件重複入隊(ingest 一條+視覺一條)→ 視覺命中若已有 pending 引用該 event 則**併入**(score 取 max·note 追加 vision)不另插。
+- **F5** URL 黑名單 `Contains` 子串假陽性(richardbard→bard·foryou.com→you.com)→ `RiskModel.HostMatchesAny` 改**按 DNS 標籤**(裸詞配整段標籤·dotted 配域後綴);處理程序名保留子串(改名遠控)。HostOf 解析失敗返空不撞整串。**F11** 空 host(about:blank/data:)不再誤判高危。
+- **F6** `LocalBuffer.MaxBufferedSeq` 不再全量讀圖位元組(只解析檔案名)。**F7** config 端點補 `IsSafeId`。**F8** no-referrer/no-store 提全域中介軟體。**F9** ParseConfidence 整數 1 不再放大成 100(僅嚴格 0<d<1)。**F10** 視覺解碼 `Image.Identify` 先探尺寸拒超 4096² 防解碼炸彈。
+- **D2** `capture_now` 影格從文件承諾變**真**(`POST /api/agents/{agentId}/capture` 推影格)。**D6** integrity 報告加 `sigVerified`/`note`(psk=null 整合測試"綠"不偽裝取證清白)。文件漂移全清(測試數 130·event:manual·舊術語"雲OCR/裁剪打碼"·尾部截斷誠實殘留)。
+- **A1/A2 事件通道跨身分栽贓 + seq 搶佔**在共享 PSK 模式下是真實風險；當前貝塔通 OIDC 路徑以 per-user 身分和工作階段綁定閉合它，`psk` / `both` 僅保留為 legacy / 灰度模式。詳見 architecture §10.1 與 [m4-identity-oidc.md](m4-identity-oidc.md)。
 
-**考试派发 + 常态待命 + 全场远程登出(owner 决策 2026-07-03 · 207 项测试全绿)**:
-- ✅ **examId 不再由 Agent 配置携带**:`/oidc/exchange` 服务端指派「当前活跃考试」(status='active' 最近创建一场;无则 `no_active_exam` 拒,且**先于 token 交换**判定不白耗一次性授权码);**seatId := OIDC username**(空/不安全回退 sub·`ExamDispatch.SeatFrom`)—— 座位=身份,学员无法自报;协议/canonical/schema/KSK **零迁移**(字段保留,来源改变),物理定位由 machineId/agentId 承担。
-- ✅ **Agent 常态待命循环**(oidc 模式):启动即待命轮询 `GET /oidc/active-exam`(**不采集不抓屏** —— 窗口外持续监控是隐私红线)→ 开考自动弹浏览器 OIDC 登录 → 采集 → 收 `exam_ended`(end 在线推送 / 重连 hello 按考试状态补发·留 5s 排空缓冲)或 `session_revoked`(立即停)→ 弃会话回待命等下一场;每 60s `GET /oidc/session` 探针兜底离线错过的推送。psk(legacy)模式保持配置 examId/seatId 的单场语义。
-- ✅ **全场远程登出** `POST /api/exams/{id}/logout`(admin 门内):`SessionStore.RevokeByExam` 吊销全部采集会话 + 推 `session_revoked` + **强断在线连接**(吊销会话的旧 WS 不能续用),重连 401;`POST /api/exams/{id}/end` 现在向在线 Agent 推 `exam_ended`(响应带 notified)。
-- ✅ **换场缓冲卫生**:新 OIDC 会话开始即 `LocalBuffer.PurgeSession`(旧 K_sess 已死,残留缓冲必 bad_sig 永不 ack → 每次重连重放-被拒死循环);seq 高水位保留 + hello_ack 对齐不撞旧 seq。
-- ✅ **默认管理员运行**:agent exe 内嵌 `requireAdministrator` manifest(双击即 UAC 提权,免右键);⚠️ requireAdministrator 程序**不能**挂 Run 键自启(系统静默跳过)—— 本就不常驻自启(考试前手动打开),保活场景走 `install-service`(LocalSystem 无 UAC)。看门狗单例键改 `agentId_machineId`(与考试解耦)。
-- ✅ **Agent 近零配置**(owner 决策 2026-07-03):`AgentConfig` 所有字段内置默认,**配置文件整个可选**(缺文件即全默认)。authMode=oidc / issuer=`https://pass.betaoi.cc`（P149 修订） / scope=`openid profile` / 采集参数 / 白名单(洛谷 + 常见 IDE)全烤默认;**agentId/machineId 留空由主机名自动推导**(machineId=主机名·agentId="ag-"+主机名·`ApplyIdentityDefaults`);examId/seatId/psk 在 oidc 无需配。**唯一去不掉 = 服务器地址**(Agent 连上前须知道服务器在哪·无法下发)→ owner 拍板烤固定默认 `192.168.32.145:8080`(IP 不符才覆盖);**dist/client 不再带任何配置文件**(纯默认零配置)。★STJ init 集合属性:配置提供的 whitelist **替换**(非合并)内置默认。
+**考試派發 + 常態待命 + 全場遠程登出(owner 決策 2026-07-03 · 207 項測試全綠)**:
+- ✅ **examId 不再由 Agent 設定攜帶**:`/oidc/exchange` 伺服器端指派「當前活躍考試」(status='active' 最近建立一場;無則 `no_active_exam` 拒,且**先於 token 交換**判定不白耗一次性授權碼);**seatId := OIDC username**(空/不安全退回 sub·`ExamDispatch.SeatFrom`)—— 座位=身分,學員無法自報;協定/canonical/schema/KSK **零遷移**(欄位保留,來源改變),物理定位由 machineId/agentId 承擔。
+- ✅ **Agent 常態待命循環**(oidc 模式):啟動即待命輪詢 `GET /oidc/active-exam`(**不採集不抓屏** —— 視窗外持續監控是隱私紅線)→ 開考自動彈瀏覽器 OIDC 登入 → 採集 → 收 `exam_ended`(end 線上推送 / 重連 hello 按考試狀態補發·留 5s 排空緩衝)或 `session_revoked`(立即停)→ 棄工作階段回待命等下一場;每 60s `GET /oidc/session` 探針備援離線錯過的推送。psk(legacy)模式保持設定 examId/seatId 的單場語義。
+- ✅ **全場遠程登出** `POST /api/exams/{id}/logout`(admin 門內):`SessionStore.RevokeByExam` 吊銷全部採集工作階段 + 推 `session_revoked` + **強斷線上連接**(吊銷工作階段的舊 WS 不能續用),重連 401;`POST /api/exams/{id}/end` 現在向線上 Agent 推 `exam_ended`(回應帶 notified)。
+- ✅ **換場緩衝衛生**:新 OIDC 工作階段開始即 `LocalBuffer.PurgeSession`(舊 K_sess 已死,殘留緩衝必 bad_sig 永不 ack → 每次重連重放-被拒死循環);seq 高水位保留 + hello_ack 對齊不撞舊 seq。
+- ✅ **預設管理員執行**:agent exe 內嵌 `requireAdministrator` manifest(雙擊即 UAC 提權,免右鍵);⚠️ requireAdministrator 程式**不能**掛 Run 鍵自啟(系統靜默跳過)—— 本就不常駐自啟(考試前手動打開),保活場景走 `install-service`(LocalSystem 無 UAC)。看門狗單例鍵改 `agentId_machineId`(與考試解耦)。
+- ✅ **Agent 近零設定**(owner 決策 2026-07-03):`AgentConfig` 所有欄位內置預設,**設定檔案整個可選**(缺檔案即全預設)。authMode=oidc / issuer=`https://pass.betaoi.cc`（P149 修訂） / scope=`openid profile` / 採集參數 / 白名單(洛谷 + 常見 IDE)全烤預設;**agentId/machineId 留空由主機名自動推導**(machineId=主機名·agentId="ag-"+主機名·`ApplyIdentityDefaults`);examId/seatId/psk 在 oidc 無需配。**唯一去不掉 = 伺服器位址**(Agent 連上前須知道伺服器在哪·無法下發)→ owner 拍板烤固定預設 `192.168.32.145:8080`(IP 不符才覆蓋);**dist/client 不再帶任何設定檔案**(純預設零設定)。★STJ init 集合屬性:設定提供的 whitelist **替換**(非合併)內置預設。
 
-**M4 身份层 + M5 采集端硬化（承前·补记状态·功能面见对应 docs）**:
-- ✅ **M4 采集面 OIDC 取代共享 PSK**（闭合 §10.1 A1 跨身份栽赃 / A2 seq 抢占）：学员机使用贝塔通 per-user 身份，事件体身份 == 会话身份强制一致；`both` 灰度共存、预检判据要求全部迁 OIDC 才切。见 [m4-identity-oidc.md](m4-identity-oidc.md)。
-- ✅ **监考员看板 OIDC 登录**：★★ **2026-08-07 起准入由贝塔通的 `horus-admin` 平台开关回答**（其 P83），本地**不再判角色** —— `user_type == 'elder'` 那行已整个删除。~~wentian 长老 = 监考员，弟子 = 考生；缺 `user_type` fail-safe 到 disciple 绝不误授~~（**已随 P83 整个消失**）；**移除静态令牌后门**（adminAuthMode=oidc 时，仍然成立）；自签 HTTPS + 贝塔通 `horus-dashboard` client（★ 归属平台 `horus-admin`，`redirect_uri` **每台监考机一条**）。
-- ✅ **M5 采集端硬化**（纯检测 = 检测 + 上报 + 看板健康告警·不做内核对抗）：三层保活（Windows 服务 LocalSystem + 兄弟看门狗互拉 + 心跳告警）+ 4 健康信号（防挂起 `suspected_suspend` / 防遮蔽 `screenshot_obscured` / 防降权限 `capability_degraded` / 服务保活）。见 [m5-agent-hardening.md](m5-agent-hardening.md)。
+**M4 身分層 + M5 採集端硬化（承前·補記狀態·功能面見對應 docs）**:
+- ✅ **M4 採集面 OIDC 取代共享 PSK**（閉合 §10.1 A1 跨身分栽贓 / A2 seq 搶佔）：學員機使用貝塔通 per-user 身分，事件體身分 == 工作階段身分強制一致；`both` 灰度共存、預檢判據要求全部遷 OIDC 才切。見 [m4-identity-oidc.md](m4-identity-oidc.md)。
+- ✅ **監考員看板 OIDC 登入**：★★ **2026-08-07 起存取資格由貝塔通的 `horus-admin` 平台開關回答**（其 P83），本機**不再判角色** —— `user_type == 'elder'` 那行已整個刪除。~~wentian 長老 = 監考員，弟子 = 考生；缺 `user_type` fail-safe 到 disciple 絕不誤授~~（**已隨 P83 整個消失**）；**移除靜態權杖後門**（adminAuthMode=oidc 時，仍然成立）；自籤 HTTPS + 貝塔通 `horus-dashboard` client（★ 歸屬平台 `horus-admin`，`redirect_uri` **每臺監考機一條**）。
+- ✅ **M5 採集端硬化**（純檢測 = 檢測 + 上報 + 看板健康告警·不做核心對抗）：三層保活（Windows 服務 LocalSystem + 兄弟看門狗互拉 + 心跳告警）+ 4 健康信號（防掛起 `suspected_suspend` / 防遮蔽 `screenshot_obscured` / 防降權限 `capability_degraded` / 服務保活）。見 [m5-agent-hardening.md](m5-agent-hardening.md)。
 
-**会话模型三道门（2026-08-11 完工·随贝塔通 P88/P101）**:
-- ✅ **三道门**：心跳 15min / idle 30min / **absolute 6h**（原 3h）。两张会话表加 `last_heartbeat_at` + `last_seen_at`（幂等迁移，旧行回填 `issued_at`）；心跳端点 `POST /api/heartbeat` → 204（150s 节流，判据按字段分开）。
-- ★★ **两个客户端的心跳规格必须分开**：看板 `horus-dashboard` 是浏览器（定时器 + `BroadcastChannel` 选主）；采集端 `horus-client` 是 exe，用 `GetLastInputInfo` 判真人活动并**复用既有 WS 上行**，不新开端点。**照抄浏览器那套会把学员踢下线。**
-- ★ **任何业务请求都不得续 idle** —— 续期只认心跳这一条通道。
-- ✅ 开考预检自算 absolute 剩余（采集端横幅告警 + 看板 `/api/preflight` 的 `session_lifetime`）；存活探针 `GET /internal/health`。
-- ⏳ **卡 owner**：`post_logout_redirect_uri` 需在贝塔通登记。
+**工作階段模型三道門（2026-08-11 完工·隨貝塔通 P88/P101）**:
+- ✅ **三道門**：心跳 15min / idle 30min / **absolute 6h**（原 3h）。兩張工作階段表加 `last_heartbeat_at` + `last_seen_at`（冪等遷移，舊行回填 `issued_at`）；心跳端點 `POST /api/heartbeat` → 204（150s 節流，判據按欄位分開）。
+- ★★ **兩個用戶端的心跳規格必須分開**：看板 `horus-dashboard` 是瀏覽器（定時器 + `BroadcastChannel` 選主）；採集端 `horus-client` 是 exe，用 `GetLastInputInfo` 判真人活動並**重複使用既有 WS 上行**，不新開端點。**照抄瀏覽器那套會把學員踢下線。**
+- ★ **任何業務請求都不得續 idle** —— 續期只認心跳這一條通道。
+- ✅ 開考預檢自算 absolute 剩餘（採集端橫幅告警 + 看板 `/api/preflight` 的 `session_lifetime`）；存活探針 `GET /internal/health`。
+- ⏳ **卡 owner**：`post_logout_redirect_uri` 需在貝塔通登記。
 
-**M3 续批 · CLIP 按图搜图（已落地）+ 运维 UX 收尾（2026-07-03）**:
-- ✅ **本地 ONNX CLIP 嵌入器**（`OnnxClipEmbedder`·OnnxRuntime CPU·零出网）：预处理 resize + center-crop 224² + CLIP 归一化 → 512 维单位向量；★实测小米 MiMo-V2.5 **无** `/v1/embeddings` 端点 → owner 拍板改本地 ONNX。**规模小 → C# 暴力余弦，无需 sqlite-vec**（`vec_images` 虚表留大规模余量）。仅嵌证据图省算力；`ImageEmbedService` 后台 backstop 补嵌；看板灯箱「按图搜图」。⚠️真 ONNX 模型（HF `Qdrant/clip-ViT-B-32-vision` 的 `model.onnx`）属部署项，冒烟测试发现模型才跑。
-- ✅ **考试管理看板 UI**：topbar 三按钮（开始 / 结束 / 全场登出·后端端点本就有·纯连 UI）。
-- ✅ **OIDC token 交换重试**（`OidcHttp.PostFormWithRetryAsync`·瞬时 TLS/网络/5xx 重试·4xx 不重试不重复消费授权码）：缓解服务端出站偶发 TLS 拦截。
-- ✅ **多密钥自动加密回写**（DPAPI）：视觉 key + 两个 OIDC secret（client + dashboard）填明文启动即加密为 `*Enc` 并清明文；★必在 env 覆盖之前跑（绝不把 env 注入的秘密写回盘）。
-- ✅ **Agent 近零配置**：配置文件整个可选·authMode=oidc / 采集参数 / 白名单全烤默认·agentId/machineId 主机名自动推导·**唯一须配 = 服务器地址**（默认 `192.168.32.145:8080`）。
+**M3 續批 · CLIP 按圖搜圖（已完成實作）+ 維運 UX 收尾（2026-07-03）**:
+- ✅ **本機 ONNX CLIP 嵌入器**（`OnnxClipEmbedder`·OnnxRuntime CPU·零出網）：預處理 resize + center-crop 224² + CLIP 歸一化 → 512 維單位向量；★實測小米 MiMo-V2.5 **無** `/v1/embeddings` 端點 → owner 拍板改本機 ONNX。**規模小 → C# 暴力餘弦，無需 sqlite-vec**（`vec_images` 虛表留大規模餘量）。僅嵌證據圖省算力；`ImageEmbedService` 後台 backstop 補嵌；看板燈箱「按圖搜圖」。⚠️真 ONNX 模型（HF `Qdrant/clip-ViT-B-32-vision` 的 `model.onnx`）屬部署項，冒煙測試發現模型才跑。
+- ✅ **考試管理看板 UI**：topbar 三按鈕（開始 / 結束 / 全場登出·後端端點本就有·純連 UI）。
+- ✅ **OIDC token 交換重試**（`OidcHttp.PostFormWithRetryAsync`·瞬時 TLS/網路/5xx 重試·4xx 不重試不重複消費授權碼）：緩解伺服器端出站偶發 TLS 攔截。
+- ✅ **多金鑰自動加密回寫**（DPAPI）：視覺 key + 兩個 OIDC secret（client + dashboard）填明文啟動即加密為 `*Enc` 並清明文；★必在 env 覆蓋之前跑（絕不把 env 注入的秘密寫回盤）。
+- ✅ **Agent 近零設定**：設定檔案整個可選·authMode=oidc / 採集參數 / 白名單全烤預設·agentId/machineId 主機名自動推導·**唯一須配 = 伺服器位址**（預設 `192.168.32.145:8080`）。
 
-**★收口审计 + 修复（2026-07-05 · 225 项测试全绿）**:对 M3 三轮审查（130 项）以来 **~4257 行未经独立审计**的新代码（考试派发 / 会话吊销 · CLIP 按图搜图 · 零配置 · OIDC 重试 · 考试 UI）做**四维并行独立审计**（身份会话安全 / 并发数据完整性 / 正确性逻辑契约 / 前端接线 + 文档），逐条对抗性复核去伪，修 **7 项确认缺陷**：
-- **[Medium] 全场登出竞态**：`EventIngest` 收帧循环握手后从不复查会话 → `RevokeByExam`（DELETE 恒先于 abort 遍历）漏断「登出瞬间正在握手」的连接 → 登记后补一次会话复查闭合（DELETE 先于 abort，凡错过 abort 者必登记于 DELETE 之后 → 复查必发现吊销）。
-- **[Medium·部署地雷] 端口 5199 ↔ 8080 分裂**：源码默认 / `server.config.sample.json` / `server/README` 旧 5199，而 Agent 烤死 / dist 成品 / 部署文档全 8080 → 运维照 sample 起服连不上 → 三处提交物对齐 8080。
-- **[Low] `/api/exams/{id}/end` 无状态守卫**：可把 archived/archiving 复活成 ended → 绕过 `/integrity` 的 `applicable:false` 保护伪装 ok:true → 加 `status IN('active','ended')` 守卫 + `IsSafeId`。
-- **[Low] 归档清理漏 `image_embeddings`**（裸 PK 表无 FK）→ 向量行悬挂指向已删图永久滞留 → 补显式清理（删 images 之前）。
-- **[Low] 视觉临时失败僵尸态**：达 `VisionMaxAttempts` 后卡 `analysis_state=0`（claim/backstop 都按 attempts<上限 过滤·既不重试也不终结）→ 达上限置终态放弃。
-- **[Low] `esc()` 不转义单引号**（防御纵深·当前不可利用）+ **[Low] `OidcTokenValidator` 补 `nbf` 校验**。
-- 审计**验证为非缺陷**（不改）：PS256 验签 / A1 身份强制 / 贝塔通平台准入 / 密钥回写 / 常量时间比较 / 归档崩溃安全·幂等 / CLIP center-crop（确用 `ResizeMode.Crop`）/ DNS 标签匹配 F5·F11 / host 裸词假阳（宁可错杀·白名单兜底）。补 **4 项回归测试**（nbf×2 · 向量孤儿清理 · end 状态守卫）。
+**★收口稽核 + 修復（2026-07-05 · 225 項測試全綠）**:對 M3 三輪審查（130 項）以來 **~4257 行未經獨立稽核**的新程式碼（考試派發 / 工作階段吊銷 · CLIP 按圖搜圖 · 零設定 · OIDC 重試 · 考試 UI）做**四維並行獨立稽核**（身分工作階段安全 / 並行資料完整性 / 正確性邏輯契約 / 前端串接 + 文件），逐條對抗性複核去偽，修 **7 項確認缺陷**：
+- **[Medium] 全場登出競態**：`EventIngest` 收影格循環握手後從不復查工作階段 → `RevokeByExam`（DELETE 恆先於 abort 遍歷）漏斷「登出瞬間正在握手」的連接 → 登記後補一次工作階段複查閉合（DELETE 先於 abort，凡錯過 abort 者必登記於 DELETE 之後 → 複查必發現吊銷）。
+- **[Medium·部署地雷] 連接埠 5199 ↔ 8080 分裂**：原始碼預設 / `server.config.sample.json` / `server/README` 舊 5199，而 Agent 烤死 / dist 成品 / 部署文件全 8080 → 維運照 sample 起服連不上 → 三處提交物對齊 8080。
+- **[Low] `/api/exams/{id}/end` 無狀態守衛**：可把 archived/archiving 復活成 ended → 繞過 `/integrity` 的 `applicable:false` 保護偽裝 ok:true → 加 `status IN('active','ended')` 守衛 + `IsSafeId`。
+- **[Low] 歸檔清理漏 `image_embeddings`**（裸 PK 表無 FK）→ 向量行懸掛指向已刪圖永久滯留 → 補顯式清理（刪 images 之前）。
+- **[Low] 視覺臨時失敗殭屍態**：達 `VisionMaxAttempts` 後卡 `analysis_state=0`（claim/backstop 都按 attempts<上限 過濾·既不重試也不終結）→ 達上限置終態放棄。
+- **[Low] `esc()` 不轉義單引號**（防禦縱深·當前不可利用）+ **[Low] `OidcTokenValidator` 補 `nbf` 檢核**。
+- 稽核**驗證為非缺陷**（不改）：PS256 驗籤 / A1 身分強制 / 貝塔通平台存取資格 / 金鑰回寫 / 常數時間比較 / 歸檔崩潰安全·冪等 / CLIP center-crop（確用 `ResizeMode.Crop`）/ DNS 標籤匹配 F5·F11 / host 裸詞假陽（寧可錯殺·白名單備援）。補 **4 項迴歸測試**（nbf×2 · 向量孤兒清理 · end 狀態守衛）。
 
-## 提交约定
-默认不提交，除非用户明确要求。commit 信息用中文，简洁。
+## 提交約定
+預設不提交，除非使用者明確要求。commit 資訊用中文，簡潔。

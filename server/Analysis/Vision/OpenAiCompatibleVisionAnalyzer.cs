@@ -6,9 +6,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Horus.Server.Analysis.Vision;
 
-/// OpenAI 兼容 /chat/completions 视觉 adapter。**DeepSeek-V4 / 小米 MiMo-V2.5(vLLM)/ Qwen-VL / GLM-4V 皆 OpenAI 兼容**
-/// → 换供应商 = 换 baseUrl + model + key 三个 config,代码零改。图以 data:image/webp;base64 内联;要求模型只回 JSON。
-/// 任何失败返回 null(fail-open:分析失败不阻断采集,交人工/后续复看),并记 Warning 供运维发现端点异常。
+/// OpenAI 相容 /chat/completions 視覺 adapter。**DeepSeek-V4 / 小米 MiMo-V2.5(vLLM)/ Qwen-VL / GLM-4V 皆 OpenAI 相容**
+/// → 換供應商 = 換 baseUrl + model + key 三個 config,程式碼零改。圖以 data:image/webp;base64 內聯;要求模型只回 JSON。
+/// 任何失敗回傳 null(fail-open:分析失敗不阻斷採集,交人工/後續復看),並記 Warning 供維運發現端點異常。
 public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
 {
     private const string SystemPrompt =
@@ -37,7 +37,7 @@ public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
 
     public string Engine => "openai:" + _model;
 
-    public bool SendsOffNetwork => true;   // 送云端点 → 送前必须剥元数据、派生失败宁跳过不泄原图(§5)
+    public bool SendsOffNetwork => true;   // 送雲端點 → 送前必須剝中繼資料、派生失敗寧跳過不洩原圖(§5)
 
     public async Task<VisionVerdict?> AnalyzeAsync(byte[] imageBytes, VisionContext ctx, CancellationToken ct)
     {
@@ -90,8 +90,8 @@ public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
         catch (Exception ex) { _log?.LogWarning(ex, "视觉端点调用失败 image={Image}", ctx.ImageId); return null; }
     }
 
-    /// 解析模型返回的 JSON。容忍 ```json 围栏 / 前后噪声:截取首个 '{' 到末个 '}'。
-    /// confidence/suspicious 容忍供应商返回的多种表述(整数/小数/字符串数字/字符串布尔/0-1),避免漏报。
+    /// 解析模型回傳的 JSON。容忍 ```json 圍欄 / 前後噪聲:截取首個 '{' 到末個 '}'。
+    /// confidence/suspicious 容忍供應商回傳的多種表述(整數/小數/字串數字/字串布爾/0-1),避免漏報。
     public static VisionVerdict? Parse(string content)
     {
         int a = content.IndexOf('{'), b = content.LastIndexOf('}');
@@ -113,7 +113,7 @@ public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
         catch { return null; }
     }
 
-    /// suspicious 容忍:true / "true"/"yes"/"1" / 数字非 0。
+    /// suspicious 容忍:true / "true"/"yes"/"1" / 數字非 0。
     private static bool ParseBool(JsonElement o, string k)
     {
         if (!o.TryGetProperty(k, out JsonElement e)) return false;
@@ -128,9 +128,9 @@ public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
         };
     }
 
-    /// confidence 容忍整数 / 小数(95.0)/ 字符串("95")/ 0-1 概率(0.95→95),统一钳到 0-100 整数,避免误归零致漏报。
-    /// 0-1 概率放大边界(BUG#2 修复):用原始 token 是否含小数点区分「整数 1(=1%,保持 F9 不放大以防假阳性)」
-    /// 与「1.0(=100% 归一化概率,放大防漏报)」—— JSON 解析后二者皆为 double 1.0,无法靠值区分,故看原始文本。
+    /// confidence 容忍整數 / 小數(95.0)/ 字串("95")/ 0-1 概率(0.95→95),統一鉗到 0-100 整數,避免誤歸零致漏報。
+    /// 0-1 概率放大邊界(BUG#2 修復):用原始 token 是否含小數點區分「整數 1(=1%,保持 F9 不放大以防假陽性)」
+    /// 與「1.0(=100% 歸一化概率,放大防漏報)」—— JSON 解析後二者皆為 double 1.0,無法靠值區分,故看原始文字。
     private static int ParseConfidence(JsonElement o, string k)
     {
         if (!o.TryGetProperty(k, out JsonElement e)) return 0;
@@ -139,7 +139,7 @@ public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
         if (e.ValueKind == JsonValueKind.Number)
         {
             if (!e.TryGetDouble(out d)) return 0;
-            hasDecimal = e.GetRawText().IndexOf('.') >= 0;   // "1" vs "1.0" 区分依据
+            hasDecimal = e.GetRawText().IndexOf('.') >= 0;   // "1" vs "1.0" 區分依據
         }
         else if (e.ValueKind == JsonValueKind.String &&
                  double.TryParse(e.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double sd))
@@ -148,8 +148,8 @@ public sealed class OpenAiCompatibleVisionAnalyzer : IVisionAnalyzer
             hasDecimal = (e.GetString() ?? "").IndexOf('.') >= 0;
         }
         else return 0;
-        // 严格 (0,1) 概率 → 放大成百分比;恰好 1.0 且为小数(token 含 '.')→ 视为归一化概率放大成 100(修复漏报);
-        // 整数 1(无小数点)保持 1(=1%,F9:避免把"1%"误放大成 100% 致假阳性)。
+        // 嚴格 (0,1) 概率 → 放大成百分比;恰好 1.0 且為小數(token 含 '.')→ 視為歸一化概率放大成 100(修復漏報);
+        // 整數 1(無小數點)保持 1(=1%,F9:避免把"1%"誤放大成 100% 致假陽性)。
         if (d > 0 && (d < 1 || (d == 1.0 && hasDecimal))) d *= 100;
         return (int)Math.Clamp(Math.Round(d), 0, 100);
     }

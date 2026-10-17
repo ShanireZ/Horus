@@ -1,123 +1,123 @@
 {
-  // 监考服务器配置**样例(模板·已提交进 git 公开仓库)**。复制为 server.config.json(已 gitignore)后按现场填真值。
-  // ⚠️ 切勿把真实密钥 / API key 填进本 sample 文件 —— 会随提交泄漏到公开仓库。真值只放 server.config.json。
+  // 監考伺服器設定**樣例(範本·已提交進 git 公開儲存庫)**。複製為 server.config.json(已 gitignore)後按現場填真值。
+  // ⚠️ 切勿把真實金鑰 / API key 填進本 sample 檔案 —— 會隨提交洩漏到公開儲存庫。真值只放 server.config.json。
   "urls": "http://0.0.0.0:8080",
   "dataDir": "./data",
   "dbPath": "horus.db",
-  // 预共享 HMAC 密钥(base64),必须与各 Agent 的 psk 一致。
-  // 留空 = 关闭验签(仅本机联调用;生产务必配置)。
+  // 預共享 HMAC 金鑰(base64),必須與各 Agent 的 psk 一致。
+  // 留空 = 關閉驗籤(僅本機整合測試用;生產務必設定)。
   // 生成示例(PowerShell): [Convert]::ToBase64String((1..32|%{Get-Random -Max 256}))
   "pskBase64": "",
-  // 击键旁路密钥(base64):判题后端持它对 /ingest/keystroke 提交体签名(X-Horus-KSig)。
-  // 留空 = 关闭击键鉴权(仅联调)。生产接了判题埋点应配置,否则同网学员机可伪造/栽赃他人击键样本。与 psk 相互独立。
+  // 擊鍵旁路金鑰(base64):判題後端持它對 /ingest/keystroke 提交體簽名(X-Horus-KSig)。
+  // 留空 = 關閉擊鍵鑑權(僅整合測試)。生產接了判題埋點應設定,否則同網學員機可偽造/栽贓他人擊鍵樣本。與 psk 相互獨立。
   "keystrokeSecretBase64": "",
-  // 管理/看板令牌:所有 /api/*(除 /api/login、/api/logout)需带凭证。
-  //   浏览器:POST /api/login {token} 校验后种 HttpOnly cookie(JS 读不到、不进 URL)——首选;
-  //   脚本客户端:X-Horus-Admin 头;图片字节端点兼容 ?t= 查询。
-  // 留空 = 关闭管理鉴权(仅联调)。生产务必配置,否则同网学员机可下发配置关掉全场检测/拉证据图/抹裁决。
+  // 管理/看板權杖:所有 /api/*(除 /api/login、/api/logout)需帶憑證。
+  //   瀏覽器:POST /api/login {token} 檢核後種 HttpOnly cookie(JS 讀不到、不進 URL)——首選;
+  //   指令碼用戶端:X-Horus-Admin 頭;圖片位元組端點相容 ?t= 查詢。
+  // 留空 = 關閉管理鑑權(僅整合測試)。生產務必設定,否則同網學員機可下發設定關掉全場檢測/拉證據圖/抹裁決。
   "adminToken": "",
-  // 非 loopback 绑定时,缺采集鉴权(PSK 或 OIDC)或 adminToken 会拒绝启动(fail-closed)。仅本机联调可设 true 放行。
+  // 非 loopback 綁定時,缺採集鑑權(PSK 或 OIDC)或 adminToken 會拒絕啟動(fail-closed)。僅本機整合測試可設 true 放行。
   "allowInsecure": false,
-  // 启动成功自动在默认浏览器打开管理端看板(仅交互式运行的真 exe;服务化/脚本运行不弹)。
+  // 啟動成功自動在預設瀏覽器打開管理端看板(僅交互式執行的真 exe;服務化/指令碼執行不彈)。
   "openDashboard": true,
-  // Cloudflare Web Analytics 的公开 site token。仅未来启用的 betaoi.cn 正式主机手动加载；LAN/IP 不出网。
-  // `.cc` 由 Cloudflare 自动注入，不在这里重复加载。也可用 env HORUS_CLOUDFLARE_WEB_ANALYTICS_TOKEN。
+  // Cloudflare Web Analytics 的公開 site token。僅未來啟用的 betaoi.cn 正式主機手動載入；LAN/IP 不出網。
+  // `.cc` 由 Cloudflare 自動注入，不在這裡重複載入。也可用 env HORUS_CLOUDFLARE_WEB_ANALYTICS_TOKEN。
   "cloudflareWebAnalyticsToken": "c113fb69d7e84d38a645c5160f6f1bda",
-  // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
-  // authMode: "psk"(默认·共享 PSK) | "oidc"(仅 OIDC 会话) | "both"(迁移共存·可回退 PSK)。
+  // ---- M4 身分層:wentian OIDC 取代共享 PSK(見 docs/m4-identity-oidc.md)----
+  // authMode: "psk"(預設·共享 PSK) | "oidc"(僅 OIDC 工作階段) | "both"(遷移共存·可退回 PSK)。
   "authMode": "psk",
-  // OIDC issuer:**贝塔通**的对外根域名。oidc/both 必配(留空会在启动时抛,不会静默放行)。
-  // ⚠★★★ 2026-08-26:本行此前写着「wentian 对外根域名,如 https://betaoi.cc」——**落后两代**
-  //   (贝塔通接手后是 betaoi.cn,P110 又搬到 pass. 子域)。★ 这里**有意不写现值**:
-  //   契约明写「别把它抄进任何代码或写死进配置的字面量里」,而一个写在注释里的举例
-  //   ★★ **会被人当成可以照抄的值**,然后跟着上游一起腐烂 —— 上面那句就是这么来的。
-  //   ⇒ 真要知道现值,打线上 discovery;或看 AgentConfig.OidcIssuer 的内置默认。
-  // P147/P149：Server 仍须由部署配置明确 issuer；不把主域再烤一份到样例。
+  // OIDC issuer:**貝塔通**的對外根網域。oidc/both 必配(留空會在啟動時拋,不會靜默放行)。
+  // ⚠★★★ 2026-08-26:本行此前寫著「wentian 對外根網域,如 https://betaoi.cc」——**落后两代**
+  //   (貝塔通接手後是 betaoi.cn,P110 又搬到 pass. 子域)。★ 這裡**有意不寫現值**:
+  //   契約明寫「別把它抄進任何程式碼或寫死進設定的字面值裡」,而一個寫在註解裡的舉例
+  //   ★★ **會被人當成可以照抄的值**,然後跟著上游一起腐爛 —— 上面那句就是這麼來的。
+  //   ⇒ 真要知道現值,打線上 discovery;或看 AgentConfig.OidcIssuer 的內置預設。
+  // P147/P149：Server 仍須由部署設定明確 issuer；不把主域再烤一份到樣例。
   "oidcIssuer": "",
-  // Horus 在**贝塔通**注册的 client_id。
+  // Horus 在**貝塔通**註冊的 client_id。
   "oidcClientId": "horus-client",
-  // client_secret:**把明文填进 oidcClientSecret,启动一次即自动加密为 oidcClientSecretEnc 并清空明文**(同 visionApiKey 机制·DPAPI)。
-  //   也可 `Horus.Server protect-secret <secret>` 预生成密文直接填 Enc、明文留空;或 env HORUS_OIDC_SECRET 注入(不落盘)。Server-Broker:secret 只在本服务器。
+  // client_secret:**把明文填進 oidcClientSecret,啟動一次即自動加密為 oidcClientSecretEnc 並清空明文**(同 visionApiKey 機制·DPAPI)。
+  //   也可 `Horus.Server protect-secret <secret>` 預生成密文直接填 Enc、明文留空;或 env HORUS_OIDC_SECRET 注入(不寫入磁碟)。Server-Broker:secret 只在本伺服器。
   "oidcClientSecret": "",
   "oidcClientSecretEnc": "",
-  // wentian JWKS(RSA 公钥)内联 JSON:局域网离线验 id_token。留空则启动时从 issuer 拉取并缓存(需启动时可达 issuer)。
+  // wentian JWKS(RSA 公鑰)內聯 JSON:區域網路離線驗 id_token。留空則啟動時從 issuer 拉取並快取(需啟動時可達 issuer)。
   "oidcJwksJson": "",
-  // OIDC 会话有效期(分钟):派发的采集凭证寿命,建议 ≥ 考试时长。默认 180。
+  // OIDC 工作階段有效期(分鐘):派發的採集憑證壽命,建議 ≥ 考試時長。預設 180。
   "oidcSessionMinutes": 180,
-  // ---- M4·RBAC:监考员看板 OIDC 登录(wentian dashboard web client·取代静态 adminToken·见 §10)----
-  // adminAuthMode: "token"(默认·静态 adminToken) | "oidc"(仅 wentian 长老 OIDC·R3 无令牌后门·监考员走 /admin/login)。
+  // ---- M4·RBAC:監考員看板 OIDC 登入(wentian dashboard web client·取代靜態 adminToken·見 §10)----
+  // adminAuthMode: "token"(預設·靜態 adminToken) | "oidc"(僅 wentian 長老 OIDC·R3 無權杖後門·監考員走 /admin/login)。
   "adminAuthMode": "token",
-  // wentian dashboard web client_id(与 wentian OAUTH_HORUS_DASHBOARD_CLIENT_ID 一致)。adminAuthMode=oidc 必配。
+  // wentian dashboard web client_id(與 wentian OAUTH_HORUS_DASHBOARD_CLIENT_ID 一致)。adminAuthMode=oidc 必配。
   "oidcDashboardClientId": "horus-dashboard",
-  // dashboard client_secret:**填明文进 oidcDashboardClientSecret,启动自动加密为 oidcDashboardClientSecretEnc 并清空明文**(同上)。
-  //   亦可 protect-secret 预生成填 Enc,或 env HORUS_OIDC_DASHBOARD_SECRET 注入。
+  // dashboard client_secret:**填明文進 oidcDashboardClientSecret,啟動自動加密為 oidcDashboardClientSecretEnc 並清空明文**(同上)。
+  //   亦可 protect-secret 預生成填 Enc,或 env HORUS_OIDC_DASHBOARD_SECRET 注入。
   "oidcDashboardClientSecret": "",
   "oidcDashboardClientSecretEnc": "",
-  // dashboard 回调 URI:须与 wentian OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致(如 https://<服务器>/cb)。
+  // dashboard 回呼 URI:須與 wentian OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一條精確一致(如 https://<服务器>/cb)。
   "oidcDashboardRedirectUri": "",
-  // 管理会话有效期(分钟):监考员登录后凭证寿命,建议 ≥ 考试时长。默认 180。
+  // 管理工作階段有效期(分鐘):監考員登入後憑證壽命,建議 ≥ 考試時長。預設 180。
   "adminSessionMinutes": 180,
-  // ---- HTTPS(远端监考工作站 OIDC 回调须 https;自签证书启动生成)。Urls 含 https 时生效 ----
-  // 额外 SAN 主机/IP(逗号分隔):填服务器 LAN IP / 主机名,监考机才能验通证书(localhost/127.0.0.1 自动含)。
+  // ---- HTTPS(遠端監考工作站 OIDC 回呼須 https;自簽證書啟動生成)。Urls 含 https 時生效 ----
+  // 額外 SAN 主機/IP(逗號分隔):填伺服器 LAN IP / 主機名,監考機才能驗通證書(localhost/127.0.0.1 自動含)。
   "httpsSanHosts": "",
   "riskThreshold": 50,
   "dedupImagesByPhash": true,
   "onlineWindowSeconds": 90,
   "recentRiskWindowSeconds": 300,
-  // M3 归档 / 清理(architecture §13/§15):考试**结束**超 RetentionDays 天后,关键数据(可疑/裁决/高危事件+其证据图/OCR/击键)
-  //   转入 archive 库、其余就地清理、status='archived'、VACUUM 回收空间。仍有 pending 未裁决的考试会**跳过**(不 purge 未决案证据)。
+  // M3 歸檔 / 清理(architecture §13/§15):考試**結束**超 RetentionDays 天后,關鍵資料(可疑/裁決/高危事件+其證據圖/OCR/擊鍵)
+  //   轉入 archive 庫、其餘就地清理、status='archived'、VACUUM 回收空間。仍有 pending 未裁決的考試會**跳過**(不 purge 未決案證據)。
   "archiveEnabled": true,
   "retentionDays": 30,
-  // 关键数据判据:事件有效风险(max(agent,server))≥ 此值,或被 suspicious_queue 引用。
+  // 關鍵資料判據:事件有效風險(max(agent,server))≥ 此值,或被 suspicious_queue 引用。
   "archiveCriticalRisk": 50,
-  // 归档库文件(相对 dataDir);后台扫描间隔小时(≤0=关后台,仍可手动 POST /api/archive/run 触发)。
+  // 歸檔庫檔案(相對 dataDir);後台掃描間隔小時(≤0=關後台,仍可手動 POST /api/archive/run 觸發)。
   "archiveDbPath": "horus-archive.db",
   "archiveScanIntervalHours": 6,
-  // 视觉分析(L2:视觉 LLM 取代 OCR + L3 Logo,合并单一视觉级)。一次调用做文字提取+界面/图标识别+分类。
-  // visionProvider: 留空/off=关(默认) | mock(确定性·联调) | openai(OpenAI 兼容端点)。
-  //   openai 通吃小米 MiMo-V2.5 / DeepSeek-V4 / Qwen-VL / GLM-4V —— 换供应商=换 baseUrl+model+key。
-  //   ★ owner 选定 = 小米 MiMo-V2.5 托管 API(境内云,OpenAI 兼容):
+  // 視覺分析(L2:視覺 LLM 取代 OCR + L3 Logo,合併單一視覺級)。一次呼叫做文字提取+介面/圖標識別+分類。
+  // visionProvider: 留空/off=關(預設) | mock(確定性·整合測試) | openai(OpenAI 相容端點)。
+  //   openai 通吃小米 MiMo-V2.5 / DeepSeek-V4 / Qwen-VL / GLM-4V —— 換供應商=換 baseUrl+model+key。
+  //   ★ owner 選定 = 小米 MiMo-V2.5 託管 API(境內雲,OpenAI 相容):
   "visionProvider": "openai",
   "visionBaseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
   "visionModel": "mimo-v2.5",
-  // ★ API key:在 **server.config.json**(非本 sample)里把明文填到 visionApiKey,服务器启动会**自动加密**为下面的 visionApiKeyEnc 并**清空本字段**。
+  // ★ API key:在 **server.config.json**(非本 sample)裡把明文填到 visionApiKey,伺服器啟動會**自動加密**為下面的 visionApiKeyEnc 並**清空本欄位**。
   "visionApiKey": "",
-  // 自动生成的 DPAPI 密文(机器绑定·勿手改)。也可用 `Horus.Server protect-secret <key>` 预生成后直接填这里、visionApiKey 留空。
+  // 自動生成的 DPAPI 密文(機器綁定·勿手改)。也可用 `Horus.Server protect-secret <key>` 預生成後直接填這裡、visionApiKey 留空。
   "visionApiKeyEnc": "",
   "visionConfidenceThreshold": 60,
   "visionAnalyzeBaseline": false,
-  // 基线分析抽样率 N:visionAnalyzeBaseline=true 时只分析 1/N 的随机基线图(确定性按 imageId·跨重启一致·控云成本)。默认 1=全分析;设 10≈分析 10%。
+  // 基線分析抽樣率 N:visionAnalyzeBaseline=true 時只分析 1/N 的隨機基線圖(確定性按 imageId·跨重新啟動一致·控雲成本)。預設 1=全分析;設 10≈分析 10%。
   "visionBaselineSampleRate": 1,
-  // 补偿重扫间隔(分钟):周期性拾回被队列丢弃/重启丢内存队列/临时云失败的未分析触发型证据图。默认 5;≤0=关闭。
+  // 補償重掃間隔(分鐘):週期性拾回被佇列丟棄/重新啟動丟記憶體佇列/臨時雲失敗的未分析觸發型證據圖。預設 5;≤0=關閉。
   "visionBackstopMinutes": 5,
-  // 单张图视觉分析最大认领次数(含失败):临时云失败由补偿重扫重试,达此上限放弃防死循环。默认 5。
+  // 單張圖視覺分析最大認領次數(含失敗):臨時雲失敗由補償重掃重試,達此上限放棄防死循環。預設 5。
   "visionMaxAttempts": 5,
-  // §5 送云前派生处理(owner 决策 2026-07-02:不再打码/裁剪,只降采样;供应商=境内云 MiMo·PIPL 无跨境):
-  //   visionMaxEdge: 送云图长边像素上限(降采样省 token·顺带剥离 EXIF/XMP/ICC 元数据)。默认 1600;0=不降采样直通。原图永不出网,只送派生图。
+  // §5 送雲前派生處理(owner 決策 2026-07-02:不再打碼/裁剪,只降取樣;供應商=境內雲 MiMo·PIPL 無跨境):
+  //   visionMaxEdge: 送雲圖長邊像素上限(降取樣省 token·順帶剝離 EXIF/XMP/ICC 中繼資料)。預設 1600;0=不降取樣直通。原圖永不出網,只送派生圖。
   "visionMaxEdge": 1600,
-  // ---- M3 CLIP 按图搜图(provider-agnostic 嵌入器·C# 暴力余弦·无需 sqlite-vec·仅嵌证据图)----
-  // embedProvider: 留空/"off"=关(默认) | "mock"(确定性·测试) | "onnx"(本地 CLIP ONNX·推荐·零出网) | "openai"(OpenAI 兼容 /v1/embeddings)。
-  //   ★探测过:小米 MiMo-V2.5 **无** /v1/embeddings 端点(仅对话/视觉/ASR/TTS)→ 复用视觉 key 走不通,故用本地 onnx。
-  //   部署前可 `Horus.Server probe-embed [model]` 探测某云端点是否有图像 embedding 模型。
+  // ---- M3 CLIP 按圖搜圖(provider-agnostic 嵌入器·C# 暴力餘弦·無需 sqlite-vec·僅嵌證據圖)----
+  // embedProvider: 留空/"off"=關(預設) | "mock"(確定性·測試) | "onnx"(本機 CLIP ONNX·推薦·零出網) | "openai"(OpenAI 相容 /v1/embeddings)。
+  //   ★探測過:小米 MiMo-V2.5 **無** /v1/embeddings 端點(僅對話/視覺/ASR/TTS)→ 重複使用視覺 key 走不通,故用本機 onnx。
+  //   部署前可 `Horus.Server probe-embed [model]` 探測某雲端點是否有圖像 embedding 模型。
   "embedProvider": "",
-  // --- provider=onnx(本地 CLIP·推荐·零出网)---
-  // embedOnnxModelPath: CLIP ViT-B/32 **图像编码器** ONNX(512 维)。★约定文件名 = model.onnx:
-  //   **留空 = 默认找 dataDir\model.onnx**(与推荐仓原始文件名一致,下载免改名);放别处才显式填(相对 dataDir 或绝对)。
-  //   下载(推荐·MIT·352MB): https://huggingface.co/Qdrant/clip-ViT-B-32-vision/resolve/main/model.onnx
-  //   小体积备选(下载后**改名 model.onnx**): https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model.onnx (或 vision_model_quantized.onnx int8)
+  // --- provider=onnx(本機 CLIP·推薦·零出網)---
+  // embedOnnxModelPath: CLIP ViT-B/32 **圖像編碼器** ONNX(512 維)。★約定檔案名 = model.onnx:
+  //   **留空 = 預設找 dataDir\model.onnx**(與推薦倉原始檔案名一致,下載免改名);放別處才顯式填(相對 dataDir 或絕對)。
+  //   下載(推薦·MIT·352MB): https://huggingface.co/Qdrant/clip-ViT-B-32-vision/resolve/main/model.onnx
+  //   小體積備選(下載後**改名 model.onnx**): https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model.onnx (或 vision_model_quantized.onnx int8)
   "embedOnnxModelPath": "",
-  // embedOnnxInput / embedOnnxOutput: 张量名。**留空即可**——自动选(输入取首个;输出优先名含 embed/pool 的·正确取嵌入向量)。特殊模型用 Netron 看输出名再填。
+  // embedOnnxInput / embedOnnxOutput: 張量名。**留空即可**——自動選(輸入取首個;輸出優先名含 embed/pool 的·正確取嵌入向量)。特殊模型用 Netron 看輸出名再填。
   "embedOnnxInput": "",
   "embedOnnxOutput": "",
-  // embedCosineFloor: 按图搜图余弦下限(低于此分的帧视为无关被过滤·默认 0.2);设为 0 则不过滤(退回旧行为·可能混入无关帧)。
+  // embedCosineFloor: 按圖搜圖餘弦下限(低於此分的影格視為無關被過濾·預設 0.2);設為 0 則不過濾(退回舊行為·可能混入無關影格)。
   "embedCosineFloor": 0.2,
-  // --- provider=openai(云·仅当有图像/多模态 embedding 端点时)---
-  // embedBaseUrl: 留空则复用 visionBaseUrl(KEY一致);/embeddings 从此拼。embedModel/embedApiKey(留空复用视觉 key·env HORUS_EMBED_KEY)。
+  // --- provider=openai(雲·僅當有圖像/多模態 embedding 端點時)---
+  // embedBaseUrl: 留空則重複使用 visionBaseUrl(KEY一致);/embeddings 從此拼。embedModel/embedApiKey(留空重複使用視覺 key·env HORUS_EMBED_KEY)。
   "embedBaseUrl": "",
   "embedModel": "",
   "embedApiKey": "",
-  // embedDim: 嵌入维度(暴力余弦无所谓·仅记录)。默认 512(CLIP ViT-B/32)。
+  // embedDim: 嵌入維度(暴力餘弦無所謂·僅記錄)。預設 512(CLIP ViT-B/32)。
   "embedDim": 512,
-  // embedBackstopMinutes: 后台补嵌间隔(分钟)·拾回证据图里尚无 embedding 的。默认 5;≤0=关闭。
+  // embedBackstopMinutes: 後台補嵌間隔(分鐘)·拾回證據圖裡尚無 embedding 的。預設 5;≤0=關閉。
   "embedBackstopMinutes": 5
 }

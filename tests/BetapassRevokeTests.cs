@@ -9,11 +9,11 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// 贝塔通撤权通知接收端(`/internal/revoke`)的契约回归。
+/// 貝塔通撤權通知接收端(`/internal/revoke`)的契約迴歸。
 ///
-/// 判据逐条来自 BetaPass `docs/rp-contract.md`,**全部落在行为上**:
-/// 验签(含 `aud` 是不是自己)、按 `jti` 幂等、三种 reason 处置相同、认不出的 reason 照清、
-/// 按 `aud` 分别处置(撤监考台不动采集面)。
+/// 判據逐條來自 BetaPass `docs/rp-contract.md`,**全部落在行為上**:
+/// 驗籤(含 `aud` 是不是自己)、按 `jti` 冪等、三種 reason 處置相同、認不出的 reason 照清、
+/// 按 `aud` 分別處置(撤監考臺不動採集面)。
 public class BetapassRevokeTests
 {
     private const string Issuer = "https://oidc.test";
@@ -32,8 +32,8 @@ public class BetapassRevokeTests
         });
     }
 
-    /// 按贝塔通真实形态签,claims 含 `jti` 与 `purpose`。
-    /// ★ 算法与 JWKS 里的 `alg` 都**从生产常量派生**,不再写死字面量 —— 见 OidcTests 里同款说明。
+    /// 按貝塔通真實形態籤,claims 含 `jti` 與 `purpose`。
+    /// ★ 演算法與 JWKS 裡的 `alg` 都**從生產常數派生**,不再寫死字面值 —— 見 OidcTests 裡同款說明。
     private static string SignNotice(RSA rsa, string aud, string jti, string sub, string purpose)
     {
         string header = JsonSerializer.Serialize(new { alg = OidcTokenValidator.SigningAlg, typ = "JWT", kid = Kid });
@@ -54,9 +54,9 @@ public class BetapassRevokeTests
         return await http.SendAsync(req);
     }
 
-    /// ★ 响应体只能读一次(HttpContent 是流)。此前分成 RevokedAsync / DuplicateAsync 两个助手,
-    ///   第二次读就 ObjectDisposedException —— 症状是「测试挂了」而不是「断言不成立」,
-    ///   花的时间远超它值得的。统一读一次再取两项。
+    /// ★ 回應體只能讀一次(HttpContent 是流)。此前分成 RevokedAsync / DuplicateAsync 兩個助手,
+    ///   第二次讀就 ObjectDisposedException —— 症狀是「測試掛了」而不是「斷言不成立」,
+    ///   花的時間遠超它值得的。統一讀一次再取兩項。
     private static async Task<(bool Duplicate, int Revoked)> ReadAsync(HttpResponseMessage resp)
     {
         JsonElement body = await resp.Content.ReadFromJsonAsync<JsonElement>();
@@ -69,7 +69,7 @@ public class BetapassRevokeTests
     [InlineData("platform_access_revoked")]
     [InlineData("password_changed")]
     [InlineData("mfa_factor_changed")]
-    [InlineData("something_new_in_2027")]   // ★ 认不出的新值也必须照清、照回 2xx
+    [InlineData("something_new_in_2027")]   // ★ 認不出的新值也必須照清、照回 2xx
     public async Task 三种reason与认不出的新值_处置完全相同(string reason)
     {
         using RSA rsa = RSA.Create(2048);
@@ -84,7 +84,7 @@ public class BetapassRevokeTests
         HttpResponseMessage resp = await PostAsync(http, token, jti, "sub-1", "horus-client", reason);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.Equal(1, (await ReadAsync(resp)).Revoked);   // ★ 不是恒 0:那条会话真被清掉了
+        Assert.Equal(1, (await ReadAsync(resp)).Revoked);   // ★ 不是恆 0:那條工作階段真被清掉了
     }
 
     [Fact]
@@ -104,21 +104,21 @@ public class BetapassRevokeTests
         Assert.Equal(1, revoked1);
         Assert.False(dup1);
 
-        // ★ 贝塔通的 HTTP 超时只有 5 秒 —— 处理成功但花了 6 秒的一发会被判失败并重投,
-        //   同一个 `jti` 必然来第二次。「反正只会来一次」是错的。
+        // ★ 貝塔通的 HTTP 超時只有 5 秒 —— 處理成功但花了 6 秒的一發會被判失敗並重投,
+        //   同一個 `jti` 必然來第二次。「反正只會來一次」是錯的。
         HttpResponseMessage again = await PostAsync(http, token, jti, "sub-1", "horus-client", "password_changed");
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
         (bool dup2, int revoked2) = await ReadAsync(again);
         Assert.True(dup2);
-        Assert.Equal(1, revoked2);   // 原样回上次的答案,不是又清了一遍
+        Assert.Equal(1, revoked2);   // 原樣回上次的答案,不是又清了一遍
     }
 
     [Fact]
     public async Task 撤监考台不动采集面()
     {
-        // ★★ 这是拆平台(贝塔通 P83)换来的精确性:`horus-client` → 平台 `horus`(采集面)、
-        //   `horus-dashboard` → 平台 `horus-admin`(监考台)。撤掉某人的监考员资格
-        //   **不该**把他作为考生的采集会话也断掉。图省事两边一起清就把这条精确性丢了。
+        // ★★ 這是拆平台(貝塔通 P83)換來的精確性:`horus-client` → 平台 `horus`(採集面)、
+        //   `horus-dashboard` → 平台 `horus-admin`(監考臺)。撤掉某人的監考員資格
+        //   **不該**把他作為考生的採集工作階段也斷掉。圖省事兩邊一起清就把這條精確性丟了。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", adminOidc: true, jwks: BuildJwks(rsa, Kid));
         HttpClient http = app.CreateClient();
@@ -134,8 +134,8 @@ public class BetapassRevokeTests
         HttpResponseMessage resp = await PostAsync(http, token, jti, "sub-1", "horus-dashboard", "platform_access_revoked");
         Assert.Equal(1, (await ReadAsync(resp)).Revoked);
 
-        Assert.Null(adminSessions.Get(admin.SessionId, Now()));       // 监考台会话没了
-        Assert.NotNull(sessions.Get(collect.SessionId, Now()));       // ★ 采集会话仍在
+        Assert.Null(adminSessions.Get(admin.SessionId, Now()));       // 監考臺工作階段沒了
+        Assert.NotNull(sessions.Get(collect.SessionId, Now()));       // ★ 採集工作階段仍在
     }
 
     [Theory]
@@ -145,11 +145,11 @@ public class BetapassRevokeTests
     [InlineData("mfa_factor_changed", "二次验证")]
     public async Task 每种reason都给出对应的一句人话(string reason, string expectFragment)
     {
-        // ★ 契约明写四种 reason「**处置完全相同,区分只服务提示语**」——
-        //   提示语正是这里。撤权是删行,不留痕的话被踢的人只看得到一句笼统的「登录已失效」。
-        // ★★ 「平台权限被关掉」这一种尤其要紧:取消 SSO(贝塔通 P84)之后,
-        //   无权限的人**每点一次登录都要完整输一遍密码**才被拒(其 P98,owner 明确不做缓解)。
-        //   不告诉他真实原因,他会一遍遍白输。
+        // ★ 契約明寫四種 reason「**處置完全相同,區分只服務提示語**」——
+        //   提示語正是這裡。撤權是刪行,不留痕的話被踢的人只看得到一句籠統的「登入已失效」。
+        // ★★ 「平台權限被關掉」這一種尤其要緊:取消 SSO(貝塔通 P84)之後,
+        //   無權限的人**每點一次登入都要完整輸一遍密碼**才被拒(其 P98,owner 明確不做緩解)。
+        //   不告訴他真實原因,他會一遍遍白輸。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", adminOidc: true, jwks: BuildJwks(rsa, Kid));
         HttpClient http = app.CreateClient();
@@ -160,7 +160,7 @@ public class BetapassRevokeTests
         string token = SignNotice(rsa, "horus-dashboard", jti, "sub-1", reason);
         await PostAsync(http, token, jti, "sub-1", "horus-dashboard", reason);
 
-        // 用那条已被删掉的会话 id 再打一次 /api/* → 401 的响应体带着「为什么」
+        // 用那條已被刪掉的工作階段 id 再打一次 /api/* → 401 的回應體帶著「為什麼」
         var req = new HttpRequestMessage(HttpMethod.Get, "/api/exams");
         req.Headers.Add("Cookie", "horus_admin=" + s.SessionId);
         HttpResponseMessage resp = await http.SendAsync(req);
@@ -174,11 +174,11 @@ public class BetapassRevokeTests
     [Fact]
     public async Task 同一条通知被重投很多次_每次都回2xx且不重复清()
     {
-        // ★★ 贝塔通 P93 起**重投走完不进终态**:阶梯是 5min×3 → 15min → 30min → 1h,
-        //   走完转「等待探活」挂起,探到本站回来后**从头再投一遍,直至成功**。
-        //   于是同一条通知会被投很多次,且**本站长时间下线再回来时会一次性收到一批积压的**。
-        // ★ 处置办法就是 `jti` 幂等台账 —— **不要动它**,也**不要因为「这条太旧了」而丢弃**
-        //   (旧不代表已经处理过)。这条锁住「投多少次都稳」。
+        // ★★ 貝塔通 P93 起**重投走完不進終態**:階梯是 5min×3 → 15min → 30min → 1h,
+        //   走完轉「等待探活」掛起,探到本站回來後**從頭再投一遍,直至成功**。
+        //   於是同一條通知會被投很多次,且**本站長時間下線再回來時會一次性收到一批積壓的**。
+        // ★ 處置辦法就是 `jti` 冪等臺賬 —— **不要動它**,也**不要因為「這條太舊了」而丟棄**
+        //   (舊不代表已經處理過)。這條鎖住「投多少次都穩」。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
         HttpClient http = app.CreateClient();
@@ -188,21 +188,21 @@ public class BetapassRevokeTests
         const string jti = "j-storm";
         string token = SignNotice(rsa, "horus-client", jti, "sub-1", "password_changed");
 
-        for (int i = 0; i < 8; i++)   // 首投 + 7 次重投(阶梯共 6 次,多打两下也得稳)
+        for (int i = 0; i < 8; i++)   // 首投 + 7 次重投(階梯共 6 次,多打兩下也得穩)
         {
             HttpResponseMessage resp = await PostAsync(http, token, jti, "sub-1", "horus-client", "password_changed");
             Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
             (bool dup, int revoked) = await ReadAsync(resp);
             Assert.Equal(i > 0, dup);
-            Assert.Equal(1, revoked);   // 恒回第一次的答案,不是每次都「又清了 0 条」
+            Assert.Equal(1, revoked);   // 恆回第一次的答案,不是每次都「又清了 0 條」
         }
     }
 
     [Fact]
     public async Task 认不出的reason_照清且兜底提示语不为空()
     {
-        // ★★ 贝塔通那边加一种 reason 时本端一行代码都不用改(处置本就与 reason 无关),
-        //   但**提示语不能因此变成空白或「未知错误」** —— 兜底那句必须自己站得住。
+        // ★★ 貝塔通那邊加一種 reason 時本端一行程式碼都不用改(處置本就與 reason 無關),
+        //   但**提示語不能因此變成空白或「未知錯誤」** —— 備援那句必須自己站得住。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", adminOidc: true, jwks: BuildJwks(rsa, Kid));
         HttpClient http = app.CreateClient();
@@ -235,8 +235,8 @@ public class BetapassRevokeTests
     [Fact]
     public async Task aud不是本机任何client_拒()
     {
-        // ★ 不验 `aud` 就等于开了一个「谁都能踢人下线」的端点。这里用**同一把真私钥**签一枚
-        //   除 `aud` 外一切合法的令牌 —— 必须被拒,才证明挡的是 `aud` 而不是签名。
+        // ★ 不驗 `aud` 就等於開了一個「誰都能踢人下線」的端點。這裡用**同一把真私鑰**籤一枚
+        //   除 `aud` 外一切合法的權杖 —— 必須被拒,才證明擋的是 `aud` 而不是簽名。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
         string token = SignNotice(rsa, "someone-elses-client", "j2", "sub-1", "password_changed");
@@ -258,23 +258,23 @@ public class BetapassRevokeTests
     [Fact]
     public async Task 拿探活令牌打撤权端点_踢不掉任何人()
     {
-        // ★ **`aud` 撞车那件事本身已由对侧 P100 修掉**(探活改发 `<client_id>#health`),
-        //   所以今天一枚真探活令牌打到这里,**光看 `aud` 就被拒**(见
+        // ★ **`aud` 撞車那件事本身已由對側 P100 修掉**(探活改發 `<client_id>#health`),
+        //   所以今天一枚真探活權杖打到這裡,**光看 `aud` 就被拒**(見
         //   `BetapassHealthTests.探活专属aud的令牌打撤权端点_拒`)。
         //
-        // ★★ **但这条用例不能删,它测的是第二道防线**:一枚 `aud` = 裸 `client_id`、
-        //   `sub` = `client_id` 自己的令牌(P100 之前探活令牌的形状,也是任何「拿撤权令牌
-        //   套别人报文」的形状)打进来,必须踢不掉任何人。
-        //   落法 = 契约要求的「**令牌的 `sub` == 报文的 `sub`**」(`BodyMatches`),
-        //   而且本端更进一步:`RevokeBySub` 用的是**令牌里的 `sub`**、不是报文里的。
+        // ★★ **但這條案例不能刪,它測的是第二道防線**:一枚 `aud` = 裸 `client_id`、
+        //   `sub` = `client_id` 自己的權杖(P100 之前探活權杖的形狀,也是任何「拿撤權權杖
+        //   套別人訊息」的形狀)打進來,必須踢不掉任何人。
+        //   落法 = 契約要求的「**權杖的 `sub` == 訊息的 `sub`**」(`BodyMatches`),
+        //   而且本端更進一步:`RevokeBySub` 用的是**權杖裡的 `sub`**、不是訊息裡的。
         //
-        // ★★★ **为什么两道都要留**:P100 那道**依赖对侧**保持发专属 `aud`;
-        //   这一道**自洽、不依赖对侧任何字段**。对侧自己也是这么说的(其 `main.ts` 注释:
-        //   「`sub` 有意仍是 client_id …… 这一道要一直留着」)。
-        //   ★ 删掉它 = 把安全性整个押在对侧不改口径上,而对侧这两周已经改过两次。
+        // ★★★ **為什麼兩道都要留**:P100 那道**相依對側**保持發專屬 `aud`;
+        //   這一道**自洽、不相依對側任何欄位**。對側自己也是這麼說的(其 `main.ts` 註解:
+        //   「`sub` 有意仍是 client_id …… 這一道要一直留著」)。
+        //   ★ 刪掉它 = 把安全性整個押在對側不改口徑上,而對側這兩週已經改過兩次。
         //
-        // ★ **不要改判成「要求令牌带 purpose」** —— 那依赖契约没承诺过的实现细节,
-        //   对侧哪天给探活令牌也加个 purpose,判据就悄悄失效且没有任何症状。
+        // ★ **不要改判成「要求權杖帶 purpose」** —— 那相依契約沒承諾過的實作細節,
+        //   對側哪天給探活權杖也加個 purpose,判據就悄悄失效且沒有任何症狀。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
         HttpClient http = app.CreateClient();
@@ -282,8 +282,8 @@ public class BetapassRevokeTests
         HorusSession victim = store.Create("E1", "seat1", "agentA", "PC", Claims("victim-sub"),
             RandomNumberGenerator.GetBytes(32), Now(), 180);
 
-        // 一枚**真的探活令牌**:aud = 本机 client_id、sub = client_id 自己、**没有 purpose**
-        // (核对 BetaPass `src/main.ts` 的 signToken)。
+        // 一枚**真的探活權杖**:aud = 本機 client_id、sub = client_id 自己、**沒有 purpose**
+        // (核對 BetaPass `src/main.ts` 的 signToken)。
         string header = JsonSerializer.Serialize(new { alg = OidcTokenValidator.SigningAlg, typ = "JWT", kid = Kid });
         string payload = JsonSerializer.Serialize(new
         {
@@ -294,17 +294,17 @@ public class BetapassRevokeTests
         string probeToken = input + "." + B64Url(rsa.SignData(Encoding.ASCII.GetBytes(input),
             HashAlgorithmName.SHA256, RSASignaturePadding.Pss));
 
-        // 攻击者拿它去撤别人的权:报文里塞受害者的 sub
+        // 攻擊者拿它去撤別人的權:訊息裡塞受害者的 sub
         HttpResponseMessage resp = await PostAsync(http, probeToken, "whatever", "victim-sub", "horus-client", "password_changed");
 
-        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);      // 报文与令牌对不上 → 拒
-        Assert.NotNull(store.Get(victim.SessionId, Now()));            // ★ 受害者还在
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);      // 訊息與權杖對不上 → 拒
+        Assert.NotNull(store.Get(victim.SessionId, Now()));            // ★ 受害者還在
     }
 
     [Fact]
     public async Task 报文与令牌对不上_拒()
     {
-        // 令牌是权威,报文只是便于阅读的副本。对不上说明有人拿一枚合法令牌套了别人的报文。
+        // 權杖是權威,訊息只是便於閱讀的副本。對不上說明有人拿一枚合法權杖套了別人的訊息。
         using RSA rsa = RSA.Create(2048);
         using var app = new TestApp(authMode: "oidc", jwks: BuildJwks(rsa, Kid));
         string token = SignNotice(rsa, "horus-client", "j4", "sub-1", "password_changed");
@@ -315,10 +315,10 @@ public class BetapassRevokeTests
     [Fact]
     public async Task 未开OIDC时回410而不是404_否则会被无限重投()
     {
-        // ★ 贝塔通判成功的口径是 2xx,而 **404 / 405 与 5xx 一样会被重投 12 次**
-        //   (「RP 还没实现这个端点」正是最需要重投的情形)。所以路由必须**始终挂上**,
-        //   由端点自己回一个「别再投了」的状态,而不是让它落到 404 去被反复敲。
-        using var app = new TestApp();   // 默认 psk,两条 OIDC 链路都没开
+        // ★ 貝塔通判成功的口徑是 2xx,而 **404 / 405 與 5xx 一樣會被重投 12 次**
+        //   (「RP 還沒實作這個端點」正是最需要重投的情形)。所以路由必須**始終掛上**,
+        //   由端點自己回一個「別再投了」的狀態,而不是讓它落到 404 去被反覆敲。
+        using var app = new TestApp();   // 預設 psk,兩條 OIDC 連線路徑都沒開
         HttpResponseMessage resp = await PostAsync(app.CreateClient(), null, "j5", "sub-1", "horus-client", "password_changed");
         Assert.Equal(HttpStatusCode.Gone, resp.StatusCode);
     }

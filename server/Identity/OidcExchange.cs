@@ -7,9 +7,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Horus.Server.Identity;
 
-/// M4·S3:授权码换 token → 验 id_token → ECDH 派生 K_sess → 建会话。**Server-Broker**:client_secret 只在本服务器,
-/// Agent 从不经手(见 docs/m4-identity-oidc.md §3)。Agent 拿 loopback 收到的 code + PKCE verifier + 自己的 ECDH 公钥来换。
-/// 考试派发:Agent **不自报 exam/seat** —— examId 由服务端指派(当前活跃考试),seatId 由 OIDC 身份派生(username)。
+/// M4·S3:授權碼換 token → 驗 id_token → ECDH 派生 K_sess → 建工作階段。**Server-Broker**:client_secret 只在本伺服器,
+/// Agent 從不經手(見 docs/m4-identity-oidc.md §3)。Agent 拿 loopback 收到的 code + PKCE verifier + 自己的 ECDH 公鑰來換。
+/// 考試派發:Agent **不自報 exam/seat** —— examId 由伺服器端指派(當前活躍考試),seatId 由 OIDC 身分派生(username)。
 public sealed class OidcExchange
 {
     private readonly HttpClient _http;
@@ -33,12 +33,12 @@ public sealed class OidcExchange
 
     public async Task<Result> ExchangeAsync(Request req, double now, CancellationToken ct)
     {
-        // 0) 服务端派发考试:无活跃考试即拒(先于 token 交换 —— 不白耗一次性授权码,Agent 可回待命重试)
+        // 0) 伺服器端派發考試:無活躍考試即拒(先於 token 交換 —— 不白耗一次性授權碼,Agent 可回待命重試)
         ExamDispatch.ActiveExam? exam = ExamDispatch.ResolveActive(_db);
         if (exam is null) return new Result(false, "no_active_exam", null, null);
 
-        // 1) 授权码 → token(client_secret_post·带 PKCE code_verifier)。瞬时 TLS/网络失败自动重试(见 OidcHttp)。
-        // ★ access_token 也要留下 —— 姓名与用户名只在 userinfo 拿得到(见 Userinfo 的类注释)。
+        // 1) 授權碼 → token(client_secret_post·帶 PKCE code_verifier)。瞬時 TLS/網路失敗自動重試(見 OidcHttp)。
+        // ★ access_token 也要留下 —— 姓名與使用者名只在 userinfo 拿得到(見 Userinfo 的類註解)。
         string? idToken;
         string? accessToken;
         try
@@ -70,18 +70,18 @@ public sealed class OidcExchange
         if (string.IsNullOrEmpty(idToken)) return new Result(false, "no_id_token", null, null);
         if (string.IsNullOrEmpty(accessToken)) return new Result(false, "no_access_token", null, null);
 
-        // 2) 离线验 id_token(签名/iss/aud/exp/nonce)→ 只得到 sub
+        // 2) 離線驗 id_token(簽名/iss/aud/exp/nonce)→ 只得到 sub
         OidcSubject subject;
         try { subject = _validator.Validate(idToken!, req.Nonce, now); }
         catch (OidcValidationException ex) { _log.LogWarning("id_token 验证失败:{Msg}", ex.Message); return new Result(false, "invalid_id_token", null, null); }
 
-        // 2.5) 取 userinfo 补齐姓名与用户名。★ **这一步不能省** —— 贝塔通的 id_token 里没有这两项,
-        //      少了它座位号会对每个人静默回退成 sub(见 Userinfo 的类注释)。取不到即登录失败,不放行空身份。
+        // 2.5) 取 userinfo 補齊姓名與使用者名。★ **這一步不能省** —— 貝塔通的 id_token 裡沒有這兩項,
+        //      少了它座位號會對每個人靜默退回成 sub(見 Userinfo 的類註解)。取不到即登入失敗,不放行空身分。
         OidcClaims claims;
         try { claims = await Userinfo.FetchAsync(_http, _cfg.OidcUserinfoEndpoint!, accessToken!, subject, _log, ct); }
         catch (OidcValidationException ex) { _log.LogWarning("userinfo 获取失败:{Msg}", ex.Message); return new Result(false, "userinfo_failed", null, null); }
 
-        // 3) ECDH:服务器出一把临时公钥,与 Agent 公钥派生同一 K_sess(私钥不过网 → 闭合 A1/A2)
+        // 3) ECDH:伺服器出一把臨時公鑰,與 Agent 公鑰派生同一 K_sess(私鑰不過網 → 閉合 A1/A2)
         byte[] kSess;
         string serverPub;
         try
@@ -92,7 +92,7 @@ public sealed class OidcExchange
         }
         catch (Exception) { return new Result(false, "bad_agent_pubkey", null, null); }
 
-        // 4) 建会话(绑定身份到 exam/seat/agent)。seat := username(不安全/为空回退 sub)—— 身份即座位,学员无法自报。
+        // 4) 建工作階段(綁定身分到 exam/seat/agent)。seat := username(不安全/為空退回 sub)—— 身分即座位,學員無法自報。
         string seatId = ExamDispatch.SeatFrom(claims);
         HorusSession session = _sessions.Create(exam.ExamId, seatId, req.AgentId, req.MachineId, claims, kSess, now, _cfg.OidcSessionMinutes);
         _log.LogInformation("OIDC 会话建立 exam={Exam} seat={Seat} sub={Sub} user={User}", exam.ExamId, seatId, claims.Sub, claims.Username);

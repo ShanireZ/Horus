@@ -5,12 +5,12 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Identity;
 
-/// M4·S3:采集面 OIDC 登录端点(**不走 admin gate** —— 由一次性 code + PKCE 保护,同 /ingest/*)。
-///   POST /oidc/exchange    —— Agent 用 loopback 收到的 code + PKCE verifier + 自己的 ECDH 公钥换取会话;
-///                             examId 由服务端派发(当前活跃考试),seatId 由 OIDC 身份派生,响应携带二者供 Agent 采用。
-///   GET  /oidc/active-exam —— 待命轮询:当前是否有活跃考试(Agent 常态待命,考试开始才弹登录、启采集)。
-///   GET  /oidc/session     —— 会话探针(带 X-Horus-Session):会话是否仍有效 + 所绑考试状态
-///                             (Agent 借此发现「离线期间被远程登出 / 考试已结束」,自行停采回待命)。
+/// M4·S3:採集面 OIDC 登入端點(**不走 admin gate** —— 由一次性 code + PKCE 保護,同 /ingest/*)。
+///   POST /oidc/exchange    —— Agent 用 loopback 收到的 code + PKCE verifier + 自己的 ECDH 公鑰換取工作階段;
+///                             examId 由伺服器端派發(當前活躍考試),seatId 由 OIDC 身分派生,回應攜帶二者供 Agent 採用。
+///   GET  /oidc/active-exam —— 待命輪詢:當前是否有活躍考試(Agent 常態待命,考試開始才彈登入、啟採集)。
+///   GET  /oidc/session     —— 工作階段探針(帶 X-Horus-Session):工作階段是否仍有效 + 所綁考試狀態
+///                             (Agent 藉此發現「離線期間被遠程登出 / 考試已結束」,自行停採回待命)。
 public static class OidcEndpoints
 {
     public static void MapOidc(this WebApplication app)
@@ -51,19 +51,19 @@ public static class OidcEndpoints
                 sessionId = s.SessionId,
                 serverEcdhPub = res.ServerEcdhPub,
                 expiresAt = s.ExpiresAt,
-                // 开考预检(贝塔通 P91):把「一场考试预计多久」下发给 Agent,让它自己拿
-                // expiresAt 算够不够。★ 原设计是靠 IdP 下发「你的会话还剩多久」的 claim,
-                //   取消 SSO 后作废 —— 判据改由 Horus 自己给,两个数都在自己手里。
+                // 開考預檢(貝塔通 P91):把「一場考試預計多久」下發給 Agent,讓它自己拿
+                // expiresAt 算夠不夠。★ 原設計是靠 IdP 下發「你的工作階段還剩多久」的 claim,
+                //   取消 SSO 後作廢 —— 判據改由 Horus 自己給,兩個數都在自己手裡。
                 expectedExamMinutes = cfg.ExpectedExamMinutes,
-                examId = s.ExamId,   // 服务端派发:Agent 采用此值填事件体(配置里已无 examId)
-                seatId = s.SeatId,   // OIDC 身份派生(username):Agent 采用此值填事件体(配置里已无 seatId)
-                // ★ 身份出口只剩三项(贝塔通 P81)。看板此前渲染的道号/境界/战力与
-                //   监考员/学员标注均已随之移除 —— 那些是问天录的业务字段,不由身份中心分发。
+                examId = s.ExamId,   // 伺服器端派發:Agent 採用此值填事件體(設定裡已無 examId)
+                seatId = s.SeatId,   // OIDC 身分派生(username):Agent 採用此值填事件體(設定裡已無 seatId)
+                // ★ 身分出口只剩三項(貝塔通 P81)。看板此前繪製的道號/境界/戰力與
+                //   監考員/學員標註均已隨之移除 —— 那些是問天錄的業務欄位,不由身分中心散布。
                 profile = new { sub = s.Sub, name = s.Name, username = s.Username },
             });
         });
 
-        // 待命轮询(公开·无凭证):只暴露「有无活跃考试 + id/名称」,供未登录 Agent 决定何时弹 OIDC 登录。
+        // 待命輪詢(公開·無憑證):只暴露「有無活躍考試 + id/名稱」,供未登入 Agent 決定何時彈 OIDC 登入。
         app.MapGet("/oidc/active-exam", () =>
         {
             ExamDispatch.ActiveExam? exam = ExamDispatch.ResolveActive(db);
@@ -72,7 +72,7 @@ public static class OidcEndpoints
                 : Results.Json(new { active = true, examId = exam.ExamId, name = exam.Name });
         });
 
-        // 会话探针:sessionId 本身即凭证(不知者查不到任何信息)。valid=false 含「被远程登出/过期/不存在」。
+        // 工作階段探針:sessionId 本身即憑證(不知者查不到任何資訊)。valid=false 含「被遠程登出/過期/不存在」。
         app.MapGet("/oidc/session", (HttpContext ctx) =>
         {
             string sid = ctx.Request.Headers["X-Horus-Session"].ToString();

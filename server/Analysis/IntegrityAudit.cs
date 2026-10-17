@@ -4,22 +4,22 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Analysis;
 
-/// 哈希链完整性审计(M3·取证强化)。对某场考试的 live 事件做**离线复验**,回答三个独立问题:
+/// 雜湊鏈完整性稽核(M3·取證強化)。對某場考試的 live 事件做**離線複驗**,回答三個獨立問題:
 ///
-///   ① **锚点自洽(hashOk)**:每条事件的 `hash_self` 是否确实 = SHA256(`hash_prev` + "\n" + canonicalCore(落库字段))?
-///      —— 从**落库的 payload/字段**逐字节复算(见 EventCanonical.CoreRaw)。不符 = 落库后 payload/字段被改动。
-///      注:hash_self 是**无密钥 SHA256**,非 PSK 方改 payload 后可**重算**使其自洽 → 单靠 hashOk 挡不住老练篡改。
-///   ② **签名自洽(sigOk)**:`sig` 是否 = HMAC-SHA256(PSK, `hash_self` + "\n" + `seq`)?**唯有持 PSK 者能产生合法 sig**,
-///      故这是真正能识破「非 PSK 方改 payload+重算 hashSelf」的锚点。配了 PSK 才验;hashOk 通过但 sigOk 失败 = 疑非 PSK 篡改。
-///   ③ **链连续(chainOk)**:按 (agent_id, seq) 升序,每条 `hash_prev` 是否 = 前一条 `hash_self`?
-///      `hash_prev="GENESIS"` = **合法段起点**(该 agent 首条,或 **Agent 重启后新起链段**)—— **不算断裂**
-///      (Agent 每次进程启动新建 HashChain,重启边界事件 hash_prev=GENESIS 属正常;伪造的 GENESIS 边界会被 ② 的 sig 校验识破)。
-///      非 GENESIS 的 hash_prev 与前驱 hash_self 不符 = 删除/插入/重排。
+///   ① **錨點自洽(hashOk)**:每條事件的 `hash_self` 是否確實 = SHA256(`hash_prev` + "\n" + canonicalCore(寫入資料庫欄位))?
+///      —— 從**寫入資料庫的 payload/欄位**逐位元組復算(見 EventCanonical.CoreRaw)。不符 = 寫入資料庫後 payload/欄位被改動。
+///      注:hash_self 是**無金鑰 SHA256**,非 PSK 方改 payload 後可**重算**使其自洽 → 單靠 hashOk 擋不住老練篡改。
+///   ② **簽名自洽(sigOk)**:`sig` 是否 = HMAC-SHA256(PSK, `hash_self` + "\n" + `seq`)?**唯有持 PSK 者能產生合法 sig**,
+///      故這是真正能識破「非 PSK 方改 payload+重算 hashSelf」的錨點。配了 PSK 才驗;hashOk 通過但 sigOk 失敗 = 疑非 PSK 篡改。
+///   ③ **鏈連續(chainOk)**:按 (agent_id, seq) 升序,每條 `hash_prev` 是否 = 前一條 `hash_self`?
+///      `hash_prev="GENESIS"` = **合法段起點**(該 agent 首條,或 **Agent 重新啟動後新起鏈段**)—— **不算斷裂**
+///      (Agent 每次處理程序啟動新建 HashChain,重新啟動邊界事件 hash_prev=GENESIS 屬正常;偽造的 GENESIS 邊界會被 ② 的 sig 檢核識破)。
+///      非 GENESIS 的 hash_prev 與前驅 hash_self 不符 = 刪除/插入/重排。
 ///
-/// **诚实边界(architecture §10.1)**:持 PSK 的学员机可构造**自洽的**伪造链(①②③ 全过),故本审计**不**能证明"内容为真",
-/// 只能证明"落库后未被无 PSK 方改动 / 未被静默删增"。内容真伪靠截图 / 视觉 / 人工裁决。
-/// **迁移前旧数据**:events.machine_id 是 M3 才加的列(旧行 NULL),canonicalCore 含 machineId → 旧事件无从复算 hashSelf,
-/// 归入 `unverifiable` 单列(既不算 hashOk 也不当篡改),**绝不对合法历史数据误报"篡改"**。
+/// **誠實邊界(architecture §10.1)**:持 PSK 的學員機可建構**自洽的**偽造鏈(①②③ 全過),故本稽核**不**能證明"內容為真",
+/// 只能證明"寫入資料庫後未被無 PSK 方改動 / 未被靜默刪增"。內容真偽靠截圖 / 視覺 / 人工裁決。
+/// **遷移前舊資料**:events.machine_id 是 M3 才加的列(舊行 NULL),canonicalCore 含 machineId → 舊事件無從復算 hashSelf,
+/// 歸入 `unverifiable` 單列(既不算 hashOk 也不當篡改),**絕不對合法歷史資料誤報"篡改"**。
 public static class IntegrityAudit
 {
     public sealed record Issue(long Id, long Seq, string Detail);
@@ -28,7 +28,7 @@ public static class IntegrityAudit
         string AgentId, string SeatId, int Total, int HashOk, int ChainOk, int Unverifiable, int RestartBoundaries,
         IReadOnlyList<Issue> HashMismatches, IReadOnlyList<Issue> ContinuityBreaks)
     {
-        // Ok = 未发现篡改证据。Unverifiable(迁移前缺 machine_id)与 RestartBoundaries(重启锚点)不算失败。
+        // Ok = 未發現篡改證據。Unverifiable(遷移前缺 machine_id)與 RestartBoundaries(重新啟動錨點)不算失敗。
         public bool Ok => HashMismatches.Count == 0 && ContinuityBreaks.Count == 0;
     }
 
@@ -37,8 +37,8 @@ public static class IntegrityAudit
         bool SigVerified, IReadOnlyList<AgentChain> Agents)
     {
         public bool Ok => Agents.All(a => a.Ok);
-        // 诚实标注(第三轮 D6):psk=null(联调/未配 PSK)时**从未验签**,ok:true 只代表"锚点自洽 + 链连续",
-        // **不代表**未被持 PSK 者篡改。sigVerified=false 时消费方(看板/运维)须知这是"未验签的绿"。
+        // 誠實標註(第三輪 D6):psk=null(整合測試/未配 PSK)時**從未驗籤**,ok:true 只代表"錨點自洽 + 鏈連續",
+        // **不代表**未被持 PSK 者篡改。sigVerified=false 時消費方(看板/維運)須知這是"未驗籤的綠"。
         public string? Note => SigVerified ? null : "未验签(psk 未配置):ok 仅表锚点自洽+链连续,不含 sig 校验;生产须配 PSK";
     }
 
@@ -46,28 +46,28 @@ public static class IntegrityAudit
         long Id, string SeatId, string AgentId, string? MachineId, long Seq, double Ts,
         string Type, string Payload, int Risk, string? EvidenceImageId, string? HashPrev, string? HashSelf, string? Sig);
 
-    /// 在**只读连接**上执行(调用方走 db.Read)。按 agent 分组、seq 升序复验。
-    /// psk 非 null 时附加 sig 校验(生产必配);null 时仅验 hashSelf + 链连续(联调无 PSK)。
+    /// 在**唯讀連接**上執行(呼叫方走 db.Read)。按 agent 分組、seq 升序複驗。
+    /// psk 非 null 時附加 sig 檢核(生產必配);null 時僅驗 hashSelf + 鏈連續(整合測試無 PSK)。
     public static Report Run(SqliteConnection conn, string examId, byte[]? psk = null)
     {
-        // 性能#3:流式按 agent 分组处理。结果按 (agent_id, seq) 升序,读到 agent 切换或 EOF 才处理并清空其缓冲,
-        // 峰值内存由"全考试事件"降为"单 agent 事件"(极大考试不再 O(N) 撑爆内存),审计语义不变。
+        // 效能#3:流式按 agent 分組處理。結果按 (agent_id, seq) 升序,讀到 agent 切換或 EOF 才處理並清空其緩衝,
+        // 峰值記憶體由"全考試事件"降為"單 agent 事件"(極大考試不再 O(N) 撐爆記憶體),稽核語義不變。
         var seatOf = new Dictionary<string, string>();
         var agents = new List<AgentChain>();
         int totalEvents = 0, totalHashOk = 0, totalChainOk = 0, totalUnverifiable = 0, totalRestart = 0;
 
-        // 单 agent 连续事件的审计(与流式读取解耦,缓冲边界内存受控)。闭包捕获 examId/psk 与累计量。
+        // 單 agent 連續事件的稽核(與流式讀取解耦,緩衝邊界記憶體受控)。閉包捕獲 examId/psk 與累計量。
         void ProcessAgent(List<Row> rows, string agentId)
         {
             var hashMiss = new List<Issue>();
             var chainMiss = new List<Issue>();
             int unverifiable = 0, hashOkCount = 0, restart = 0;
-            string? prevSelf = null;   // null → 尚无前驱(首条应链到 GENESIS)
+            string? prevSelf = null;   // null → 尚無前驅(首條應鏈到 GENESIS)
 
             foreach (Row e in rows)
             {
-                // ①+②锚点自洽:从落库字段(含 machine_id)复算 hashSelf,并(配了 PSK 时)复验 sig。
-                //    迁移前旧事件缺 machine_id → 归 unverifiable,既不算 hashOk 也不当篡改。
+                // ①+②錨點自洽:從寫入資料庫欄位(含 machine_id)復算 hashSelf,並(配了 PSK 時)複驗 sig。
+                //    遷移前舊事件缺 machine_id → 歸 unverifiable,既不算 hashOk 也不當篡改。
                 if (e.MachineId is null)
                 {
                     unverifiable++;
@@ -85,11 +85,11 @@ public static class IntegrityAudit
                         hashOkCount++;
                 }
 
-                // ③链连续:hash_prev="GENESIS"=合法段起点(首条或重启锚点),不算断裂;否则应 = 前一条 hash_self。
+                // ③鏈連續:hash_prev="GENESIS"=合法段起點(首條或重新啟動錨點),不算斷裂;否則應 = 前一條 hash_self。
                 string gotPrev = e.HashPrev ?? "";
                 if (gotPrev == "GENESIS")
                 {
-                    if (prevSelf is not null) restart++;   // 非首条却链到 GENESIS = Agent 重启后新起链段
+                    if (prevSelf is not null) restart++;   // 非首條卻鏈到 GENESIS = Agent 重新啟動後新起鏈段
                 }
                 else if (!Crypto.FixedTimeEquals(gotPrev, prevSelf ?? "GENESIS"))
                 {
@@ -104,9 +104,9 @@ public static class IntegrityAudit
             totalHashOk += hashOkCount;
             totalUnverifiable += unverifiable;
             totalRestart += restart;
-            // chainOk 口径 = 连续性未断的行数。**与 hashOk 口径不同**:hashOk 只数"锚点+签名都验过"的行(不含 unverifiable);
-            // 而连续性检查对**每一行**(含重启锚点、含迁移前缺 machineId 的行)都做了 hash_prev↔前驱 比对,故它们计入 chainOk 是正确的
-            // (它们的链确实没断)。看板若要"纯净度",另有 totalUnverifiable / totalRestartBoundaries 正交呈现。
+            // chainOk 口徑 = 連續性未斷的行數。**與 hashOk 口徑不同**:hashOk 只數"錨點+簽名都驗過"的行(不含 unverifiable);
+            // 而連續性檢查對**每一行**(含重新啟動錨點、含遷移前缺 machineId 的行)都做了 hash_prev↔前驅 比對,故它們計入 chainOk 是正確的
+            // (它們的鏈確實沒斷)。看板若要"純淨度",另有 totalUnverifiable / totalRestartBoundaries 正交呈現。
             totalChainOk += rows.Count - chainMiss.Count;
             agents.Add(new AgentChain(
                 agentId, seatOf.TryGetValue(agentId, out string? s) ? s : "", rows.Count, hashOkCount, rows.Count - chainMiss.Count, unverifiable, restart,
@@ -131,14 +131,14 @@ public static class IntegrityAudit
                     r.IsDBNull(11) ? null : r.GetString(11),
                     r.IsDBNull(12) ? null : r.GetString(12));
                 if (curAgent is null) curAgent = row.AgentId;
-                if (row.AgentId != curAgent)   // agent 切换:处理上一缓冲,起新缓冲
+                if (row.AgentId != curAgent)   // agent 切換:處理上一緩衝,起新緩衝
                 {
                     ProcessAgent(buf!, curAgent!);
                     buf = null;
                     curAgent = row.AgentId;
                 }
                 (buf ??= new List<Row>()).Add(row);
-                seatOf[row.AgentId] = row.SeatId;   // 取该 agent 见到的 seat(通常固定)
+                seatOf[row.AgentId] = row.SeatId;   // 取該 agent 見到的 seat(通常固定)
             }
             if (buf is not null) ProcessAgent(buf, curAgent!);
         }

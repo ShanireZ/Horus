@@ -1,26 +1,26 @@
 namespace Horus.Agent.Hardening;
 
-/// M5 防遮蔽:从**廉价像素统计**判断截图是否被遮蔽(黑屏 / 纯色覆盖 / DRM 保护窗口黑帧 / 尺寸异常)。
-/// **分类器与采集解耦**:Agent 端从 Bitmap 算出 luma 方差 + 尺寸喂进来,此处纯逻辑判定 → 可单测。
-/// 哲学:只上报"疑似遮蔽",不阻断;第二显示器/虚拟桌面仍是结构盲区(靠物理监考)。
+/// M5 防遮蔽:從**廉價像素統計**判斷截圖是否被遮蔽(黑屏 / 純色覆蓋 / DRM 保護視窗黑影格 / 尺寸異常)。
+/// **分類器與採集解耦**:Agent 端從 Bitmap 算出 luma 方差 + 尺寸喂進來,此處純邏輯判定 → 可單測。
+/// 哲學:只上報"疑似遮蔽",不阻斷;第二顯示器/虛擬桌面仍是結構盲區(靠物理監考)。
 public enum ObscureReason
 {
     None,
-    BadSize,     // 宽/高 ≤ 0(截图失败)
-    TooSmall,    // 远小于预期分辨率(疑似截到极小窗口 / 采集异常)
-    Solid,       // luma 方差≈0 → 近纯色(全黑 / 单色覆盖 / DRM 黑帧)
-    LowEntropy,  // luma 方差很低 → 画面几乎无内容(疑似大面积遮挡)
+    BadSize,     // 寬/高 ≤ 0(截圖失敗)
+    TooSmall,    // 遠小於預期解析度(疑似截到極小視窗 / 採集異常)
+    Solid,       // luma 方差≈0 → 近純色(全黑 / 單色覆蓋 / DRM 黑影格)
+    LowEntropy,  // luma 方差很低 → 畫面幾乎無內容(疑似大面積遮擋)
 }
 
-/// 一张截图的廉价统计量(0–255 luma 尺度)。DistinctBuckets = 下采样直方图非空桶数(可选·0 表示未提供)。
+/// 一張截圖的廉價統計量(0–255 luma 尺度)。DistinctBuckets = 下取樣直方圖非空桶數(可選·0 表示未提供)。
 public readonly record struct ScreenStats(int Width, int Height, double LumaVariance, int DistinctBuckets = 0);
 
-/// 判定阈值(可从配置热更新)。默认保守:只稳抓"近纯色 / 坏尺寸 / 过小",避免误伤深色 IDE(有文字→方差不低)。
-/// **引用类型 record**(非 record struct):`new()` 会走主构造函数默认值;record struct 的 `new()` 是零值会绕过默认参数。
+/// 判定閾值(可從設定熱更新)。預設保守:只穩抓"近純色 / 壞尺寸 / 過小",避免誤傷深色 IDE(有文字→方差不低)。
+/// **引用類型 record**(非 record struct):`new()` 會走主建構函式預設值;record struct 的 `new()` 是零值會繞過預設參數。
 public sealed record ScreenQualityThresholds(
-    double SolidVariance = 2.0,     // ≤ 此值视为纯色
-    double LowEntropyVariance = 8.0, // < 此值视为低熵(仍很保守·深色带代码的截图方差远高于此)
-    int MinEdge = 240);              // 宽或高 < 此值视为过小
+    double SolidVariance = 2.0,     // ≤ 此值視為純色
+    double LowEntropyVariance = 8.0, // < 此值視為低熵(仍很保守·深色帶程式碼的截圖方差遠高於此)
+    int MinEdge = 240);              // 寬或高 < 此值視為過小
 
 public static class ScreenQuality
 {
@@ -40,7 +40,7 @@ public static class ScreenQuality
     public static bool IsObscured(ScreenStats s, ScreenQualityThresholds? t = null)
         => Classify(s, t) != ObscureReason.None;
 
-    /// 契约用小写标签(进事件 payload.reason)。
+    /// 契約用小寫標籤(進事件 payload.reason)。
     public static string ReasonLabel(ObscureReason r) => r switch
     {
         ObscureReason.BadSize => "bad_size",

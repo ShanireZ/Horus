@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// M5 采集端硬化:平台无关检测核(遮蔽分类 / 挂起监测 / 能力健康 / 异常重启)纯逻辑单测。
+/// M5 採集端硬化:平台無關檢測核(遮蔽分類 / 掛起監測 / 能力健康 / 異常重新啟動)純邏輯單測。
 public class ScreenQualityTests
 {
     [Fact]
@@ -31,7 +31,7 @@ public class ScreenQualityTests
         => Assert.Equal(ObscureReason.LowEntropy, ScreenQuality.Classify(new ScreenStats(1920, 1080, 5.0)));
 
     [Fact]
-    public void 深色IDE有内容_不误报()   // 深色但有文字 → 方差远高于阈值
+    public void 深色IDE有内容_不误报()   // 深色但有文字 → 方差遠高於閾值
         => Assert.False(ScreenQuality.IsObscured(new ScreenStats(1920, 1080, 120.0)));
 
     [Fact]
@@ -56,14 +56,14 @@ public class SuspendMonitorTests
     {
         var m = new SuspendMonitor(30);
         m.Observe(1000.0);
-        Assert.Null(m.Observe(1030.0));   // gap 30 < 90 阈值
+        Assert.Null(m.Observe(1030.0));   // gap 30 < 90 閾值
         Assert.Null(m.Observe(1061.0));   // gap 31
     }
 
     [Fact]
     public void 大跳变_报挂起_返回gap毫秒()
     {
-        var m = new SuspendMonitor(30, 3.0);   // 阈值 90s
+        var m = new SuspendMonitor(30, 3.0);   // 閾值 90s
         m.Observe(1000.0);
         double? gap = m.Observe(1400.0);        // gap 400s ≫ 90s
         Assert.NotNull(gap);
@@ -79,8 +79,8 @@ public class CapabilityTrackerTests
         var t = new CapabilityTracker(3);
         Assert.False(t.RecordFailure("uia"));   // 1
         Assert.False(t.RecordFailure("uia"));   // 2
-        Assert.True(t.RecordFailure("uia"));    // 3 → 刚降级
-        Assert.False(t.RecordFailure("uia"));   // 4 → 已降级,不再报
+        Assert.True(t.RecordFailure("uia"));    // 3 → 剛降級
+        Assert.False(t.RecordFailure("uia"));   // 4 → 已降級,不再報
         Assert.True(t.IsDegraded("uia"));
     }
 
@@ -88,11 +88,11 @@ public class CapabilityTrackerTests
     public void 成功清零_从降级恢复报一次()
     {
         var t = new CapabilityTracker(2);
-        t.RecordFailure("wmi"); t.RecordFailure("wmi");   // 降级
+        t.RecordFailure("wmi"); t.RecordFailure("wmi");   // 降級
         Assert.True(t.IsDegraded("wmi"));
-        Assert.True(t.RecordSuccess("wmi"));               // 恢复
+        Assert.True(t.RecordSuccess("wmi"));               // 恢復
         Assert.False(t.IsDegraded("wmi"));
-        Assert.False(t.RecordSuccess("wmi"));              // 本就正常 → 不报
+        Assert.False(t.RecordSuccess("wmi"));              // 本就正常 → 不報
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public class RestartClassifierTests
         => Assert.False(RestartClassifier.IsUnexpectedRestart(null));
 }
 
-/// M5 服务端:健康信号处置(遮屏独立赋分入队 + 座位健康告警计数)。
+/// M5 伺服器端:健康信號處置(遮屏獨立賦分入隊 + 座位健康告警計數)。
 public class HealthSignalServerTests
 {
     private static async Task CreateExam(HttpClient http)
@@ -142,14 +142,14 @@ public class HealthSignalServerTests
         await CreateExam(http);
         using WebSocket ws = await HelloAsync(app);
 
-        // Agent 把遮屏事件签成 risk=0 试图压住,服务器独立赋分 60 → 入队。
+        // Agent 把遮屏事件籤成 risk=0 試圖壓住,伺服器獨立賦分 60 → 入隊。
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.ScreenshotObscured,
             new() { ["reason"] = "solid", ["metric"] = 0.4 }, 0, seq: 1));
         Assert.Equal("ack", (await Ws.ReceiveAsync(ws)).GetProperty("type").GetString());
 
         JsonElement events = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/events?seatId=A07");
         Assert.Equal(60, events[0].GetProperty("serverRisk").GetInt32());
-        // 健康信号独立成「采集健康」面板:入队(source='health')→进 /health,不再进可裁决的 /suspicious。
+        // 健康信號獨立成「採集健康」面板:入隊(source='health')→進 /health,不再進可裁決的 /suspicious。
         JsonElement health = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/health");
         Assert.Equal(1, health.GetArrayLength());
         Assert.Equal("screen_obscured", health[0].GetProperty("kind").GetString());

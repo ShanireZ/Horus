@@ -1,31 +1,31 @@
-# 维度六 · 失效审查（Broken — 已实现但不可用）
+# 維度六 · 失效審查（Broken — 已實作但不可用）
 
-> 审查口径：代码里存在、但运行时实际不工作 / 行为错误的功能。
-> 结论：**本次审查未发现已确认的「已实现但失效」功能**。以下仅列「潜在失效风险」与「需 owner 确认的边界」。
+> 審查口徑：程式碼裡存在、但執行環境實際不工作 / 行為錯誤的功能。
+> 結論：**本次審查未發現已確認的「已實作但失效」功能**。以下僅列「潛在失效風險」與「需 owner 確認的邊界」。
 
 ---
 
-## 已逐项核对、确认可用（避免误报为失效）
-| 功能 | 端点/代码 | 前端 | 结论 |
+## 已逐項核對、確認可用（避免誤報為失效）
+| 功能 | 端點/程式碼 | 前端 | 結論 |
 |---|---|---|---|
-| 按图搜图 | `Endpoints.cs:71` `POST /api/exams/{id}/search-image` | `app.js:217` 取 `imageSearchEnabled`、`app.js:1125` 显隐、`app.js:1141` `searchSimilar` | **可用**（嵌入器关时按钮隐藏，行为正确） |
-| 点名抓图 | `Endpoints.cs:612` + `UplinkClient.cs:176` + `agent/Program.cs:153` | 座位抽屉「点名抓图」按钮（`app.js`） | **可用**（UI 已补齐，归 01-U1，2026-07-15 已实施） |
-| 哈希链复验 | `EventIngest` + `integrity` 端点 | — | 可用（有测试） |
-| 归档作业 | `ArchiveService` | — | 可用（有测试） |
-| OIDC / RBAC | `IngestAuth` / `admin_sessions` | 登录门 | 可用 |
-| 考前预检 | `Endpoints.cs:98` | 预检按钮 | 可用 |
-| 可疑裁决 | `Endpoints.cs:635` `decide` | 队列裁决 | 可用 |
+| 按圖搜圖 | `Endpoints.cs:71` `POST /api/exams/{id}/search-image` | `app.js:217` 取 `imageSearchEnabled`、`app.js:1125` 顯隱、`app.js:1141` `searchSimilar` | **可用**（嵌入器關時按鈕隱藏，行為正確） |
+| 點名抓圖 | `Endpoints.cs:612` + `UplinkClient.cs:176` + `agent/Program.cs:153` | 座位抽屜「點名抓圖」按鈕（`app.js`） | **可用**（UI 已補齊，歸 01-U1，2026-07-15 已實施） |
+| 雜湊鏈複驗 | `EventIngest` + `integrity` 端點 | — | 可用（有測試） |
+| 歸檔作業 | `ArchiveService` | — | 可用（有測試） |
+| OIDC / RBAC | `IngestAuth` / `admin_sessions` | 登入門 | 可用 |
+| 考前預檢 | `Endpoints.cs:98` | 預檢按鈕 | 可用 |
+| 可疑裁決 | `Endpoints.cs:635` `decide` | 佇列裁決 | 可用 |
 
 ---
 
-## X1 〔P3·潜在〕`capture_now` 若 Agent 端 `OnCaptureNow` 未注入 → 静默失效
-**状态（2026-07-15）**：✅ 已实施（见 02-A3）。`agent/Program.cs` 启动断言 + `UplinkClient.OnCaptureNow` 注释点明，未注入即告警。
+## X1 〔P3·潛在〕`capture_now` 若 Agent 端 `OnCaptureNow` 未注入 → 靜默失效
+**狀態（2026-07-15）**：✅ 已實施（見 02-A3）。`agent/Program.cs` 啟動斷言 + `UplinkClient.OnCaptureNow` 註解點明，未注入即告警。
 
-## X2 〔P3·潜在〕CLIP 模型缺失时「按图搜图」整链路不可用且无引导
-**状态（2026-07-15）**：✅ 已实施（见 05-M7 + 03-D4）。预检 `clip_model` 检查 + 灯箱禁用态「按图搜图」按钮 + tooltip 提示「未部署 CLIP 模型(model.onnx)」。
+## X2 〔P3·潛在〕CLIP 模型缺失時「按圖搜圖」整連線路徑不可用且無引導
+**狀態（2026-07-15）**：✅ 已實施（見 05-M7 + 03-D4）。預檢 `clip_model` 檢查 + 燈箱禁用態「按圖搜圖」按鈕 + tooltip 提示「未部署 CLIP 模型(model.onnx)」。
 
 ---
 
-## 优先级建议
-- 本维度**无 P0–P2 项**。仅 X1/X2 两个 P3 防御性项，随 02-A3 / 05-M7 / 03-D4 一并处理即可。
-- ~~「点名抓图按钮是否有意不暴露」~~ → **已确认暴露到看板**（2026-07-15 实施），01-U1 维持「缺失→已修」，非「按预期行为」。
+## 優先級建議
+- 本維度**無 P0–P2 項**。僅 X1/X2 兩個 P3 防禦性項，隨 02-A3 / 05-M7 / 03-D4 一併處理即可。
+- ~~「點名抓圖按鈕是否有意不暴露」~~ → **已確認暴露到看板**（2026-07-15 實施），01-U1 維持「缺失→已修」，非「按預期行為」。

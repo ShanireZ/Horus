@@ -4,9 +4,9 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// OIDC/通用密钥自动加密回写(DPAPI·Windows)。覆盖:通用 EncryptSecretInFile —— 明文→密文 + 清空明文、
-/// 缺 Enc 字段时紧挨插入(保留注释)、密文可解回原文、空明文不改文件。(视觉 key 专项见 ReliabilityTests.SecretProtectTests。)
-/// DPAPI 仅 Windows;非 Windows 环境整类跳过(测试机是 Windows 笔记本,与生产一致)。
+/// OIDC/通用金鑰自動加密回寫(DPAPI·Windows)。覆蓋:通用 EncryptSecretInFile —— 明文→密文 + 清空明文、
+/// 缺 Enc 欄位時緊挨插入(保留註解)、密文可解回原文、空明文不改檔案。(視覺 key 專項見 ReliabilityTests.SecretProtectTests。)
+/// DPAPI 僅 Windows;非 Windows 環境整類跳過(測試機是 Windows 筆記本,與生產一致)。
 public class SecretProtectOidcTests
 {
     private static string Temp() => Path.Combine(Path.GetTempPath(), "horus-secret-" + Guid.NewGuid().ToString("N") + ".json");
@@ -31,9 +31,9 @@ public class SecretProtectOidcTests
             Assert.Equal("super-secret-123", SecretProtect.Unprotect(enc!));   // 密文解回原文
 
             string after = File.ReadAllText(path);
-            Assert.Contains("注释应保留", after);                               // 行内替换保留注释
+            Assert.Contains("注释应保留", after);                               // 行內替換保留註解
             Assert.Contains("\"oidcClientSecret\": \"\"", after);              // 明文已清空
-            Assert.Contains(enc!, after);                                      // 密文已写入
+            Assert.Contains(enc!, after);                                      // 密文已寫入
             Assert.DoesNotContain("super-secret-123", after);                 // 明文不再存在
         }
         finally { File.Delete(path); }
@@ -46,7 +46,7 @@ public class SecretProtectOidcTests
         string path = Temp();
         try
         {
-            // 故意不含 oidcDashboardClientSecretEnc,模拟旧配置
+            // 故意不含 oidcDashboardClientSecretEnc,模擬舊設定
             File.WriteAllText(path, """
             {
               // 保留我
@@ -58,12 +58,12 @@ public class SecretProtectOidcTests
             Assert.NotNull(enc);
 
             string after = File.ReadAllText(path);
-            Assert.Contains("保留我", after);                                         // 注释未被 JsonNode 回退抹掉
-            Assert.Contains("\"oidcDashboardClientSecretEnc\"", after);              // Enc 字段已插入
-            Assert.Contains("\"adminSessionMinutes\"", after);                       // 其它字段仍在
+            Assert.Contains("保留我", after);                                         // 註解未被 JsonNode 退回抹掉
+            Assert.Contains("\"oidcDashboardClientSecretEnc\"", after);              // Enc 欄位已插入
+            Assert.Contains("\"adminSessionMinutes\"", after);                       // 其它欄位仍在
             Assert.DoesNotContain("dash-secret-xyz", after);                         // 明文已清
 
-            // 插入后仍是合法 JSON(允许注释/尾逗号)
+            // 插入後仍是合法 JSON(允許註解/尾逗號)
             using var _ = JsonDocument.Parse(after,
                 new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
         }
@@ -79,11 +79,11 @@ public class SecretProtectOidcTests
         {
             File.WriteAllText(path, "{ \"visionApiKey\": \"\", \"visionApiKeyEnc\": \"\" }");
             string before = File.ReadAllText(path);
-            // Program 侧对空明文根本不调 Encrypt;此处直接验证 API:空串加密仍会写(但 Program 有 IsNullOrEmpty 守卫)。
-            // 故这里只断言 Program 的守卫语义:空明文不触发。用 helper 复刻守卫:
+            // Program 側對空明文根本不調 Encrypt;此處直接驗證 API:空串加密仍會寫(但 Program 有 IsNullOrEmpty 守衛)。
+            // 故這裡只斷言 Program 的守衛語義:空明文不觸發。用 helper 復刻守衛:
             string? enc = string.IsNullOrEmpty("") ? null : SecretProtect.EncryptSecretInFile(path, "visionApiKey", "visionApiKeyEnc", "");
             Assert.Null(enc);
-            Assert.Equal(before, File.ReadAllText(path));   // 文件未变
+            Assert.Equal(before, File.ReadAllText(path));   // 檔案未變
         }
         finally { File.Delete(path); }
     }

@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// M4 部署项:考前预检 /api/preflight + /api/exams 白名单标记(§10.1 缺口告警)。
+/// M4 部署項:考前預檢 /api/preflight + /api/exams 白名單標記(§10.1 缺口告警)。
 public class PreflightTests
 {
     private static async Task<JsonElement> AdminGet(HttpClient http, string path)
@@ -49,9 +49,9 @@ public class PreflightTests
         using var app = new TestApp(adminAuth: true);
         HttpClient http = app.CreateClient();
         JsonElement pf = await AdminGet(http, "/api/preflight");
-        Assert.True(pf.GetProperty("ok").GetBoolean());                 // token 模式无 fail
+        Assert.True(pf.GetProperty("ok").GetBoolean());                 // token 模式無 fail
         Assert.True(pf.GetProperty("checks").GetArrayLength() > 0);
-        Assert.Equal(0, pf.GetProperty("activeExams").GetArrayLength()); // 尚无考试
+        Assert.Equal(0, pf.GetProperty("activeExams").GetArrayLength()); // 尚無考試
     }
 
     [Fact]
@@ -62,14 +62,14 @@ public class PreflightTests
         await CreateExam(http, "E1");
 
         JsonElement pf1 = await AdminGet(http, "/api/preflight");
-        Assert.Equal("warn", WhitelistCheckLevel(pf1));                 // 无白名单 → warn
+        Assert.Equal("warn", WhitelistCheckLevel(pf1));                 // 無白名單 → warn
         JsonElement ae = pf1.GetProperty("activeExams")[0];
         Assert.Equal("E1", ae.GetProperty("examId").GetString());
         Assert.False(ae.GetProperty("hasWhitelist").GetBoolean());
 
         await PushWhitelist(http, "E1");
         JsonElement pf2 = await AdminGet(http, "/api/preflight");
-        Assert.Equal("ok", WhitelistCheckLevel(pf2));                   // 下发后 → ok
+        Assert.Equal("ok", WhitelistCheckLevel(pf2));                   // 下發後 → ok
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class PreflightTests
     [Fact]
     public async Task authmode_带采集面模式()
     {
-        using var app = new TestApp(adminAuth: true);   // 采集面默认 psk
+        using var app = new TestApp(adminAuth: true);   // 採集面預設 psk
         JsonElement am = JsonSerializer.Deserialize<JsonElement>(
             await app.CreateClient().GetStringAsync("/api/authmode"));
         Assert.Equal("psk", am.GetProperty("collectAuthMode").GetString());
@@ -118,7 +118,7 @@ public class PreflightTests
         req.Headers.Add("X-Horus-Admin", TestApp.AdminToken);
         (await http.SendAsync(req)).EnsureSuccessStatusCode();
 
-        // A07 走 PSK 发一条事件 → 在线;A08 闲置 → offline
+        // A07 走 PSK 發一條事件 → 線上;A08 閒置 → offline
         using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}"); await Ws.ReceiveAsync(ws);
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
@@ -132,7 +132,7 @@ public class PreflightTests
     }
 }
 
-/// M2 基线抽样策略:确定性 1/N 抽样(跨重启一致)。
+/// M2 基線抽樣策略:確定性 1/N 抽樣(跨重新啟動一致)。
 public class BaselineSamplingTests
 {
     [Theory]
@@ -162,7 +162,7 @@ public class BaselineSamplingTests
         for (int i = 0; i < total; i++)
             if (ImageIngest.BaselineSampleHit("img_" + i.ToString("x8"), rate)) hit++;
         double frac = (double)hit / total;
-        // 期望 ~0.2;放宽到 [0.15, 0.25] 容忍 FNV 在有限样本上的偏差。
+        // 期望 ~0.2;放寬到 [0.15, 0.25] 容忍 FNV 在有限樣本上的偏差。
         Assert.InRange(frac, 0.15, 0.25);
     }
 }

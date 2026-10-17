@@ -4,12 +4,12 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace Horus.Server.Config;
 
-/// M4·RBAC·S8:监考员看板远端 OIDC 回调需 https(wentian dashboard client 回调是 HTTPS)。
-/// 局域网无公网域名/证书,故**启动时自签证书**(首用点过浏览器警告或预装证书)。
-/// 仅当 Urls 含 https 时被调用;pfx 落 DataDir 复用(重启不重签,SAN 稳定)。
+/// M4·RBAC·S8:監考員看板遠端 OIDC 回呼需 https(wentian dashboard client 回呼是 HTTPS)。
+/// 區域網路無公用網路網域/證書,故**啟動時自簽證書**(首用點過瀏覽器警告或預裝證書)。
+/// 僅當 Urls 含 https 時被呼叫;pfx 落 DataDir 重複使用(重新啟動不重籤,SAN 穩定)。
 public static class HttpsCert
 {
-    /// 加载已有 pfx;不存在则自签生成并落盘。SAN 含 localhost/127.0.0.1/::1/机器名 + 配置的额外主机/IP。
+    /// 載入已有 pfx;不存在則自籤生成並寫入磁碟。SAN 含 localhost/127.0.0.1/::1/機器名 + 設定的額外主機/IP。
     public static X509Certificate2 LoadOrCreate(ServerConfig cfg, string dataDir)
     {
         string path = string.IsNullOrWhiteSpace(cfg.HttpsCertPath)
@@ -20,7 +20,7 @@ public static class HttpsCert
         if (File.Exists(path))
         {
             try { return new X509Certificate2(File.ReadAllBytes(path), pwd, X509KeyStorageFlags.Exportable); }
-            catch { /* 坏证书 → 重新生成覆盖 */ }
+            catch { /* 壞證書 → 重新生成覆蓋 */ }
         }
 
         using RSA rsa = RSA.Create(2048);
@@ -35,7 +35,7 @@ public static class HttpsCert
         san.AddDnsName("localhost");
         san.AddIpAddress(IPAddress.Loopback);
         san.AddIpAddress(IPAddress.IPv6Loopback);
-        try { san.AddDnsName(Dns.GetHostName()); } catch { /* 无主机名忽略 */ }
+        try { san.AddDnsName(Dns.GetHostName()); } catch { /* 無主機名忽略 */ }
         foreach (string h in (cfg.HttpsSanHosts ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             if (IPAddress.TryParse(h, out IPAddress? ip)) san.AddIpAddress(ip);
@@ -46,7 +46,7 @@ public static class HttpsCert
         using X509Certificate2 cert = req.CreateSelfSigned(
             DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(5));
         byte[] pfx = cert.Export(X509ContentType.Pfx, pwd);
-        try { File.WriteAllBytes(path, pfx); } catch { /* 写失败不致命,仍用内存证书 */ }
+        try { File.WriteAllBytes(path, pfx); } catch { /* 寫失敗不致命,仍用記憶體證書 */ }
         return new X509Certificate2(pfx, pwd, X509KeyStorageFlags.Exportable);
     }
 }

@@ -1,22 +1,22 @@
-# Horus（horus）— v2 重构提示词
+# Horus（horus）— v2 重構提示詞
 
-## 平台档案
+## 平台檔案
 
-| 项            | 值                                                 |
+| 項            | 值                                                 |
 | ------------- | -------------------------------------------------- |
-| code / 显示名 | `horus` / Horus                                    |
-| 定位          | 局域网考试监考：检测与取证，系统初筛、人工裁决     |
-| 最终文字      | `HORUS`（定案无中文名，单语）                      |
-| 字体          | Cinzel，大写，字距 0.16–0.18em                     |
-| 色板          | 青金蓝 `#2E5EAA` · 鎏金 `#C9A227` · 暖白 `#F2EDE4` |
+| code / 顯示名 | `horus` / Horus                                    |
+| 定位          | 區域網路考試監考：檢測與取證，系統初篩、人工裁決     |
+| 最終文字      | `HORUS`（定案無中文名，單語）                      |
+| 字體          | Cinzel，大寫，字距 0.16–0.18em                     |
+| 色板          | 青金藍 `#2E5EAA` · 鎏金 `#C9A227` · 暖白 `#F2EDE4` |
 
-## 视觉重构
+## 視覺重構
 
-核心是**庄重的守望与证据仪器**。荷鲁斯之眼仍是身份，但要做成一枚真实有层次的监察徽记：
-鹰眼轮廓、经典泪线与卷尾、相机光圈瞳孔、表圈刻度和未闭合状态环。背景表达局域网考场的
-记录与取证秩序，不走阴森监视、纯色科技底或 CCTV 直白图标。
+核心是**莊重的守望與證據儀器**。荷魯斯之眼仍是身分，但要做成一枚真實有層次的監察徽記：
+鷹眼輪廓、經典淚線與卷尾、相機光圈瞳孔、表圈刻度和未閉合狀態環。背景表達區域網路考場的
+記錄與取證秩序，不走陰森監視、純色科技底或 CCTV 直白圖標。
 
-## 1. Logo 原生生成（随后抠图）
+## 1. Logo 原生生成（隨後摳圖）
 
 ```text
 Use case: logo-brand
@@ -31,7 +31,7 @@ Constraints: one uniform backdrop, no shadow, no gradient, no texture, no floor,
 Avoid: realistic human eye, eyelashes, wet iris, blood, tears of sadness, horror, CCTV camera, pyramid scene, pharaoh portrait, generic eye icon
 ```
 
-抠图后入库 `horus-logo.png`。
+摳圖後入庫 `horus-logo.png`。
 
 ## 2. 徽章背景原生生成（3:1）
 
@@ -49,9 +49,9 @@ Constraints: no text, no letters, no logo, no watermark, no frame, no human eye
 Avoid: plain blue gradient, empty solid background, neon cyberpunk, CCTV camera, horror, pyramid postcard, bright left side
 ```
 
-入库 `horus-badge-bg.webp`。
+入庫 `horus-badge-bg.webp`。
 
-## 3. 登录背景原生生成（4:5）
+## 3. 登入背景原生生成（4:5）
 
 ```text
 Use case: stylized-concept
@@ -67,18 +67,18 @@ Constraints: no text, no letters, no logo, no watermark, no person, no realistic
 Avoid: pure-color background, cyberpunk screens, CCTV, horror, blood, tourist Egypt scene, green palette
 ```
 
-入库 `horus-stage-bg.webp`。
+入庫 `horus-stage-bg.webp`。
 
-## 4. 后期合成
+## 4. 後期合成
 
-- 徽章左侧 1/4 叠 `horus-logo.png`；中间只排 `HORUS`，文字在中段安全区内略向左放置，
-  Cinzel 全大写并与 Logo 垂直居中；右侧只保留背景光圈 HERO。
-- 登录宣传图中央叠 `horus-logo.png`，下方排 `HORUS`；组合在中央安全区内整体略向下放置，
-  文字在组内略向上收紧与 Logo 的间距。
-- 不排副标、不创造中文名。
+- 徽章左側 1/4 疊 `horus-logo.png`；中間只排 `HORUS`，文字在中段安全區內略向左放置，
+  Cinzel 全大寫並與 Logo 垂直居中；右側只保留背景光圈 HERO。
+- 登入宣傳圖中央疊 `horus-logo.png`，下方排 `HORUS`；組合在中央安全區內整體略向下放置，
+  文字在組內略向上收緊與 Logo 的間距。
+- 不排副標、不創造中文名。
 
-## 5. 自检
+## 5. 自檢
 
-- Logo 必须保留泪线与卷尾，否则只是普通眼睛。
-- 背景要有石材、金属、刻度、光圈与空间纵深，不能再是纯蓝色块。
-- `HORUS` 五个字母正确，且视觉组的中心不是文字基线而是整组包围盒中心。
+- Logo 必須保留淚線與卷尾，否則只是普通眼睛。
+- 背景要有石材、金屬、刻度、光圈與空間縱深，不能再是純藍色塊。
+- `HORUS` 五個字母正確，且視覺組的中心不是文字基線而是整組包圍盒中心。

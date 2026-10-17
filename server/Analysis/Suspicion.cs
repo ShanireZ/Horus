@@ -3,31 +3,31 @@ using Horus.Contracts;
 
 namespace Horus.Server.Analysis;
 
-/// M1 服务器侧初筛:由事件类型 + payload 判定可疑类别(kind)。
-/// 系统只初筛,处分由人裁决(architecture 铁律 §3)。风险分由 Agent 本地初判,
-/// 服务器 risk ≥ 阈值即入 suspicious_queue;M2/M3 再叠加 OCR/Logo/击键。
+/// M1 伺服器側初篩:由事件類型 + payload 判定可疑類別(kind)。
+/// 系統只初篩,處分由人裁決(architecture 鐵律 §3)。風險分由 Agent 本機初判,
+/// 伺服器 risk ≥ 閾值即入 suspicious_queue;M2/M3 再疊加 OCR/Logo/擊鍵。
 public static class Suspicion
 {
-    /* SignalType → kind → 前端标签 总表（T4：新增信号时据此同步补 KIND_META，防漏标签）
-     * ScreenshotObscured   → screen_obscured     → 屏幕遮挡      (health)
-     * CapabilityDegraded   → capability_degraded → 能力降级      (health)
-     * WatchdogRestart      → watchdog_restart    → 看门狗重启    (health)
-     * SuspectedSuspend     → suspected_suspend    → 疑似挂起      (health)
-     * BrowserUrl(ai)       → web_ai              → AI 网站       (suspicion)
-     * BrowserUrl(search)   → search              → 搜题         (suspicion)
-     * BrowserUrl(other)    → non_whitelist_web   → 非白名单网站  (suspicion)
-     * BrowserUrl(unreadable)→ browser_unreadable → 浏览器不可读  (suspicion)
-     * ProcessStart         → non_whitelist_proc  → 非白名单进程  (suspicion)
-     * Clipboard            → large_paste         → 大段粘贴      (suspicion)
-     * Usb                  → usb                 → USB 设备      (suspicion)
-     * (其它/兜底)           → suspect             → 可疑         (suspicion)
-     * 视觉判定(ide_plugin/remote_tool)经 VisionVerdict.Kind() 映射,同源归 suspicion。
+    /* SignalType → kind → 前端標籤 總表（T4：新增信號時據此同步補 KIND_META，防漏標籤）
+     * ScreenshotObscured   → screen_obscured     → 螢幕遮擋      (health)
+     * CapabilityDegraded   → capability_degraded → 能力降級      (health)
+     * WatchdogRestart      → watchdog_restart    → 看門狗重新啟動    (health)
+     * SuspectedSuspend     → suspected_suspend    → 疑似掛起      (health)
+     * BrowserUrl(ai)       → web_ai              → AI 網站       (suspicion)
+     * BrowserUrl(search)   → search              → 搜題         (suspicion)
+     * BrowserUrl(other)    → non_whitelist_web   → 非白名單網站  (suspicion)
+     * BrowserUrl(unreadable)→ browser_unreadable → 瀏覽器不可讀  (suspicion)
+     * ProcessStart         → non_whitelist_proc  → 非白名單處理程序  (suspicion)
+     * Clipboard            → large_paste         → 大段粘貼      (suspicion)
+     * Usb                  → usb                 → USB 設備      (suspicion)
+     * (其它/備援)           → suspect             → 可疑         (suspicion)
+     * 視覺判定(ide_plugin/remote_tool)經 VisionVerdict.Kind() 映射,同源歸 suspicion。
      */
-    // 命中黑名单即细分标签。黑名单与 RiskModel 共用同一份,避免风险判据与标签判据漂移。
+    // 命中黑名單即細分標籤。黑名單與 RiskModel 共用同一份,避免風險判據與標籤判據漂移。
     private static string[] AiHosts => RiskModel.AiHosts;
     private static string[] SearchHosts => RiskModel.SearchHosts;
 
-    /// 返回 kind;返回 null 表示该事件不单独入队(例如低于阈值的软信号)。
+    /// 回傳 kind;回傳 null 表示該事件不單獨入隊(例如低於閾值的軟信號)。
     public static string KindFor(SignalType type, JsonElement payload)
     {
         switch (type)
@@ -38,25 +38,25 @@ public static class Suspicion
                 if (TryStr(payload, "url", out string? url) && !string.IsNullOrEmpty(url))
                 {
                     string host = HostOf(url);
-                    // 与 RiskModel 共用按 DNS 标签的匹配(避免 richardbard→bard 等子串误标),判据与标签不漂移。
+                    // 與 RiskModel 共用按 DNS 標籤的匹配(避免 richardbard→bard 等子串誤標),判據與標籤不漂移。
                     if (RiskModel.HostMatchesAny(host, AiHosts)) return "web_ai";
                     if (RiskModel.HostMatchesAny(host, SearchHosts)) return "search";
                 }
-                return "non_whitelist_web";   // 非 AI/非搜索的非白名单站:中性标签,别误贴 web_ai
+                return "non_whitelist_web";   // 非 AI/非搜索的非白名單站:中性標籤,別誤貼 web_ai
             case SignalType.ProcessStart: return "non_whitelist_proc";
             case SignalType.Clipboard:    return "large_paste";
             case SignalType.Usb:          return "usb";
-            // M5 采集端硬化:入队的健康信号给专属 kind(看板可辨识)。
+            // M5 採集端硬化:入隊的健康信號給專屬 kind(看板可辨識)。
             case SignalType.ScreenshotObscured: return "screen_obscured";
             case SignalType.CapabilityDegraded: return "capability_degraded";
             case SignalType.WatchdogRestart:    return "watchdog_restart";
-            case SignalType.SuspectedSuspend:   return "suspected_suspend";   // M8:统一经「采集健康」面板呈现
+            case SignalType.SuspectedSuspend:   return "suspected_suspend";   // M8:統一經「採集健康」面板呈現
             default:                      return "suspect";
         }
     }
 
-    /// 健康信号(采集端硬化三件套)入队时归属 source='health',仅在「采集健康」面板呈现、不可裁决;
-    /// 其余作弊线索默认 source='suspicion'。判据与 KindFor 的三分支保持一致,避免漂移。
+    /// 健康信號(採集端硬化三件套)入隊時歸屬 source='health',僅在「採集健康」面板呈現、不可裁決;
+    /// 其餘作弊線索預設 source='suspicion'。判據與 KindFor 的三分支保持一致,避免漂移。
     public static string SourceForKind(string kind)
     {
         return kind is "screen_obscured" or "capability_degraded" or "watchdog_restart" or "suspected_suspend"
@@ -65,7 +65,7 @@ public static class Suspicion
 
     private static string HostOf(string url)
     {
-        // 解析失败返回空串(与 RiskModel.HostOf 一致):不拿整条 URL 去撞黑名单标签,免 path/query 假阳性(F5)。
+        // 解析失敗回傳空串(與 RiskModel.HostOf 一致):不拿整條 URL 去撞黑名單標籤,免 path/query 假陽性(F5)。
         try { return new Uri(url).Host.ToLowerInvariant(); }
         catch { return ""; }
     }

@@ -5,15 +5,15 @@ using Microsoft.Extensions.Hosting;
 
 namespace Horus.Agent.Hardening;
 
-/// M5 保活层1:以 **Windows 服务(LocalSystem)** 承载看门狗 —— 学员标准账户杀不掉 LocalSystem 服务,
-/// 服务被停 / 采集被关都靠**心跳断→看板告警**兜底(层3)。服务体 = <see cref="Watchdog.RunSupervisor"/>(serviceSession=true·
-/// 经 SessionLauncher 把采集拉进用户交互会话)。安装/卸载走 sc.exe(免额外 SCM P/Invoke)。**真机验收**。
+/// M5 保活層1:以 **Windows 服務(LocalSystem)** 承載看門狗 —— 學員標準帳戶殺不掉 LocalSystem 服務,
+/// 服務被停 / 採集被關都靠**心跳斷→看板告警**備援(層3)。服務體 = <see cref="Watchdog.RunSupervisor"/>(serviceSession=true·
+/// 經 SessionLauncher 把採集拉進使用者交互工作階段)。安裝/卸載走 sc.exe(免額外 SCM P/Invoke)。**真機驗收**。
 [SupportedOSPlatform("windows")]
 public static class WindowsService
 {
     public const string ServiceName = "HorusAgentWatchdog";
 
-    /// 以服务身份运行(由 SCM 启动;也可控制台直接跑调试)。configArgs=传给采集模式的参数(config 路径)。
+    /// 以服務身分執行(由 SCM 啟動;也可控制檯直接跑偵錯)。configArgs=傳給採集模式的參數(config 路徑)。
     public static void Run(string selfExe, string[] configArgs, string instanceKey)
     {
         IHost host = Host.CreateDefaultBuilder()
@@ -23,7 +23,7 @@ public static class WindowsService
         host.Run();
     }
 
-    /// 注册服务:binPath = "<exe> --service <configArgs>"。start=auto·LocalSystem。返回退出码。
+    /// 註冊服務:binPath = "<exe> --service <configArgs>"。start=auto·LocalSystem。回傳結束代碼。
     public static int Install(string selfExe, string[] configArgs)
     {
         string bin = "\"" + selfExe + "\" --service" + string.Concat(configArgs.Select(a => " \"" + a + "\""));
@@ -32,7 +32,7 @@ public static class WindowsService
         return rc;
     }
 
-    /// 卸载服务:先停再删。
+    /// 卸載服務:先停再刪。
     public static int Uninstall()
     {
         Sc($"stop {ServiceName}");
@@ -52,7 +52,7 @@ public static class WindowsService
     }
 }
 
-/// 服务托管的后台任务:跑看门狗 supervisor(serviceSession=true)。SCM 停止 → stoppingToken 取消 → 看门狗退出。
+/// 服務託管的後台任務:跑看門狗 supervisor(serviceSession=true)。SCM 停止 → stoppingToken 取消 → 看門狗退出。
 [SupportedOSPlatform("windows")]
 internal sealed class WatchdogHostedService(string selfExe, string[] configArgs, string instanceKey) : BackgroundService
 {

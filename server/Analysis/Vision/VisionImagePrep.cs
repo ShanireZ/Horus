@@ -6,48 +6,48 @@ using SixLabors.ImageSharp.Processing;
 
 namespace Horus.Server.Analysis.Vision;
 
-/// §5 送云前的派生处理 —— **降采样**(压 token/成本、少送无关像素)+ **剥离元数据**(EXIF/XMP/ICC 不随派生图出网),
-/// 再重编码 WebP。**原图字节只读,只送本方法产出的派生字节**。
+/// §5 送雲前的派生處理 —— **降取樣**(壓 token/成本、少送無關像素)+ **剝離中繼資料**(EXIF/XMP/ICC 不隨派生圖出網),
+/// 再重編碼 WebP。**原圖位元組唯讀,只送本方法產出的派生位元組**。
 ///
-/// 注(owner 决策·2026-07-02):**不再做打码身份 / 裁剪**(按考场 UI 逐一配矩形的运维负担 > 收益,且供应商=小米 MiMo 境内云·PIPL 无跨境)。
-/// 只保留分辨率无关的降采样 + 元数据剥离。
+/// 注(owner 決策·2026-07-02):**不再做打碼身分 / 裁剪**(按考場 UI 逐一配矩形的維運負擔 > 收益,且供應商=小米 MiMo 境內雲·PIPL 無跨境)。
+/// 只保留解析度無關的降取樣 + 中繼資料剝離。
 ///
-/// `mustStrip`(送云分析器 = true)决定隐私铁律的强度:
-///   • mustStrip=true(联网):**始终**解码 + 剥元数据 + 重编码(即便 `visionMaxEdge≤0` 不缩放也剥),解码失败**返回 null**
-///     由调用方跳过 —— 绝不把带 EXIF/XMP/ICC 的原字节送出局域网(§5「原图永不出网」)。
-///   • mustStrip=false(本地/mock·不出网):`visionMaxEdge≤0` 直通原字节(零开销·mock 测试用假图字节保留标记),
-///     解码失败也直通原字节(不出网,无泄漏面)。
+/// `mustStrip`(送雲分析器 = true)決定隱私鐵律的強度:
+///   • mustStrip=true(聯網):**始終**解碼 + 剝中繼資料 + 重編碼(即便 `visionMaxEdge≤0` 不縮放也剝),解碼失敗**回傳 null**
+///     由呼叫方跳過 —— 絕不把帶 EXIF/XMP/ICC 的原位元組送出區域網路(§5「原圖永不出網」)。
+///   • mustStrip=false(本機/mock·不出網):`visionMaxEdge≤0` 直通原位元組(零開銷·mock 測試用假圖位元組保留標記),
+///     解碼失敗也直通原位元組(不出網,無洩漏面)。
 public static class VisionImagePrep
 {
-    /// 解码像素上限(纵深防解码炸弹):≈ 4096×4096,远超 1080p 采集(1920×1080≈207 万)。超此判失败不全解码。
+    /// 解碼像素上限(縱深防解碼炸彈):≈ 4096×4096,遠超 1080p 採集(1920×1080≈207 萬)。超此判失敗不全解碼。
     private const long MaxDecodePixels = 4096L * 4096L;
 
-    /// 返回派生字节;见类注释关于 `mustStrip` 的两条路径。
+    /// 回傳派生位元組;見類註解關於 `mustStrip` 的兩條路徑。
     public static byte[]? Prepare(byte[] original, ServerConfig cfg, bool mustStrip = false)
     {
         int maxEdge = cfg.VisionMaxEdge;
-        // 不出网(mock/联调)且不降采样 → 直通不解码(零开销)。联网分析器绝不走此直通,必落到下方解码+剥离。
+        // 不出網(mock/整合測試)且不降取樣 → 直通不解碼(零開銷)。聯網分析器絕不走此直通,必落到下方解碼+剝離。
         if (!mustStrip && maxEdge <= 0) return original;
 
         try
         {
             using var inMs = new MemoryStream(original);
-            // F10 纵深:2MB 体上限只约束**压缩后**字节;高压缩比图(大面积纯色)可在 <2MB 内编码巨幅位图,
-            // 解码即 4 字节/px 巨额分配(20000×20000≈1.6GB)。先 Identify 只读头探尺寸(不解码像素),超上限直接判失败,
-            // 不进全解码。上限 MaxDecodePixels(≈ 4096×4096,远超 1080p 采集)。
+            // F10 縱深:2MB 體上限只約束**壓縮後**位元組;高壓縮比圖(大面積純色)可在 <2MB 內編碼巨幅點陣圖,
+            // 解碼即 4 位元組/px 鉅額分配(20000×20000≈1.6GB)。先 Identify 唯讀頭探尺寸(不解碼像素),超上限直接判失敗,
+            // 不進全解碼。上限 MaxDecodePixels(≈ 4096×4096,遠超 1080p 採集)。
             ImageInfo info = Image.Identify(inMs);
             if ((long)info.Width * info.Height > MaxDecodePixels)
-                return mustStrip ? null : original;   // 联网:宁跳过不泄原图;本地/mock:直通(不出网,无泄漏面)
+                return mustStrip ? null : original;   // 聯網:寧跳過不洩原圖;本機/mock:直通(不出網,無洩漏面)
             inMs.Position = 0;
             using Image<Rgba32> image = Image.Load<Rgba32>(inMs);
 
-            // 剥离元数据:派生图只含像素,不随源图 EXIF/XMP/IPTC/ICC 出网(#15)。
+            // 剝離中繼資料:派生圖只含像素,不隨源圖 EXIF/XMP/IPTC/ICC 出網(#15)。
             image.Metadata.ExifProfile = null;
             image.Metadata.XmpProfile = null;
             image.Metadata.IptcProfile = null;
             image.Metadata.IccProfile = null;
 
-            if (maxEdge > 0 && Math.Max(image.Width, image.Height) > maxEdge)   // 配了上限且长边超限才降采样
+            if (maxEdge > 0 && Math.Max(image.Width, image.Height) > maxEdge)   // 配了上限且長邊超限才降取樣
                 image.Mutate(m => m.Resize(new ResizeOptions
                 {
                     Mode = ResizeMode.Max,
@@ -60,8 +60,8 @@ public static class VisionImagePrep
         }
         catch
         {
-            // 联网分析器:无法安全派生 → 返回 null,调用方跳过该图(fail-safe,绝不泄未剥元数据的原图)。
-            // 本地/mock:直通原字节(不出网,无泄漏面,保持既有行为 + mock 假图字节可达分析器)。
+            // 聯網分析器:無法安全派生 → 回傳 null,呼叫方跳過該圖(fail-safe,絕不洩未剝中繼資料的原圖)。
+            // 本機/mock:直通原位元組(不出網,無洩漏面,保持既有行為 + mock 假圖位元組可達分析器)。
             return mustStrip ? null : original;
         }
     }

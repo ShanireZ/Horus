@@ -13,7 +13,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// M5:视觉判定映射 + 视觉分析服务落库链路。
+/// M5:視覺判定映射 + 視覺分析服務寫入資料庫連線路徑。
 public class VisionTests
 {
     [Theory]
@@ -47,7 +47,7 @@ public class VisionTests
         var svc = app.Services.GetRequiredService<VisionAnalysisService>();
         svc.Enqueue("img_v000001");
 
-        // 轮询等待后台分析落库(最长 ~4s)
+        // 輪詢等待後台分析寫入資料庫(最長 ~4s)
         bool ok = false;
         for (int i = 0; i < 40; i++)
         {
@@ -66,7 +66,7 @@ public class VisionTests
             using SqliteCommand c = conn.Cmd("SELECT analysis_state FROM images WHERE image_id='img_v000001'");
             return Convert.ToInt32(c.ExecuteScalar());
         });
-        Assert.Equal(1, state);   // 终结态(分析完成)
+        Assert.Equal(1, state);   // 終結態(分析完成)
     }
 
     // ---- helpers ----

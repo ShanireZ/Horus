@@ -7,15 +7,15 @@ using Microsoft.Extensions.Logging;
 
 namespace Horus.Server.Analysis.Search;
 
-/// M3 按图搜图:后台把**证据图**(is_evidence=1)嵌入为向量(补扫·不占 ingest 热路径)。
-/// 仅嵌证据/可疑图(owner 决策·省算力);原图永不出网(嵌入器内送派生图)。嵌入器未注册时整体 no-op。
+/// M3 按圖搜圖:後台把**證據圖**(is_evidence=1)嵌入為向量(補掃·不佔 ingest 熱路徑)。
+/// 僅嵌證據/可疑圖(owner 決策·省算力);原圖永不出網(嵌入器內送派生圖)。嵌入器未註冊時整體 no-op。
 public sealed class ImageEmbedService(
     Db db, Storage storage, ImageSearchStore store, ServerConfig cfg, IServiceProvider sp, ILogger<ImageEmbedService> log)
     : BackgroundService
 {
-    private readonly IImageEmbedder? embedder = sp.GetService<IImageEmbedder>();   // 嵌入器关时未注册 → null → no-op
+    private readonly IImageEmbedder? embedder = sp.GetService<IImageEmbedder>();   // 嵌入器關時未註冊 → null → no-op
 
-    // 嵌入器未注册(off/mock 未配)时为 false → 整服务 no-op;看板据此(经由 /api/authmode 的 imageSearchEnabled)决定「按图搜图」按钮显隐。
+    // 嵌入器未註冊(off/mock 未配)時為 false → 整服務 no-op;看板據此(經由 /api/authmode 的 imageSearchEnabled)決定「按圖搜圖」按鈕顯隱。
     public bool Enabled => embedder is { Enabled: true };
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -29,7 +29,7 @@ public sealed class ImageEmbedService(
         }
     }
 
-    /// 嵌入一批尚无 embedding 的证据图;返回本次嵌入数。可手动触发(测试)。
+    /// 嵌入一批尚無 embedding 的證據圖;回傳本次嵌入數。可手動觸發(測試)。
     public async Task<int> RunOnceAsync(CancellationToken ct)
     {
         if (!Enabled) return 0;
@@ -57,7 +57,7 @@ public sealed class ImageEmbedService(
         return n;
     }
 
-    /// 即时嵌入单图(搜索时查询图未嵌入则补嵌)。返回向量或 null。
+    /// 即時嵌入單圖(搜索時查詢圖未嵌入則補嵌)。回傳向量或 null。
     public async Task<float[]?> EmbedImageAsync(string imageId, CancellationToken ct)
     {
         if (!Enabled) return null;

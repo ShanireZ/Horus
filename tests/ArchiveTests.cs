@@ -15,8 +15,8 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// M3 归档 / 清理作业:到龄考试关键数据入 archive 库、非关键就地清理、status='archived';
-/// pending 未裁决则跳过;未到龄不动;幂等重跑 no-op。
+/// M3 歸檔 / 清理作業:到齡考試關鍵資料入 archive 庫、非關鍵就地清理、status='archived';
+/// pending 未裁決則跳過;未到齡不動;冪等重跑 no-op。
 public class ArchiveTests
 {
     private const string Exam = "E1", Seat = "A07", Agent = "ag-A07", Machine = "PC-A07";
@@ -43,7 +43,7 @@ public class ArchiveTests
     private static async Task SendEventAsync(WebSocket ws, SignalType type, Dictionary<string, object?> payload,
         int risk, long seq, string? evidenceImageId = null)
     {
-        // 各事件独立自洽(hashPrev=GENESIS),足以过 ingest 验签 + 哈希复验(归档不看链连续)。
+        // 各事件獨立自洽(hashPrev=GENESIS),足以過 ingest 驗籤 + 雜湊複驗(歸檔不看鏈連續)。
         string json = Ws.SignedEvent(Exam, Seat, Agent, Machine, type, payload, risk, seq, evidenceImageId: evidenceImageId);
         await Ws.SendAsync(ws, json);
         await Ws.ReceiveAsync(ws);   // ack
@@ -93,26 +93,26 @@ public class ArchiveTests
 
         using (WebSocket ws = await HelloAsync(app))
         {
-            // 证据图先到,随后高危事件引用它 → 服务器标 is_evidence=1(关键)
+            // 證據圖先到,隨後高危事件引用它 → 伺服器標 is_evidence=1(關鍵)
             await UploadImageAsync(http, "event:browser", cidEv, 10);
             await SendEventAsync(ws, SignalType.BrowserUrl,
                 new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = false }, 80, 1, evidenceImageId: cidEv);
-            // 低危事件(非关键)
+            // 低危事件(非關鍵)
             await SendEventAsync(ws, SignalType.WindowFocus, new() { ["title"] = "题目.pdf", ["process"] = "acrobat" }, 0, 2);
-            // 随机基线图(非关键,应被清理)
+            // 隨機基線圖(非關鍵,應被清理)
             await UploadImageAsync(http, "baseline_random", cidBase, 11);
         }
 
-        // 裁决那条 web_ai → confirmed(否则 pending 会挡归档),同时成为一条归档裁决
+        // 裁決那條 web_ai → confirmed(否則 pending 會擋歸檔),同時成為一條歸檔裁決
         JsonElement susp = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/suspicious");
         Assert.Equal(1, susp.GetArrayLength());
         long sid = susp[0].GetProperty("id").GetInt64();
         (await http.PostAsJsonAsync($"/api/suspicious/{sid}/decide", new { status = "confirmed", reviewer = "监考A" })).EnsureSuccessStatusCode();
 
-        // 结束考试
+        // 結束考試
         (await http.PostAsync($"/api/exams/{Exam}/end", null)).EnsureSuccessStatusCode();
 
-        // 归档:传入"31 天后"的 now → 该考试到龄
+        // 歸檔:傳入"31 天后"的 now → 該考試到齡
         var archive = app.Services.GetRequiredService<ArchiveService>();
         var storage = app.Services.GetRequiredService<Storage>();
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 + 31 * Day;
@@ -122,7 +122,7 @@ public class ArchiveTests
         Assert.Equal(1, report.Archived);
         Assert.Equal(0, report.Skipped);
 
-        // live 端:该考试事件 / 图片 / 可疑全清空,status=archived
+        // live 端:該考試事件 / 圖片 / 可疑全清空,status=archived
         JsonElement events = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/events");
         Assert.Equal(0, events.GetArrayLength());
         JsonElement all = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/suspicious?status=all");
@@ -130,7 +130,7 @@ public class ArchiveTests
         JsonElement exams = await http.GetFromJsonAsync<JsonElement>("/api/exams");
         Assert.Equal("archived", exams[0].GetProperty("status").GetString());
 
-        // archive 库:1 关键事件、1 证据图、1 裁决、1 考试汇总
+        // archive 庫:1 關鍵事件、1 證據圖、1 裁決、1 考試彙總
         string ap = archive.ArchivePath;
         Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_events"));
         Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_images"));
@@ -138,7 +138,7 @@ public class ArchiveTests
         Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_exams"));
         Assert.Equal(80, OpenArchiveScalar(ap, "SELECT risk FROM archive_events"));
 
-        // 文件:证据图迁入 archive/ 冷存(live 原图不在);基线图被删
+        // 檔案:證據圖遷入 archive/ 冷存(live 原圖不在);基線圖被刪
         string evLive = storage.Resolve(Storage.RelPath(Exam, Seat, cidEv))!;
         string evCold = storage.Resolve(Storage.ArchiveRelPath(Exam, Seat, cidEv))!;
         string baseLive = storage.Resolve(Storage.RelPath(Exam, Seat, cidBase))!;
@@ -146,13 +146,13 @@ public class ArchiveTests
         Assert.True(File.Exists(evCold), "证据图应在 archive 冷存");
         Assert.False(File.Exists(baseLive), "非关键基线图应被清理");
 
-        // F3(第三轮):归档后证据图/元数据仍可经 HTTP 取证读取(此前 live 行删掉后 /api/images 一律 404)。
+        // F3(第三輪):歸檔後證據圖/中繼資料仍可經 HTTP 取證讀取(此前 live 行刪掉後 /api/images 一律 404)。
         HttpResponseMessage imgResp = await http.GetAsync($"/api/images/{cidEv}");
         Assert.Equal(HttpStatusCode.OK, imgResp.StatusCode);
-        Assert.True((await imgResp.Content.ReadAsByteArrayAsync()).Length > 0);   // 冷存字节送出
+        Assert.True((await imgResp.Content.ReadAsByteArrayAsync()).Length > 0);   // 冷存位元組送出
         JsonElement meta = await http.GetFromJsonAsync<JsonElement>($"/api/images/{cidEv}/meta");
         Assert.True(meta.GetProperty("archived").GetBoolean());
-        // 归档考试只读复核端点:汇总 + 裁决 + 关键事件 + 证据图都可读回
+        // 歸檔考試唯讀複核端點:彙總 + 裁決 + 關鍵事件 + 證據圖都可讀回
         JsonElement arc = await http.GetFromJsonAsync<JsonElement>($"/api/archive/exams/{Exam}");
         Assert.True(arc.GetProperty("archived").GetBoolean());
         Assert.Equal(1, arc.GetProperty("adjudications").GetArrayLength());
@@ -163,12 +163,12 @@ public class ArchiveTests
     [Fact]
     public async Task 击键定罪证据_随confirmed裁决归档_不丢证据()
     {
-        // 闭合审计 C1:被 confirmed 裁决引用的击键样本必须进 archive,而非在清理时被无条件删除。
+        // 閉合稽核 C1:被 confirmed 裁決引用的擊鍵樣本必須進 archive,而非在清理時被無條件刪除。
         using var app = new TestApp();
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http);
 
-        // 判题网页上报"空窗后突现整段代码"→ keystroke_samples 落库 + 入可疑队列(large_paste/ide_plugin_suspect, risk=70)
+        // 判題網頁上報"空窗後突現整段程式碼"→ keystroke_samples 寫入資料庫 + 入可疑佇列(large_paste/ide_plugin_suspect, risk=70)
         HttpResponseMessage ks = await http.PostAsJsonAsync("/ingest/keystroke", new
         {
             examId = Exam, seatId = Seat, submissionId = "sub1", ts = 1750000000.0,
@@ -177,7 +177,7 @@ public class ArchiveTests
         });
         ks.EnsureSuccessStatusCode();
 
-        // 监考员裁决 confirmed —— 其唯一证据就是这条击键时间线
+        // 監考員裁決 confirmed —— 其唯一證據就是這條擊鍵時間線
         JsonElement susp = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/suspicious");
         Assert.Equal(1, susp.GetArrayLength());
         long sid = susp[0].GetProperty("id").GetInt64();
@@ -190,13 +190,13 @@ public class ArchiveTests
         ArchiveService.Report report = archive.RunOnce(now);
         Assert.Equal(1, report.Archived);
 
-        // archive 库:击键证据 + 裁决都在,timeline 字节完好
+        // archive 庫:擊鍵證據 + 裁決都在,timeline 位元組完好
         string ap = archive.ArchivePath;
         Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_keystroke_samples"));
         Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_adjudications"));
         Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_keystroke_samples WHERE timeline IS NOT NULL AND length(timeline)>0"));
 
-        // live 已清空(击键证据已安全落 archive)
+        // live 已清空(擊鍵證據已安全落 archive)
         JsonElement all = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/suspicious?status=all");
         Assert.Equal(0, all.GetArrayLength());
     }
@@ -211,7 +211,7 @@ public class ArchiveTests
         using (WebSocket ws = await HelloAsync(app))
             await SendEventAsync(ws, SignalType.BrowserUrl,
                 new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = false }, 80, 1);
-        // 不裁决 → 留 pending
+        // 不裁決 → 留 pending
         (await http.PostAsync($"/api/exams/{Exam}/end", null)).EnsureSuccessStatusCode();
 
         var archive = app.Services.GetRequiredService<ArchiveService>();
@@ -239,7 +239,7 @@ public class ArchiveTests
         (await http.PostAsync($"/api/exams/{Exam}/end", null)).EnsureSuccessStatusCode();
 
         var archive = app.Services.GetRequiredService<ArchiveService>();
-        // now = 真实此刻(考试刚结束)→ 未过 30 天留存 → 不候选
+        // now = 真實此刻(考試剛結束)→ 未過 30 天留存 → 不候選
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         ArchiveService.Report report = archive.RunOnce(now);
         Assert.Equal(0, report.Scanned);
@@ -264,15 +264,15 @@ public class ArchiveTests
 
         ArchiveService.Report r1 = archive.RunOnce(now);
         Assert.Equal(1, r1.Archived);
-        // 二次:考试已 archived,不再是 ended 候选 → 扫描 0
+        // 二次:考試已 archived,不再是 ended 候選 → 掃描 0
         ArchiveService.Report r2 = archive.RunOnce(now);
         Assert.Equal(0, r2.Scanned);
         Assert.Equal(0, r2.Archived);
     }
 }
 
-/// 文件库归档(非 :memory:):走真只读连接池 + 真 VACUUM + 冷存文件移动。既有 ArchiveTests 全 :memory: 回退单连接,
-/// 此类补文件库端到端盲区(含墓碑 'archiving' 态崩溃续跑)。
+/// 檔案庫歸檔(非 :memory:):走真唯讀連接池 + 真 VACUUM + 冷存檔案移動。既有 ArchiveTests 全 :memory: 退回單連接,
+/// 此類補檔案庫端到端盲區(含墓碑 'archiving' 態崩潰續跑)。
 public class FileDbArchiveTests
 {
     private const double Day = 86400.0;
@@ -324,7 +324,7 @@ public class FileDbArchiveTests
 
             Assert.Equal(1, report.Archived);
             long liveEvents = db.Read(conn => { using SqliteCommand c = conn.Cmd("SELECT COUNT(*) FROM events WHERE exam_id='E1'"); return Convert.ToInt64(c.ExecuteScalar()); });
-            Assert.Equal(0, liveEvents);   // live 清空(且 VACUUM 已在文件库上跑过,未抛)
+            Assert.Equal(0, liveEvents);   // live 清空(且 VACUUM 已在檔案庫上跑過,未拋)
             string status = db.Read(conn => { using SqliteCommand c = conn.Cmd("SELECT status FROM exams WHERE exam_id='E1'"); return (string)c.ExecuteScalar()!; });
             Assert.Equal("archived", status);
             Assert.Equal(1, OpenArchiveScalar(Path.Combine(dir, "arch.db"), "SELECT COUNT(*) FROM archive_events"));
@@ -335,7 +335,7 @@ public class FileDbArchiveTests
     [Fact]
     public void 墓碑archiving态_崩溃续跑_收敛为archived()
     {
-        // 模拟上次崩在归档中途:status='archiving' 且 live 数据仍在。候选查询含 'archiving' → 本次续跑跑完。
+        // 模擬上次崩在歸檔中途:status='archiving' 且 live 資料仍在。候選查詢含 'archiving' → 本次續跑跑完。
         string dir = TempDir();
         try
         {
@@ -346,7 +346,7 @@ public class FileDbArchiveTests
             var svc = new ArchiveService(db, storage, Cfg(), NullLogger<ArchiveService>.Instance);
             ArchiveService.Report report = svc.RunOnce(1000.0 + 40 * Day);
 
-            Assert.Equal(1, report.Archived);   // 墓碑态被拾起续跑
+            Assert.Equal(1, report.Archived);   // 墓碑態被拾起續跑
             string status = db.Read(conn => { using SqliteCommand c = conn.Cmd("SELECT status FROM exams WHERE exam_id='E1'"); return (string)c.ExecuteScalar()!; });
             Assert.Equal("archived", status);
             Assert.Equal(1, OpenArchiveScalar(Path.Combine(dir, "arch.db"), "SELECT COUNT(*) FROM archive_events"));
@@ -357,8 +357,8 @@ public class FileDbArchiveTests
     private const string ImgId = "img_ev010000";
     private const string PayloadText = "{\"note\":\"x\"}";
 
-    /// 播种一条**合法签名**的关键事件(risk80·引用证据图)+ 其证据图(is_evidence=1),event.id 显式=1(便于模拟崩溃续跑)。
-    /// 返回该事件 hash_self(供独立复验)。status/是否写 live 图文件可配。
+    /// 播種一條**合法簽名**的關鍵事件(risk80·引用證據圖)+ 其證據圖(is_evidence=1),event.id 顯式=1(便於模擬崩潰續跑)。
+    /// 回傳該事件 hash_self(供獨立複驗)。status/是否寫 live 圖檔案可配。
     private static string SeedSignedEvidence(Db db, Storage storage, string status, double t, bool writeImgFile)
     {
         var core = new AgentEvent
@@ -375,7 +375,7 @@ public class FileDbArchiveTests
         {
             using (SqliteCommand c = conn.Cmd(
                 @"INSERT INTO exams (exam_id,name,status,started_at,ended_at,created_at) VALUES ('E1','x',@st,@t,@t,@t)
-                  ON CONFLICT(exam_id) DO UPDATE SET status=@st, ended_at=@t",   // 用 UPDATE 而非 REPLACE:避免隐式 DELETE 触发 seats FK
+                  ON CONFLICT(exam_id) DO UPDATE SET status=@st, ended_at=@t",   // 用 UPDATE 而非 REPLACE:避免隱式 DELETE 觸發 seats FK
                 ("@st", status), ("@t", t))) c.ExecuteNonQuery();
             using (SqliteCommand c = conn.Cmd("INSERT OR IGNORE INTO seats (exam_id,seat_id,agent_id) VALUES ('E1','A01','ag')")) c.ExecuteNonQuery();
             using (SqliteCommand c = conn.Cmd(
@@ -393,7 +393,7 @@ public class FileDbArchiveTests
     [Fact]
     public void 归档事件保留machineId与原始risk_锚点可独立逐字节复验()
     {
-        // #item3:archive_events 补 machine_id + 存原始 agent risk → 归档后凭落档字段独立复算 hash_self 应一致。
+        // #item3:archive_events 補 machine_id + 存原始 agent risk → 歸檔後憑落檔欄位獨立復算 hash_self 應一致。
         string dir = TempDir();
         try
         {
@@ -404,7 +404,7 @@ public class FileDbArchiveTests
             var svc = new ArchiveService(db, storage, Cfg(), NullLogger<ArchiveService>.Instance);
             Assert.Equal(1, svc.RunOnce(1000.0 + 40 * Day).Archived);
 
-            // 从 archive 库读回落档字段,独立复算 hash_self
+            // 從 archive 庫讀回落檔欄位,獨立復算 hash_self
             using var arc = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(dir, "arch.db"), Pooling = false }.ToString());
             arc.Open();
             using SqliteCommand c = arc.CreateCommand();
@@ -428,14 +428,14 @@ public class FileDbArchiveTests
     [Fact]
     public void 归档清理_向量索引行随图删除_不留孤儿()
     {
-        // CI-L1:image_embeddings 无 FK 到 images(裸 PK 表),归档清理须显式删除,否则向量行悬挂指向已删图、永久滞留 live 库。
+        // CI-L1:image_embeddings 無 FK 到 images(裸 PK 表),歸檔清理須顯式刪除,否則向量行懸掛指向已刪圖、永久滯留 live 庫。
         string dir = TempDir();
         try
         {
             using var db = new Db(Path.Combine(dir, "live.db"));
             var storage = new Storage(dir);
             SeedSignedEvidence(db, storage, "ended", 1000.0, writeImgFile: true);
-            // 为该证据图播一条向量索引行(模拟按图搜图已嵌入过)。
+            // 為該證據圖播一條向量索引行(模擬按圖搜圖已嵌入過)。
             db.Write(conn =>
             {
                 using SqliteCommand c = conn.Cmd(
@@ -449,7 +449,7 @@ public class FileDbArchiveTests
             var svc = new ArchiveService(db, storage, Cfg(), NullLogger<ArchiveService>.Instance);
             Assert.Equal(1, svc.RunOnce(1000.0 + 40 * Day).Archived);
 
-            // 归档后 live 图已清空 → 向量行也应随之清理,无孤儿滞留。
+            // 歸檔後 live 圖已清空 → 向量行也應隨之清理,無孤兒滯留。
             long orphans = db.Read(conn => { using SqliteCommand c = conn.Cmd("SELECT COUNT(*) FROM image_embeddings"); return Convert.ToInt64(c.ExecuteScalar()); });
             Assert.Equal(0, orphans);
         }
@@ -459,8 +459,8 @@ public class FileDbArchiveTests
     [Fact]
     public void copy后delete前崩溃_重跑不重复归档且live清空()
     {
-        // #item4:模拟"copy 已完成(archive 有数据 + 证据图已移冷存)、delete 未执行(live 数据还在·status='archiving')"崩溃态。
-        // 真实崩溃下 live 事件 id 不变,故用显式 id=1 复播,重跑应凭 ON CONFLICT(id)/MoveToArchive 容忍已迁而收敛、不产生重复。
+        // #item4:模擬"copy 已完成(archive 有資料 + 證據圖已移冷存)、delete 未執行(live 資料還在·status='archiving')"崩潰態。
+        // 真實崩潰下 live 事件 id 不變,故用顯式 id=1 復播,重跑應憑 ON CONFLICT(id)/MoveToArchive 容忍已遷而收斂、不產生重複。
         string dir = TempDir();
         try
         {
@@ -468,20 +468,20 @@ public class FileDbArchiveTests
             var storage = new Storage(dir);
             string ap = Path.Combine(dir, "arch.db");
 
-            // 第一次:完整归档(copy+文件移冷存+delete+archived)
+            // 第一次:完整歸檔(copy+檔案移冷存+delete+archived)
             SeedSignedEvidence(db, storage, "ended", 1000.0, writeImgFile: true);
             var svc = new ArchiveService(db, storage, Cfg(), NullLogger<ArchiveService>.Instance);
             Assert.Equal(1, svc.RunOnce(1000.0 + 40 * Day).Archived);
             Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_events"));
             Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_images"));
 
-            // 模拟崩溃残留:同 id 复播 live 行 + 置 archiving(证据图此刻已在冷存,不重写 live 文件)
+            // 模擬崩潰殘留:同 id 復播 live 行 + 置 archiving(證據圖此刻已在冷存,不重寫 live 檔案)
             SeedSignedEvidence(db, storage, "archiving", 1000.0, writeImgFile: false);
 
-            // 重跑 → 收敛:INSERT OR IGNORE 不重复、MoveToArchive 容忍源已迁、删 live、置 archived
+            // 重跑 → 收斂:INSERT OR IGNORE 不重複、MoveToArchive 容忍源已遷、刪 live、置 archived
             Assert.Equal(1, svc.RunOnce(1000.0 + 40 * Day).Archived);
-            Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_events"));   // **无重复**
-            Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_images"));   // **无重复**
+            Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_events"));   // **無重複**
+            Assert.Equal(1, OpenArchiveScalar(ap, "SELECT COUNT(*) FROM archive_images"));   // **無重複**
             long liveEv = db.Read(conn => { using SqliteCommand c = conn.Cmd("SELECT COUNT(*) FROM events WHERE exam_id='E1'"); return Convert.ToInt64(c.ExecuteScalar()); });
             Assert.Equal(0, liveEv);   // live 清空
             string status = db.Read(conn => { using SqliteCommand c = conn.Cmd("SELECT status FROM exams WHERE exam_id='E1'"); return (string)c.ExecuteScalar()!; });

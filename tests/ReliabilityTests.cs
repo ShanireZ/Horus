@@ -11,7 +11,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// LocalBuffer 纯逻辑单测(入队 / 快照 / 压实 / 图片增删)。
+/// LocalBuffer 純邏輯單測(入隊 / 快照 / 壓實 / 圖片增刪)。
 public class LocalBufferTests
 {
     private static string TempDir()
@@ -33,7 +33,7 @@ public class LocalBufferTests
             Assert.Equal(1, snap[0].seq);           // 升序
             Assert.Equal("{\"a\":2}", snap[1].json);
 
-            // 逐条 ack:删 seq=2,**seq=1 与 seq=3 必须都还在**(证明不是范围压实,不会连坐删掉低 seq)
+            // 逐條 ack:刪 seq=2,**seq=1 與 seq=3 必須都還在**(證明不是範圍壓實,不會連坐刪掉低 seq)
             b.RemoveEvent(2);
             var snap2 = b.SnapshotPendingEvents();
             Assert.Equal(2, snap2.Count);
@@ -53,12 +53,12 @@ public class LocalBufferTests
             for (long seq = 1; seq <= 10; seq++) await b.EnqueueEventAsync(seq, "{\"s\":" + seq + "}");
 
             b.RemoveEvent(3);
-            b.RemoveEvent(7);   // 未到压实阈值,文件未重写,但快照须排除已确认的
+            b.RemoveEvent(7);   // 未到壓實閾值,檔案未重寫,但快照須排除已確認的
             var snap = b.SnapshotPendingEvents();
             Assert.Equal(8, snap.Count);
             Assert.DoesNotContain(snap, x => x.seq == 3 || x.seq == 7);
 
-            b.Compact();        // 强制压实后仍一致
+            b.Compact();        // 強制壓實後仍一致
             var snap2 = b.SnapshotPendingEvents();
             Assert.Equal(8, snap2.Count);
             Assert.DoesNotContain(snap2, x => x.seq == 3 || x.seq == 7);
@@ -75,7 +75,7 @@ public class LocalBufferTests
             var b = new LocalBuffer(dir);
             b.SaveSeqCeiling(500);
             Assert.Equal(500, b.LoadSeqCeiling());
-            // 模拟"重启":新 LocalBuffer 实例读到同一高水位
+            // 模擬"重新啟動":新 LocalBuffer 執行個體讀到同一高水位
             var b2 = new LocalBuffer(dir);
             Assert.Equal(500, b2.LoadSeqCeiling());
         }
@@ -96,10 +96,10 @@ public class LocalBufferTests
             Func<Uri, CancellationToken, Task<WebSocket>> noConnect = (_, __) => throw new InvalidOperationException("test: no connect");
 
             var u1 = new UplinkClient(cfg, new LocalBuffer(dir), http: new HttpClient(), wsConnect: noConnect);
-            long s1 = u1.NextSeq();     // 1(预留一个 block 落盘)
+            long s1 = u1.NextSeq();     // 1(預留一個 block 寫入磁碟)
             long s2 = u1.NextSeq();     // 2
 
-            // 模拟进程重启:同目录新 buffer + 新 uplink,读回持久化的高水位
+            // 模擬處理程序重新啟動:同目錄新 buffer + 新 uplink,讀回持久化的高水位
             var u2 = new UplinkClient(cfg, new LocalBuffer(dir), http: new HttpClient(), wsConnect: noConnect);
             long s3 = u2.NextSeq();
 
@@ -122,7 +122,7 @@ public class LocalBufferTests
             var snap = b.SnapshotPendingImages();
             Assert.Single(snap);
             Assert.Equal(5, snap[0].seq);
-            Assert.Equal("img_abc123", snap[0].imageId);        // 客户端预生成 id 往返保真
+            Assert.Equal("img_abc123", snap[0].imageId);        // 用戶端預生成 id 往返保真
             Assert.Equal("event:browser", snap[0].trigger);
             Assert.Equal(0x9f3c1a22b0e4d7f1UL, snap[0].phash);
             Assert.Equal(webp, snap[0].webp);
@@ -134,7 +134,7 @@ public class LocalBufferTests
     }
 }
 
-/// UplinkClient 重连 / 续传端到端(内存中打真实服务器,经注入的 WS 工厂 + HttpClient)。
+/// UplinkClient 重連 / 續傳端到端(記憶體中打真實伺服器,經注入的 WS 工廠 + HttpClient)。
 public class ReconnectTests
 {
     private const string Exam = "E1", Seat = "A07", Agent = "ag-A07";
@@ -172,7 +172,7 @@ public class ReconnectTests
         Psk = TestApp.Psk,
     };
 
-    /// 注入的 WS 连接工厂:走 TestServer(内存),带合法握手头。
+    /// 注入的 WS 連接工廠:走 TestServer(記憶體),帶合法握手頭。
     private static Func<Uri, CancellationToken, Task<WebSocket>> WsFactory(TestApp app)
         => async (uri, ct) =>
         {
@@ -198,17 +198,17 @@ public class ReconnectTests
             var buffer = new LocalBuffer(dir);
             var uplink = new UplinkClient(Cfg(), buffer, http: app.CreateClient(), wsConnect: WsFactory(app));
 
-            // 离线阶段(未 RunAsync,_ws 为 null):3 条事件只落缓冲
+            // 離線階段(未 RunAsync,_ws 為 null):3 條事件只落緩衝
             for (long seq = 1; seq <= 3; seq++) await uplink.SendEventAsync(Evt(seq), seq, CancellationToken.None);
-            Assert.Equal(0, await EventCountAsync(http));           // 服务器尚未收到
-            Assert.Equal(3, buffer.SnapshotPendingEvents().Count);  // 全在缓冲
+            Assert.Equal(0, await EventCountAsync(http));           // 伺服器尚未收到
+            Assert.Equal(3, buffer.SnapshotPendingEvents().Count);  // 全在緩衝
 
-            // 上线:连接管理循环启动 → 握手 → 续传
+            // 上線:連接管理循環啟動 → 握手 → 續傳
             using var runCts = new CancellationTokenSource();
             Task run = Task.Run(() => uplink.RunAsync(runCts.Token));
 
-            await WaitUntilAsync(async () => await EventCountAsync(http) == 3);   // 服务器无损收全
-            await WaitUntilAsync(() => Task.FromResult(buffer.SnapshotPendingEvents().Count == 0)); // ack 后缓冲压实清空
+            await WaitUntilAsync(async () => await EventCountAsync(http) == 3);   // 伺服器無損收全
+            await WaitUntilAsync(() => Task.FromResult(buffer.SnapshotPendingEvents().Count == 0)); // ack 後緩衝壓實清空
 
             runCts.Cancel();
             await run;
@@ -229,7 +229,7 @@ public class ReconnectTests
         {
             var buffer = new LocalBuffer(dir);
 
-            // WS 工厂:第 1 次连上后立即由测试关闭以模拟断线,第 2 次正常
+            // WS 工廠:第 1 次連上後立即由測試關閉以模擬斷線,第 2 次正常
             int connectCount = 0;
             WebSocket? first = null;
             Func<Uri, CancellationToken, Task<WebSocket>> factory = async (uri, ct) =>
@@ -246,22 +246,22 @@ public class ReconnectTests
             using var runCts = new CancellationTokenSource();
             Task run = Task.Run(() => uplink.RunAsync(runCts.Token));
 
-            // 等首次连上,发 2 条并确认到达
+            // 等首次連上,發 2 條並確認到達
             await WaitUntilAsync(() => Task.FromResult(connectCount >= 1));
             await uplink.SendEventAsync(Evt(1), 1, CancellationToken.None);
             await uplink.SendEventAsync(Evt(2), 2, CancellationToken.None);
             await WaitUntilAsync(async () => await EventCountAsync(http) == 2);
 
-            // 强制断线:中止首个连接 → RunAsync 应退避重连(connectCount≥2)
+            // 強制斷線:中止首個連接 → RunAsync 應退避重連(connectCount≥2)
             first?.Abort();
             await WaitUntilAsync(() => Task.FromResult(connectCount >= 2));
 
-            // 重连后再发 2 条(seq 续)→ 服务器应共 4 条、不重复
+            // 重連後再發 2 條(seq 續)→ 伺服器應共 4 條、不重複
             await uplink.SendEventAsync(Evt(3), 3, CancellationToken.None);
             await uplink.SendEventAsync(Evt(4), 4, CancellationToken.None);
             await WaitUntilAsync(async () => await EventCountAsync(http) == 4);
 
-            // 幂等:即使重连触发了对 1/2 的重传,服务器仍恰好 4 条
+            // 冪等:即使重連觸發了對 1/2 的重傳,伺服器仍恰好 4 條
             Assert.Equal(4, await EventCountAsync(http));
 
             runCts.Cancel();
@@ -282,12 +282,12 @@ public class ReconnectTests
         try
         {
             var buffer = new LocalBuffer(dir);
-            // 可切换失败的 HttpClient(模拟图片通道离线);内层路由到 TestServer
+            // 可切換失敗的 HttpClient(模擬圖片通道離線);內層路由到 TestServer
             var toggle = new ToggleFailHandler(app.Server.CreateHandler());
             var togHttp = new HttpClient(toggle) { BaseAddress = new Uri("http://localhost") };
             var uplink = new UplinkClient(Cfg(), buffer, http: togHttp, wsConnect: WsFactory(app));
 
-            // 离线:图片通道失败 + ws 未连 → 触发型抓图预生成 id 并落缓冲(返回该 id 供事件关联)
+            // 離線:圖片通道失敗 + ws 未連 → 觸發型抓圖預生成 id 並落緩衝(回傳該 id 供事件關聯)
             toggle.Fail = true;
             byte[] webp = System.Text.Encoding.ASCII.GetBytes("RIFF-evidence-offline");
             string? imgId = await uplink.UploadImageAsync(webp, "browser_non_whitelist_url", 0x1122334455667788UL, 1, CancellationToken.None);
@@ -298,15 +298,15 @@ public class ReconnectTests
                 new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = false },
                 80, 2, evidenceImageId: imgId);
             await uplink.SendEventAsync(evt, 2, CancellationToken.None);
-            Assert.Equal(0, await EventCountAsync(http));            // 服务器尚无
+            Assert.Equal(0, await EventCountAsync(http));            // 伺服器尚無
 
-            // 上线:恢复图片通道 + 启动连接管理 → 续传(先补图后发事件)
+            // 上線:恢復圖片通道 + 啟動連接管理 → 續傳(先補圖後發事件)
             toggle.Fail = false;
             using var runCts = new CancellationTokenSource();
             Task run = Task.Run(() => uplink.RunAsync(runCts.Token));
             await WaitUntilAsync(async () => await EventCountAsync(http) == 1);
 
-            // 事件的 evidenceImageId 指向同一 id;该图存在且被标记为证据
+            // 事件的 evidenceImageId 指向同一 id;該圖存在且被標記為證據
             JsonElement events = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/events?seatId={Seat}");
             Assert.Equal(imgId, events[0].GetProperty("evidenceImageId").GetString());
             JsonElement meta = await http.GetFromJsonAsync<JsonElement>($"/api/images/{imgId}/meta");
@@ -337,7 +337,7 @@ public class ReconnectTests
                 WhitelistHosts = new() { "oj.local" }, WhitelistProcs = new(), LargePasteThreshold = 200,
             });
             var uplink = new UplinkClient(Cfg(), buffer, http: app.CreateClient(), wsConnect: WsFactory(app));
-            uplink.OnConfigUpdate = json => live.Apply(json);   // Program 里也是这么接线的
+            uplink.OnConfigUpdate = json => live.Apply(json);   // Program 裡也是這麼串接的
 
             Assert.True(live.IsWhitelistedHost("oj.local"));
             Assert.Equal(200, live.LargePasteThreshold);
@@ -345,7 +345,7 @@ public class ReconnectTests
             using var runCts = new CancellationTokenSource();
             Task run = Task.Run(() => uplink.RunAsync(runCts.Token));
 
-            // 连接就绪后(pushedTo≥1),下发新配置
+            // 連接就緒後(pushedTo≥1),下發新設定
             await WaitUntilAsync(async () =>
             {
                 HttpResponseMessage r = await http.PostAsJsonAsync($"/api/exams/{Exam}/config",
@@ -354,7 +354,7 @@ public class ReconnectTests
                 return j.GetProperty("pushedTo").GetInt32() >= 1;
             });
 
-            // Agent 收到并应用:旧白名单被替换,阈值更新
+            // Agent 收到並應用:舊白名單被替換,閾值更新
             await WaitUntilAsync(() => Task.FromResult(live.IsWhitelistedHost("judge.exam.cn") && live.LargePasteThreshold == 50));
             Assert.False(live.IsWhitelistedHost("oj.local"));
 
@@ -366,7 +366,7 @@ public class ReconnectTests
     }
 }
 
-/// CaptureReason → 契约 trigger 映射(C3 回归)。
+/// CaptureReason → 契約 trigger 映射(C3 迴歸)。
 public class TriggerMapTests
 {
     [Theory]
@@ -381,7 +381,7 @@ public class TriggerMapTests
         => Assert.Equal(expected, Horus.Agent.Transport.TriggerMap.ToContract(reason));
 }
 
-/// Schema 应用健壮性:注释里的分号不能劈裂 DDL(F5 回归)。
+/// Schema 應用穩健性:註解裡的分號不能劈裂 DDL(F5 迴歸)。
 public class SchemaTests
 {
     [Fact]
@@ -402,7 +402,7 @@ public class SchemaTests
     }
 }
 
-/// LiveConfig 热更新纯逻辑单测。
+/// LiveConfig 熱更新純邏輯單測。
 public class LiveConfigTests
 {
     private static AgentConfig Base() => new()
@@ -424,11 +424,11 @@ public class LiveConfigTests
         live.Apply(JsonDocument.Parse(
             "{\"whitelistHosts\":[\"judge.exam.cn\"],\"largePasteThreshold\":50,\"webpQuality\":40}").RootElement);
 
-        Assert.True(live.IsWhitelistedHost("judge.exam.cn"));   // 新白名单生效
-        Assert.False(live.IsWhitelistedHost("oj.local"));       // 旧的被整体替换
+        Assert.True(live.IsWhitelistedHost("judge.exam.cn"));   // 新白名單生效
+        Assert.False(live.IsWhitelistedHost("oj.local"));       // 舊的被整體替換
         Assert.Equal(50, live.LargePasteThreshold);
         Assert.Equal(40, live.WebpQuality);
-        Assert.Equal(1080, live.TargetHeight);                  // 未出现 → 保留缺省
+        Assert.Equal(1080, live.TargetHeight);                  // 未出現 → 保留預設
     }
 
     [Fact]
@@ -438,20 +438,20 @@ public class LiveConfigTests
         live.Apply(JsonDocument.Parse(
             "{\"webpQuality\":999,\"baselineMinSeconds\":90,\"baselineMaxSeconds\":30}").RootElement);
         Assert.Equal(100, live.WebpQuality);                    // clamp 到 1..100
-        Assert.True(live.BaselineMinSeconds <= live.BaselineMaxSeconds);  // min/max 自动纠正
+        Assert.True(live.BaselineMinSeconds <= live.BaselineMaxSeconds);  // min/max 自動糾正
     }
 
     [Fact]
     public void Apply_只下发min_不篡改未下发的max()
     {
         var live = new LiveConfig(Base());   // min=30, max=90
-        live.Apply(JsonDocument.Parse("{\"baselineMinSeconds\":120}").RootElement);  // 只下发 min
-        Assert.Equal(90, live.BaselineMaxSeconds);              // max 未被篡改(旧代码会变成 120)
+        live.Apply(JsonDocument.Parse("{\"baselineMinSeconds\":120}").RootElement);  // 只下發 min
+        Assert.Equal(90, live.BaselineMaxSeconds);              // max 未被篡改(舊程式碼會變成 120)
         Assert.True(live.BaselineMinSeconds <= live.BaselineMaxSeconds);
     }
 }
 
-/// fail-closed:非 loopback 绑定却缺凭证时拒绝启动(S2 回归)。
+/// fail-closed:非 loopback 綁定卻缺憑證時拒絕啟動(S2 迴歸)。
 public class FailClosedTests
 {
     [Fact]
@@ -463,41 +463,41 @@ public class FailClosedTests
             Environment.SetEnvironmentVariable("HORUS_DBPATH", ":memory:");
             Environment.SetEnvironmentVariable("HORUS_DATADIR", dir);
             Environment.SetEnvironmentVariable("HORUS_PSK_B64", TestApp.PskB64);   // 有 PSK
-            Environment.SetEnvironmentVariable("HORUS_ADMIN_TOKEN", null);         // 但缺管理令牌
+            Environment.SetEnvironmentVariable("HORUS_ADMIN_TOKEN", null);         // 但缺管理權杖
             Environment.SetEnvironmentVariable("HORUS_URLS", "http://0.0.0.0:5199"); // 非 loopback
-            // ★隔离进程全局 env 泄漏:AdminOidcTests 等会置 HORUS_ADMIN_AUTH_MODE=oidc + dashboard client,
-            //   若不复位,DashboardOidcEnabled=true → AdminAuthEnabled=true → fail-closed 不触发(此测试曾偶发不抛)。
+            // ★隔離處理程序全域 env 洩漏:AdminOidcTests 等會置 HORUS_ADMIN_AUTH_MODE=oidc + dashboard client,
+            //   若不復位,DashboardOidcEnabled=true → AdminAuthEnabled=true → fail-closed 不觸發(此測試曾偶發不拋)。
             foreach (string k in new[] { "HORUS_ADMIN_AUTH_MODE", "HORUS_OIDC_DASHBOARD_CLIENT_ID",
                 "HORUS_OIDC_DASHBOARD_SECRET", "HORUS_OIDC_DASHBOARD_REDIRECT",
                 "HORUS_AUTH_MODE", "HORUS_OIDC_ISSUER", "HORUS_OIDC_CLIENT_ID", "HORUS_OIDC_JWKS" })
                 Environment.SetEnvironmentVariable(k, null);
 
             using var f = new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program>();
-            Assert.ThrowsAny<Exception>(() => f.CreateClient());   // fail-closed:构建即抛
+            Assert.ThrowsAny<Exception>(() => f.CreateClient());   // fail-closed:建置即拋
         }
         finally
         {
-            Environment.SetEnvironmentVariable("HORUS_URLS", "http://127.0.0.1:0");   // 复位,勿污染后续
+            Environment.SetEnvironmentVariable("HORUS_URLS", "http://127.0.0.1:0");   // 復位,勿汙染後續
             Directory.Delete(dir, true);
         }
     }
 }
 
-/// 常量时间比较(FixedTimeEquals)——含长度不泄漏(S1 回归)。
+/// 常數時間比較(FixedTimeEquals)——含長度不洩漏(S1 迴歸)。
 public class CryptoCompareTests
 {
     [Theory]
     [InlineData("abc", "abc", true)]
     [InlineData("abc", "abd", false)]
-    [InlineData("abc", "abcd", false)]   // 不同长度也返回 false
+    [InlineData("abc", "abcd", false)]   // 不同長度也回傳 false
     [InlineData("", "", true)]
     [InlineData("", "x", false)]
     public void FixedTimeEquals(string a, string b, bool expected)
         => Assert.Equal(expected, Horus.Contracts.Crypto.FixedTimeEquals(a, b));
 }
 
-/// DB 读写分离(文件库):写连接落库,独立只读连接读回;只读连接物理拒写;并发读写不死锁。
-/// 既有测试全走 :memory:(回退单连接路径),此类专测**文件库的双连接路径**。
+/// DB 讀寫分離(檔案庫):寫連接寫入資料庫,獨立唯讀連接讀回;唯讀連接物理拒寫;並行讀寫不死鎖。
+/// 既有測試全走 :memory:(退回單連接路徑),此類專測**檔案庫的雙連接路徑**。
 public class DbReadWriteTests
 {
     private static string TempDbDir()
@@ -522,7 +522,7 @@ public class DbReadWriteTests
                 c.CommandText = "SELECT COUNT(*) FROM exams WHERE exam_id='E1'";
                 return Convert.ToInt64(c.ExecuteScalar());
             });
-            Assert.Equal(1, n);   // 独立只读连接看到写连接刚提交的数据
+            Assert.Equal(1, n);   // 獨立唯讀連接看到寫連接剛提交的資料
         }
         finally { Directory.Delete(dir, true); }
     }
@@ -538,7 +538,7 @@ public class DbReadWriteTests
             {
                 using var c = conn.CreateCommand();
                 c.CommandText = "INSERT INTO exams (exam_id,name,status,created_at) VALUES ('X','x','active',1)";
-                return c.ExecuteNonQuery();   // Mode=ReadOnly → 抛,杜绝经读连接误写
+                return c.ExecuteNonQuery();   // Mode=ReadOnly → 拋,杜絕經讀連接誤寫
             }));
         }
         finally { Directory.Delete(dir, true); }
@@ -576,7 +576,7 @@ public class DbReadWriteTests
                 }
             });
 
-            // 写进行中并发读:WAL 下读不阻塞写、不死锁、不抛
+            // 寫進行中並行讀:WAL 下讀不阻塞寫、不死鎖、不拋
             for (int r = 0; r < N; r++)
                 db.Read(conn =>
                 {
@@ -598,7 +598,7 @@ public class DbReadWriteTests
     }
 }
 
-/// 视觉 adapter JSON 解析:容忍 ```json 围栏 / 前后噪声,健壮取字段。
+/// 視覺 adapter JSON 解析:容忍 ```json 圍欄 / 前後噪聲,健壯取欄位。
 public class VisionParseTests
 {
     [Fact]
@@ -633,27 +633,27 @@ public class VisionParseTests
         => Assert.Null(Horus.Server.Analysis.Vision.OpenAiCompatibleVisionAnalyzer.Parse("模型拒答,无结构化输出"));
 }
 
-/// 视觉端点 API key DPAPI 加密存储:配置文件不存明文,读取时解密。DPAPI 仅 Windows。
+/// 視覺端點 API key DPAPI 加密儲存:設定檔案不存明文,讀取時解密。DPAPI 僅 Windows。
 public class SecretProtectTests
 {
     [Fact]
     public void DPAPI往返_密文非明文_解得回原文()
     {
-        if (!OperatingSystem.IsWindows()) return;   // DPAPI 仅 Windows(部署=Windows 笔记本)
+        if (!OperatingSystem.IsWindows()) return;   // DPAPI 僅 Windows(部署=Windows 筆記本)
         const string key = "sk-mimo-secret-key-1234567890";
         string enc = Horus.Server.Config.SecretProtect.Protect(key);
         Assert.NotEqual(key, enc);
-        Assert.DoesNotContain(key, enc);            // 配置里存的不是明文
-        Assert.Equal(key, Horus.Server.Config.SecretProtect.Unprotect(enc));   // 读取时解得回原文
+        Assert.DoesNotContain(key, enc);            // 設定裡存的不是明文
+        Assert.Equal(key, Horus.Server.Config.SecretProtect.Unprotect(enc));   // 讀取時解得回原文
     }
 
     [Fact]
     public void Resolve优先级_明文env先于密文_密文次之()
     {
-        // 明文字段(env 已覆盖进 VisionApiKey)优先
+        // 明文欄位(env 已覆蓋進 VisionApiKey)優先
         Assert.Equal("plain-key",
             Horus.Server.Config.SecretProtect.Resolve(new Horus.Server.Config.ServerConfig { VisionApiKey = "plain-key", VisionApiKeyEnc = "ignored" }));
-        // 都无 → 空串(不抛)
+        // 都無 → 空串(不拋)
         Assert.Equal("", Horus.Server.Config.SecretProtect.Resolve(new Horus.Server.Config.ServerConfig()));
     }
 
@@ -671,17 +671,17 @@ public class SecretProtectTests
             Assert.NotNull(enc);
             string after = File.ReadAllText(path);
             Assert.DoesNotContain("sk-mimo-plain-999", after);      // 明文已清
-            Assert.Contains(enc!, after);                            // 密文已写
-            Assert.Contains("// 视觉 key 注释", after);              // 注释保留(行内替换,非整文件重写)
-            Assert.Contains("\"riskThreshold\": 50", after);        // 其它字段原样
+            Assert.Contains(enc!, after);                            // 密文已寫
+            Assert.Contains("// 视觉 key 注释", after);              // 註解保留(行內替換,非整檔案重寫)
+            Assert.Contains("\"riskThreshold\": 50", after);        // 其它欄位原樣
             Assert.Equal("sk-mimo-plain-999", Horus.Server.Config.SecretProtect.Unprotect(enc!));
         }
         finally { Directory.Delete(dir, true); }
     }
 }
 
-/// §5 送云前派生处理:降采样(压 token)+ 剥离元数据 + 直通/回退。用真 WebP(ImageSharp 现造)验证。
-/// (owner 决策 2026-07-02:已去除打码/裁剪,只保留降采样。)
+/// §5 送雲前派生處理:降取樣(壓 token)+ 剝離中繼資料 + 直通/退回。用真 WebP(ImageSharp 現造)驗證。
+/// (owner 決策 2026-07-02:已去除打碼/裁剪,只保留降取樣。)
 public class VisionImagePrepTests
 {
     [Fact]
@@ -693,13 +693,13 @@ public class VisionImagePrepTests
         src.SaveAsWebp(ms0);
         byte[] webp = ms0.ToArray();
 
-        var cfg = new Horus.Server.Config.ServerConfig { VisionMaxEdge = 200 };   // 长边 800 → 降到 200
+        var cfg = new Horus.Server.Config.ServerConfig { VisionMaxEdge = 200 };   // 長邊 800 → 降到 200
         byte[]? outb = Horus.Server.Analysis.Vision.VisionImagePrep.Prepare(webp, cfg);
         Assert.NotNull(outb);
 
         using var img = Image.Load<Rgba32>(outb!);
-        Assert.True(Math.Max(img.Width, img.Height) <= 200);           // 已降采样
-        Rgba32 white = img[img.Width / 2, img.Height / 2];             // 内容保留(全白)
+        Assert.True(Math.Max(img.Width, img.Height) <= 200);           // 已降取樣
+        Rgba32 white = img[img.Width / 2, img.Height / 2];             // 內容保留(全白)
         Assert.True(white.R > 200 && white.G > 200 && white.B > 200, $"应为白, got {white}");
     }
 
@@ -715,9 +715,9 @@ public class VisionImagePrepTests
             webp, new Horus.Server.Config.ServerConfig { VisionMaxEdge = 1600 });
         Assert.NotNull(outb);
         using var img = Image.Load<Rgba32>(outb!);
-        Assert.Equal(100, img.Width);     // 未超上限:不缩放
+        Assert.Equal(100, img.Width);     // 未超上限:不縮放
         Assert.Equal(80, img.Height);
-        Assert.Null(img.Metadata.ExifProfile);   // 元数据已剥离
+        Assert.Null(img.Metadata.ExifProfile);   // 中繼資料已剝離
     }
 
     [Fact]
@@ -726,7 +726,7 @@ public class VisionImagePrepTests
         byte[] fake = System.Text.Encoding.ASCII.GetBytes("not-an-image-AICHAT-marker");
         byte[]? outb = Horus.Server.Analysis.Vision.VisionImagePrep.Prepare(
             fake, new Horus.Server.Config.ServerConfig { VisionMaxEdge = 0 });
-        Assert.Same(fake, outb);   // 直通(未解码,mock 标记保留)
+        Assert.Same(fake, outb);   // 直通(未解碼,mock 標記保留)
     }
 
     [Fact]
@@ -735,11 +735,11 @@ public class VisionImagePrepTests
         byte[] fake = System.Text.Encoding.ASCII.GetBytes("not-an-image");
         byte[]? outb = Horus.Server.Analysis.Vision.VisionImagePrep.Prepare(
             fake, new Horus.Server.Config.ServerConfig { VisionMaxEdge = 1600 });
-        Assert.Same(fake, outb);   // 无打码矩形需守护 → 解不开就直通原字节
+        Assert.Same(fake, outb);   // 無打碼矩形需守護 → 解不開就直通原位元組
     }
 }
 
-/// 视觉返回 JSON 的健壮解析:confidence/suspicious 容忍供应商多种表述,**绝不误归零致漏报**(#2)。
+/// 視覺回傳 JSON 的健壯解析:confidence/suspicious 容忍供應商多種表述,**絕不誤歸零致漏報**(#2)。
 public class VisionVerdictParseTests
 {
     private static Horus.Server.Analysis.Vision.VisionVerdict P(string json)
@@ -754,7 +754,7 @@ public class VisionVerdictParseTests
         => Assert.Equal(95, P("{\"suspicious\":true,\"category\":\"web_ai\",\"confidence\":95}").Confidence);
 
     [Fact]
-    public void confidence_小数被截前归零_现正确取整()   // 回归:TryGetInt32 对 95.0 返回 false → 曾归零漏报
+    public void confidence_小数被截前归零_现正确取整()   // 迴歸:TryGetInt32 對 95.0 回傳 false → 曾歸零漏報
         => Assert.Equal(95, P("{\"suspicious\":true,\"confidence\":95.0}").Confidence);
 
     [Fact]
@@ -766,7 +766,7 @@ public class VisionVerdictParseTests
         => Assert.Equal(90, P("{\"suspicious\":true,\"confidence\":0.9}").Confidence);
 
     [Fact]
-    public void suspicious_字符串true_被识别为真()   // 回归:曾只认 JsonValueKind.True
+    public void suspicious_字符串true_被识别为真()   // 迴歸:曾只認 JsonValueKind.True
         => Assert.True(P("{\"suspicious\":\"true\",\"confidence\":80}").Suspicious);
 
     [Fact]
@@ -782,7 +782,7 @@ public class VisionVerdictParseTests
     }
 }
 
-/// 可切换失败的 HTTP 处理器:Fail=true 时抛异常(模拟图片通道离线),否则转发到内层(TestServer)。
+/// 可切換失敗的 HTTP 處理器:Fail=true 時拋異常(模擬圖片通道離線),否則轉發到內層(TestServer)。
 public sealed class ToggleFailHandler : DelegatingHandler
 {
     public volatile bool Fail;
@@ -791,7 +791,7 @@ public sealed class ToggleFailHandler : DelegatingHandler
         => Fail ? throw new HttpRequestException("simulated offline") : base.SendAsync(request, ct);
 }
 
-/// #10:下发的每考试配置持久化到 exam_config,服务器重启后回填内存缓存(白名单不丢 → server_risk 复判不退化)。
+/// #10:下發的每考試設定持久化到 exam_config,伺服器重新啟動後回填記憶體快取(白名單不丟 → server_risk 復判不退化)。
 public class ConfigPersistenceTests
 {
     private static string TempDbDir()
@@ -808,22 +808,22 @@ public class ConfigPersistenceTests
             using (var db = new Horus.Server.Data.Db(dbPath))
             {
                 var hub = new Horus.Server.Ingest.AgentHub(db);
-                Assert.Null(hub.GetConfig("E1"));                       // 初始无
-                await hub.PushConfigAsync("E1", cfgJson, default);       // 下发 → 落库
+                Assert.Null(hub.GetConfig("E1"));                       // 初始無
+                await hub.PushConfigAsync("E1", cfgJson, default);       // 下發 → 寫入資料庫
                 Assert.Equal(cfgJson, hub.GetConfig("E1"));
             }
-            // 模拟服务器重启:同一 DB 文件 + 全新 AgentHub
+            // 模擬伺服器重新啟動:同一 DB 檔案 + 全新 AgentHub
             using (var db2 = new Horus.Server.Data.Db(dbPath))
             {
                 var hub2 = new Horus.Server.Ingest.AgentHub(db2);
-                Assert.Equal(cfgJson, hub2.GetConfig("E1"));            // 重启后回填,白名单不丢
+                Assert.Equal(cfgJson, hub2.GetConfig("E1"));            // 重新啟動後回填,白名單不丟
             }
         }
         finally { Directory.Delete(dir, true); }
     }
 }
 
-/// Schema 形状:vec_images 虚表已从 schema 移除(不依赖 sqlite-vec 原生扩展)、核心表齐全、心跳 PK 含 seat 维。
+/// Schema 形狀:vec_images 虛表已從 schema 移除(不相依 sqlite-vec 原生擴充)、核心表齊全、心跳 PK 含 seat 維。
 public class SchemaShapeTests
 {
     [Fact]
@@ -839,7 +839,7 @@ public class SchemaShapeTests
             while (r.Read()) set.Add(r.GetString(0));
             return set;
         });
-        Assert.DoesNotContain("vec_images", tables);   // vec_images 虚表已从 schema.sql 移除,不依赖 sqlite-vec
+        Assert.DoesNotContain("vec_images", tables);   // vec_images 虛表已從 schema.sql 移除,不相依 sqlite-vec
         foreach (string t in new[] { "exams", "seats", "events", "images", "ocr_results", "logo_hits",
             "keystroke_samples", "suspicious_queue", "agent_heartbeats", "exam_config" })
             Assert.Contains(t, tables);
@@ -864,6 +864,6 @@ public class SchemaShapeTests
             c.CommandText = "SELECT COUNT(*) FROM agent_heartbeats";
             return Convert.ToInt64(c.ExecuteScalar());
         });
-        Assert.Equal(2, n);   // 旧 PK(agent_id,ts) 会 UPSERT 覆盖成 1 行;新 PK 含 seat → 两行并存,在线判定不错位
+        Assert.Equal(2, n);   // 舊 PK(agent_id,ts) 會 UPSERT 覆蓋成 1 行;新 PK 含 seat → 兩行並存,線上判定不錯位
     }
 }

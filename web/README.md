@@ -1,25 +1,25 @@
-# web/ —— Horus 主页（`hr.betaoi.cc`）
+# web/ —— Horus 主頁（`hr.betaoi.cc`）
 
-两屏静态页：首屏定位，第二屏下载 + 页脚。**没有构建链** —— Caddy 直接 `file_server` 这几个文件。
+兩屏靜態頁：首屏定位，第二屏下載 + 頁腳。**沒有建置鏈** —— Caddy 直接 `file_server` 這幾個檔案。
 
-| 文件 | 说明 |
+| 檔案 | 說明 |
 | --- | --- |
-| `index.html` | 两屏结构与全部文案 |
-| `styles.css` | 全部样式（含窄屏取舍，见文件里那段注释） |
-| `main.js` | 两件事：下载链接、Cloudflare Web Analytics 的 hostname 门控 |
-| `assets/` | ★ **装配出来的，不入库**（见下） |
+| `index.html` | 兩屏結構與全部文案 |
+| `styles.css` | 全部樣式（含窄螢幕取捨，見檔案裡那段註解） |
+| `main.js` | 兩件事：下載連結、Cloudflare Web Analytics 的 hostname 門控 |
+| `assets/` | ★ **裝配出來的，不入庫**（見下） |
 
-P147/P149 当前仅 cc 主域，cn 休眠；共享主配置仍归 betai，本站不挂彩排门。现有下载指向历史 Windows 构建，本轮未发布新包；迁移上线前须核新产物/摘要与实际下载，见 architecture §0 D10。
+P147/P149 當前僅 cc 主域，cn 休眠；共享主設定仍歸 betai，本站不掛演練門。現有下載指向歷史 Windows 建置，本輪未發佈新包；遷移上線前須核新產物/摘要與實際下載，見 architecture §0 D10。
 
-站点块在 [`../deploy/hr.caddy`](../deploy/hr.caddy)。
+站台塊在 [`../deploy/hr.caddy`](../deploy/hr.caddy)。
 
-## ★★★ `assets/` 是装配出来的，不入库
+## ★★★ `assets/` 是裝配出來的，不入庫
 
-权威在 `../assets/brand/`，而**那份本身已经是 `BetaPass/std/brand/horus/` 的逐字节镜像**
-（见其 `PROVENANCE.md`）。再入库一份就是**第三份抄件** —— 上游换一次 logo，
-三处一起过期而彼此自洽，★ **本仓内任何判据都看不见那个分歧**。
+權威在 `../assets/brand/`，而**那份本身已經是 `BetaPass/std/brand/horus/` 的逐位元組鏡像**
+（見其 `PROVENANCE.md`）。再入庫一份就是**第三份抄件** —— 上游換一次 logo，
+三處一起過期而彼此自洽，★ **本儲存庫內任何判據都看不見那個分歧**。
 
-装配（本地预览与部署前都要先跑）：
+裝配（本機預覽與部署前都要先跑）：
 
 ```sh
 mkdir -p web/assets
@@ -28,16 +28,16 @@ cp assets/brand/fonts/Cinzel.ttf web/assets/
 cp assets/brand/fonts/OFL-1.1.txt web/assets/Cinzel-OFL-1.1.txt
 ```
 
-★ `Cinzel-OFL-1.1.txt` 必须跟着字体一起走：Cinzel 按 SIL OFL 1.1 使用，
-**分发字体文件时授权文本要在旁边**。
+★ `Cinzel-OFL-1.1.txt` 必須跟著字體一起走：Cinzel 按 SIL OFL 1.1 使用，
+**散布字體檔案時授權文字要在旁邊**。
 
-## 本地预览
+## 本機預覽
 
 ```sh
 python -m http.server 8150 --directory web
 ```
 
-⚠ 直接双击 `index.html`（`file://`）看不出真样子：相对路径的 CSS 与资产不会按预期加载。
+⚠ 直接雙擊 `index.html`（`file://`）看不出真樣子：相對路徑的 CSS 與資產不會按預期載入。
 
 ## 部署
 
@@ -45,23 +45,23 @@ python -m http.server 8150 --directory web
 rsync -a --delete web/ root@47.104.190.255:/opt/horus-web/
 ```
 
-反代与验收命令见 [`../deploy/hr.caddy`](../deploy/hr.caddy) 的文件头。
+反代與驗收命令見 [`../deploy/hr.caddy`](../deploy/hr.caddy) 的檔案頭。
 
-## ★ 改文案之前先读这一条
+## ★ 改文案之前先讀這一條
 
-首屏那三条与合规那一段**不是营销话术，是这个项目对自己的定义**：
+首屏那三條與合規那一段**不是營銷話術，是這個專案對自己的定義**：
 
-- **纯检测 + 取证** —— `AGENTS.md` 设计铁律第 1 条「预防层为零」。
-  ⛔ **任何时候都不得把它写成「防止 / 拦截 / 阻断作弊」。**
-  预防层为零是定义，不是还没做的功能。
-- **系统只初筛、人工裁决** —— 机器不下结论。
-- **原图永不出网** —— 送云前降采样并剥离元数据（README「设计哲学」原话）。
-- **仅用于获得授权的考试监考** —— README「合规与正当使用」原话，
-  ★ 它把「未授权监控」明确划出去，**不是可以为排版让路的装饰**。
+- **純檢測 + 取證** —— `AGENTS.md` 設計鐵律第 1 條「預防層為零」。
+  ⛔ **任何時候都不得把它寫成「防止 / 攔截 / 阻斷作弊」。**
+  預防層為零是定義，不是還沒做的功能。
+- **系統只初篩、人工裁決** —— 機器不下結論。
+- **原圖永不出網** —— 送雲前降取樣並剝離中繼資料（README「設計哲學」原話）。
+- **僅用於獲得授權的考試監考** —— README「合規與正當使用」原話，
+  ★ 它把「未授權監控」明確劃出去，**不是可以為排版讓路的裝飾**。
 
-## ⏳ 待办
+## ⏳ 待辦
 
 | # | 事 | 卡在哪 |
 | --- | --- | --- |
-| 1 | 下载按钮指向真实产物 | owner 2026-08-27 定：放 **Cloudflare R2**。落地只改 `main.js` 顶部 `DOWNLOADS` 一处；在那之前 `url` 保持 `null`，页面显式把按钮置灰并写「即将开放」 |
-| 2 | Cloudflare Web Analytics 回传 | ⏳ **owner 控制台**：2026-08-27 历史 cn 实测 beacon 加载得到但回传被 CORS 拦（`cdn-cgi/rum` 无 `Access-Control-Allow-Origin`），最可能是 `hr.betaoi.cn` 还没登记进那个 Web Analytics 站点。★ 代码有意不关掉 —— 登记做上那一刻它自己就好，**而在那之前控制台那两条报错就是这件事唯一活着的提示** |
+| 1 | 下載按鈕指向真實產物 | owner 2026-08-27 定：放 **Cloudflare R2**。完成實作只改 `main.js` 頂部 `DOWNLOADS` 一處；在那之前 `url` 保持 `null`，頁面顯式把按鈕置灰並寫「即將開放」 |
+| 2 | Cloudflare Web Analytics 回傳 | ⏳ **owner 控制檯**：2026-08-27 歷史 cn 實測 beacon 載入得到但回傳被 CORS 攔（`cdn-cgi/rum` 無 `Access-Control-Allow-Origin`），最可能是 `hr.betaoi.cn` 還沒登記進那個 Web Analytics 站台。★ 程式碼有意不關掉 —— 登記做上那一刻它自己就好，**而在那之前控制檯那兩條回報錯誤就是這件事唯一活著的提示** |

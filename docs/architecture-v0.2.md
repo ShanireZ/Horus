@@ -1,49 +1,49 @@
 ---
 type: architecture
-title: 监考系统架构设计文档（v0.2 · 完整版）
+title: 監考系統架構設計文件（v0.2 · 完整版）
 ---
 
-# 监考系统架构设计文档（v0.2 · 完整版）
+# 監考系統架構設計文件（v0.2 · 完整版）
 
-- 项目：**Horus** — 本地局域网考试监考系统
+- 專案：**Horus** — 本機區域網路考試監考系統
 - 版本：v0.2（取代 v0.1）
-- 日期：2026-06-28（实现进度更新至 2026-07-03）
-- 状态：**M1–M5 + 考试派发均已实现·225 测试全绿**（Windows 专属采集端硬化待 owner 真机验收，见 §15）
-- 关联：[api-contract-m1.md](api-contract-m1.md) · [../schema/schema.sql](../schema/schema.sql) · [../schema/schema-archive.sql](../schema/schema-archive.sql) · [../agent/](../agent/)
+- 日期：2026-06-28（實作進度更新至 2026-07-03）
+- 狀態：**M1–M5 + 考試派發均已實作·225 測試全綠**（Windows 專屬採集端硬化待 owner 真機驗收，見 §15）
+- 關聯：[api-contract-m1.md](api-contract-m1.md) · [../schema/schema.sql](../schema/schema.sql) · [../schema/schema-archive.sql](../schema/schema-archive.sql) · [../agent/](../agent/)
 
-> 场景：本地局域网内的编程 / OJ 考试。学员**本地 IDE 写 C++ + 网页判题**提交；服务器为局域网内 1+ 台笔记本；考试时长 2h。
-> 哲学：**纯检测 + 取证**（预防层已确认不纳入）；**元数据优先、图像为辅**；**系统只初筛、人工裁决**。
+> 場景：本機區域網路內的編程 / OJ 考試。學員**本機 IDE 寫 C++ + 網頁判題**提交；伺服器為區域網路內 1+ 檯筆記本；考試時長 2h。
+> 哲學：**純檢測 + 取證**（預防層已確認不納入）；**中繼資料優先、圖像為輔**；**系統只初篩、人工裁決**。
 
-## 0. 已锁定决策
+## 0. 已鎖定決策
 
-| 编号 | 决策 | 选定 |
+| 編號 | 決策 | 選定 |
 |---|---|---|
-| D1 | 答题环境 | 网页判题 + 本地 IDE |
-| D2 | 网络白名单预防层 | **不纳入**（控不了考场网络） |
-| D2′ | 主机级防火墙预防 | **不纳入**（纯检测取证） |
-| D3 | Agent 技术栈 | C#/.NET 单文件 exe |
-| D3′ | 服务器技术栈 | **C#/.NET 8 · ASP.NET Core**（minimal API + WebSocket）+ Microsoft.Data.Sqlite。与 Agent 同栈,经 `Horus.Contracts` 共享契约 / HMAC canonical,哈希签名两端逐字节一致 |
-| D4 | 图像分析位置 | 服务器集中 + **视觉 LLM(识图)** —— 取代专用云 OCR + L3 Logo,合并单一视觉级(2026-07-01 owner 拍板,详见 §4)。provider-agnostic;**已选定并真机验证 = 小米 MiMo-V2.5 托管 API**(`token-plan-cn.xiaomimimo.com/v1`·`model=mimo-v2.5`·OpenAI 兼容·**境内云**·PIPL 无跨境);key DPAPI 加密存储不存明文 |
-| D8 | 截图参数 | **1080p · WebP q75 · 随机 30–90s** |
-| D9 | 存储后端 | SQLite + 文件系统（图像向量存普通 image_embeddings 表 + C# 暴力余弦检索） |
-| — | 留存 | **30 天**，到期关键数据转 archive，其余清理 |
-| D10 | P147/P149 主域迁移 | owner 已批准本地顺序实施与最终独立评审：BetaPass issuer 为 pass.betaoi.cc，公开主页/下载入口 hr.betaoi.cc；cn 休眠，LAN 与原生动态 loopback 接线保持 |
+| D1 | 答題環境 | 網頁判題 + 本機 IDE |
+| D2 | 網路白名單預防層 | **不納入**（控不了考場網路） |
+| D2′ | 主機級防火牆預防 | **不納入**（純檢測取證） |
+| D3 | Agent 技術棧 | C#/.NET 單檔案 exe |
+| D3′ | 伺服器技術棧 | **C#/.NET 8 · ASP.NET Core**（minimal API + WebSocket）+ Microsoft.Data.Sqlite。與 Agent 同棧,經 `Horus.Contracts` 共享契約 / HMAC canonical,雜湊簽名兩端逐位元組一致 |
+| D4 | 圖像分析位置 | 伺服器集中 + **視覺 LLM(識圖)** —— 取代專用雲 OCR + L3 Logo,合併單一視覺級(2026-07-01 owner 拍板,詳見 §4)。provider-agnostic;**已選定並真機驗證 = 小米 MiMo-V2.5 託管 API**(`token-plan-cn.xiaomimimo.com/v1`·`model=mimo-v2.5`·OpenAI 相容·**境內雲**·PIPL 無跨境);key DPAPI 加密儲存不存明文 |
+| D8 | 截圖參數 | **1080p · WebP q75 · 隨機 30–90s** |
+| D9 | 儲存後端 | SQLite + 檔案系統（圖像向量存普通 image_embeddings 表 + C# 暴力餘弦檢索） |
+| — | 留存 | **30 天**，到期關鍵資料轉 archive，其餘清理 |
+| D10 | P147/P149 主域遷移 | owner 已批准本機順序實施與最終獨立評審：BetaPass issuer 為 pass.betaoi.cc，公開主頁/下載入口 hr.betaoi.cc；cn 休眠，LAN 與原生動態 loopback 串接保持 |
 
 ### 0.1 Web Platform Baseline 合同
 
-- 监考看板运行时为 `controlled-web`，Newly 是开发能力上限；LAN 工作站合同为 Chrome / Edge 当前及前一主版本，不覆盖公网 downstream。
-- 该移动窗口在 2026-08-24 的批准快照为 Chrome / Edge 150–151；实际复核机版本与 .NET SDK 一并记录在根 `baseline.config.json`，版本窗口升级不得静默漂移。
-- 看板是 ASP.NET Core 直接提供的原生 HTML/CSS/JavaScript，没有转译或打包阶段，因此构建目标标记为 `not-applicable`，不以一份虚假的 Browserslist 配置冒充兼容性保证。
-- 引入 Newly 能力时必须在 `baseline.config.json` 登记检测与回退的源码标记，且注释中的标记不算活动实现；关键登录、座位刷新、复核、证据灯箱和考试控制不得静默降级。
-- `WebBaselineContractTests` 检查策略、原生资源和已监视现代 API；开考前仍须在实际工作站完成浏览器预检。
+- 監考看板執行環境為 `controlled-web`，Newly 是開發能力上限；LAN 工作站合同為 Chrome / Edge 當前及前一主版本，不覆蓋公用網路 downstream。
+- 該移動視窗在 2026-08-24 的批准快照為 Chrome / Edge 150–151；實際複核機版本與 .NET SDK 一併記錄在根 `baseline.config.json`，版本視窗升級不得靜默漂移。
+- 看板是 ASP.NET Core 直接提供的原生 HTML/CSS/JavaScript，沒有轉譯或打包階段，因此建置目標標記為 `not-applicable`，不以一份虛假的 Browserslist 設定冒充相容性保證。
+- 引入 Newly 能力時必須在 `baseline.config.json` 登記檢測與退回的原始碼標記，且註解中的標記不算活動實作；關鍵登入、座位刷新、複核、證據燈箱和考試控制不得靜默降級。
+- `WebBaselineContractTests` 檢查策略、原生資源和已監視現代 API；開考前仍須在實際工作站完成瀏覽器預檢。
 
-### 0.2 P147/P149 域名迁移边界（2026-10-07）
+### 0.2 P147/P149 網域遷移邊界（2026-10-07）
 
-owner 原话“所有betapass相关项目，以betaoi.cc作为主域，betaoi.cn作为备用（且暂时不启动该域相关设置，以后备案通过后再启用）”，并选择“本会话顺序实施，最终独立评审”。本轮只改内置 issuer、当前说明及本仓拥有的公开静态站点片段；Server 仍显式配置 issuer，Agent 样例继承内置值。动态 loopback、现场 LAN/看板 HTTPS 回跳、两客户端、PS256、openid profile、userinfo 身份来源、用途受众与 P101 不主动入站拓扑保持。公共下载页不添加彩排门，共享 Caddy 主配置归 betai；Round1 和公共资产域保持。
+owner 原話“所有betapass相關專案，以betaoi.cc作為主域，betaoi.cn作為備用（且暫時不啟動該域相關設置，以後備案通過後再啟用）”，並選擇“本工作階段順序實施，最終獨立評審”。本輪只改內置 issuer、當前說明及本儲存庫擁有的公開靜態站台片段；Server 仍顯式設定 issuer，Agent 樣例繼承內置值。動態 loopback、現場 LAN/看板 HTTPS 回跳、兩用戶端、PS256、openid profile、userinfo 身分來源、用途受眾與 P101 不主動入站拓撲保持。公共下載頁不添加演練門，共享 Caddy 主設定歸 betai；Round1 和公共資產域保持。
 
-本地测试及合成验收不证明现场登录或已发布。具体生产协调切换、新 Windows 产物和公开下载发布另按固定候选审阅；不改设备私有配置，不发送邮件，不开启 cn。issuer 切换后重新登录；恢复使用已验 cc 组合，数据只前滚，不回装旧 cn 整套。公开下载链接目前对应历史构建，迁移发布前须固定新版与摘要并验实际下载，不能只换网页域名。进度在 status，本节只登记决策。
+本機測試及合成驗收不證明現場登入或已發佈。具體生產協調切換、新 Windows 產物和公開下載發佈另按固定候選審閱；不改設備私有設定，不傳送電子郵件，不開啟 cn。issuer 切換後重新登入；恢復使用已驗 cc 組合，資料只前滾，不回裝舊 cn 整套。公開下載連結目前對應歷史建置，遷移發佈前須固定新版與摘要並驗實際下載，不能只換網頁網域。進度在 status，本節只登記決策。
 
-## 1. 总体架构
+## 1. 總體架構
 
 ```
  ┌──────────── 考试机 Agent（C#/.NET，每台一个）─────────────┐
@@ -70,201 +70,201 @@ owner 原话“所有betapass相关项目，以betaoi.cc作为主域，betaoi.cn
  └────────────────────────────────────────────────────────────┘
 ```
 
-**注意**：除 L2 视觉 LLM 识图（走云端点时）外，所有数据（元数据、截图原图、向量、看板）**全程不出局域网**。
+**注意**：除 L2 視覺 LLM 識圖（走雲端點時）外，所有資料（中繼資料、截圖原圖、向量、看板）**全程不出區域網路**。
 
-## 2. 采集端 Agent（C#/.NET）
+## 2. 採集端 Agent（C#/.NET）
 
-### 2.1 元数据信号（L1，零图像，几十~几百字节/条）
+### 2.1 中繼資料信號（L1，零圖像，幾十~幾百位元組/條）
 
-| 信号 | 来源 | 抓什么 |
+| 信號 | 來源 | 抓什麼 |
 |---|---|---|
-| 前台窗口标题 + 进程名 | UIAutomation / `GetForegroundWindow` | 当前在用什么 |
-| **多浏览器地址栏 URL** | UIAutomation 无障碍接口（Chrome/Edge/Firefox） | **访问哪个站——本系统对抗网页 AI 的第一防线** |
-| 进程启动/退出 | ETW / WMI | 起没起非白名单程序、远程协助工具 |
-| 剪贴板事件 + 内容长度 | 剪贴板监听 | 大段粘贴 |
-| Alt-Tab / 切窗频率 | 钩子 | 频繁切出 IDE |
-| USB 插入 | 设备通知（WMI） | 外接设备 |
-| 心跳 | 定时 | Agent 存活 / 防卸载 |
+| 前台視窗標題 + 處理程序名 | UIAutomation / `GetForegroundWindow` | 當前在用什麼 |
+| **多瀏覽器位址欄 URL** | UIAutomation 無障礙介面（Chrome/Edge/Firefox） | **訪問哪個站——本系統對抗網頁 AI 的第一防線** |
+| 處理程序啟動/退出 | ETW / WMI | 起沒起非白名單程式、遠程協助工具 |
+| 剪貼板事件 + 內容長度 | 剪貼板監聽 | 大段粘貼 |
+| Alt-Tab / 切窗頻率 | 鉤子 | 頻繁切出 IDE |
+| USB 插入 | 設備通知（WMI） | 外接設備 |
+| 心跳 | 定時 | Agent 存活 / 防卸載 |
 
-> **因预防层为零，URL 监控是重中之重**：判题站本身在浏览器里合法开着，所以判定要落到 **URL 级别**——判题站域名走白名单，浏览器里出现**任何其它 URL**（AI 站、搜索引擎、贴板）即高风险。必须覆盖主流浏览器，并对"隐身模式 / 冷门浏览器抓不到 URL"的情况降级为"进程级浏览器告警 + 强制抓图"。
+> **因預防層為零，URL 監控是重中之重**：判題站本身在瀏覽器裡合法開著，所以判定要落到 **URL 級別**——判題站網域走白名單，瀏覽器裡出現**任何其它 URL**（AI 站、搜索引擎、貼板）即高風險。必須覆蓋主流瀏覽器，並對"隱身模式 / 冷門瀏覽器抓不到 URL"的情況降級為"處理程序級瀏覽器告警 + 強制抓圖"。
 
-### 2.2 截图策略
-- **事件触发**：非白名单进程启动、浏览器出现非判题 URL、大段粘贴、切窗爆发、USB 插入 → 立刻 1 张。
-- **随机基线**：每 **[30s, 90s]** 均匀随机 1 张。**专抓 IDE AI 插件**——Copilot / Continue 等补全不产生进程 / 网络 / URL 事件，唯一证据就是屏幕上"凭空出现整段代码"，只能靠定期看屏留底。
-- **pHash 去重（保守）**：dHash 汉明距离 ≤3 视为重复，仅丢"短时间多次触发、画面几乎不变"的近似图。**随机基线层不去重**（每张都可能是孤证）；阈值刻意敏感，防止"只多几行补全"的关键图被误删。
+### 2.2 截圖策略
+- **事件觸發**：非白名單處理程序啟動、瀏覽器出現非判題 URL、大段粘貼、切窗爆發、USB 插入 → 立刻 1 張。
+- **隨機基線**：每 **[30s, 90s]** 均勻隨機 1 張。**專抓 IDE AI 外掛**——Copilot / Continue 等補全不產生處理程序 / 網路 / URL 事件，唯一證據就是螢幕上"憑空出現整段程式碼"，只能靠定期看屏留底。
+- **pHash 去重（保守）**：dHash 漢明距離 ≤3 視為重複，僅丟"短時間多次觸發、畫面幾乎不變"的近似圖。**隨機基線層不去重**（每張都可能是孤證）；閾值刻意敏感，防止"只多幾行補全"的關鍵圖被誤刪。
 
-### 2.3 本地处理
-**1080p / WebP q75（≈150KB/张）** → pHash → 风险初判打分 → 哈希链封装 → 断网时本地缓冲，恢复后按 seq 续传去重。
+### 2.3 本機處理
+**1080p / WebP q75（≈150KB/張）** → pHash → 風險初判打分 → 雜湊鏈封裝 → 斷網時本機緩衝，恢復後按 seq 續傳去重。
 
-## 3. 数据模型（概要，权威定义见 api-contract-m1.md）
+## 3. 資料模型（概要，權威定義見 api-contract-m1.md）
 
 ```jsonc
-// 事件流（WebSocket 上报）
+// 事件流（WebSocket 上報）
 { "ts":..., "examId":"...", "seatId":"A07", "agentId":"...", "machineId":"...",
   "type":"window_focus|browser_url|process_start|process_exit|clipboard|alt_tab_burst|usb|screenshot|heartbeat",
-  "payload":{...}, "risk":0,                        // 本地初判 0–100
+  "payload":{...}, "risk":0,                        // 本機初判 0–100
   "evidenceImageId":"...|null",
-  "hashPrev":"...", "hashSelf":"...", "seq":12345 } // 哈希链 + 单调序号
-// 截图记录（HTTP 上传，原图存文件系统）
+  "hashPrev":"...", "hashSelf":"...", "seq":12345 } // 雜湊鏈 + 單調序號
+// 截圖記錄（HTTP 上傳，原圖存檔案系統）
 { "imageId":"...", "seatId":"A07",
   "trigger":"event:browser|event:paste|baseline_random",
   "phash":"...", "file":"...webp", "w":1920, "h":1080,
   "uploadedToOcr":true, "ocrHits":["chatgpt"], "logoHits":["google"] }
 ```
 
-## 4. 分析流水线（系统只初筛）
+## 4. 分析流水線（系統只初篩）
 
-| 级 | 位置 | 做什么 | 备注 |
+| 級 | 位置 | 做什麼 | 備註 |
 |---|---|---|---|
-| **L1 OS 信号** | Agent 本地 + **服务器复判** | 窗口标题 / URL 正则匹配黑名单（`chat.openai`/`doubao`/`deepseek`/`google`/`baidu`/`bing`…）。服务器侧 `RiskModel` **独立复判**不采信 Agent 自报(M2 已实现,见 §10.1) | 零图像、最准最便宜 |
-| **L2 视觉 LLM（识图）** | 服务器 → **视觉 LLM 端点** | **一次「看懂画面」同时做:文字提取 + AI 对话界面/搜索页/IDE 幽灵补全/远控工具识别 + 分类**,直出 `{suspicious,category,confidence,evidence}`。取代专用 OCR + L3 Logo(合并单一视觉级) | provider-agnostic(OpenAI 兼容:DeepSeek-V4/MiMo-V2.5/Qwen-VL/GLM-4V);**云端点=唯一出网(见 §5)**,或**本地自托管 MiMo(vLLM)= 零出网** |
+| **L1 OS 信號** | Agent 本機 + **伺服器復判** | 視窗標題 / URL 正則匹配黑名單（`chat.openai`/`doubao`/`deepseek`/`google`/`baidu`/`bing`…）。伺服器側 `RiskModel` **獨立復判**不採信 Agent 自報(M2 已實作,見 §10.1) | 零圖像、最準最便宜 |
+| **L2 視覺 LLM（識圖）** | 伺服器 → **視覺 LLM 端點** | **一次「看懂畫面」同時做:文字提取 + AI 對話介面/搜索頁/IDE 幽靈補全/遠控工具識別 + 分類**,直出 `{suspicious,category,confidence,evidence}`。取代專用 OCR + L3 Logo(合併單一視覺級) | provider-agnostic(OpenAI 相容:DeepSeek-V4/MiMo-V2.5/Qwen-VL/GLM-4V);**雲端點=唯一出網(見 §5)**,或**本機自託管 MiMo(vLLM)= 零出網** |
 
-> **为何视觉 LLM 取代 OCR(2026-07-01 owner 拍板)**:任务本质是「看懂画面」(认出 AI 界面/搜索页/IDE 幽灵补全)而非纯文字识别 —— 视觉 LLM 是 OCR 的超集,一次调用顶原 L2(OCR)+ L3(Logo),且结构化输出直接喂风险聚合 + 人话证据(契合「只初筛、人工裁决」)。取舍:每图成本高于专用 OCR(§5 最小化 + 只送触发型压量);画面攻击者可控 → 提示注入靠「只作一条线索 + 人工裁决」缓解。
+> **為何視覺 LLM 取代 OCR(2026-07-01 owner 拍板)**:任務本質是「看懂畫面」(認出 AI 介面/搜索頁/IDE 幽靈補全)而非純文字識別 —— 視覺 LLM 是 OCR 的超集,一次呼叫頂原 L2(OCR)+ L3(Logo),且結構化輸出直接喂風險聚合 + 人話證據(契合「只初篩、人工裁決」)。取捨:每圖成本高於專用 OCR(§5 最小化 + 只送觸發型壓量);畫面攻擊者可控 → 提示注入靠「只作一條線索 + 人工裁決」緩解。
 
-各级命中累加**风险分**(有效风险 = max(Agent 自报, 服务器 L1 复判, 视觉 LLM 置信)) → 超阈值进**可疑事件队列** → 人工复核裁决。
+各級命中累加**風險分**(有效風險 = max(Agent 自報, 伺服器 L1 復判, 視覺 LLM 置信)) → 超閾值進**可疑事件佇列** → 人工複核裁決。
 
-## 5. L2 视觉 LLM 数据流与隐私收口（唯一出网，重点）
+## 5. L2 視覺 LLM 資料流與隱私收口（唯一出網，重點）
 
-L2 现为**视觉 LLM 识图**(取代 OCR,见 §4)。走**云端点**时这是全系统唯一离开局域网的环节,按下列约束收口;走**本地自托管**(开源 MiMo + vLLM)时则**零出网**、收口第 4/5 条不适用。**✅ 派生处理已实现**(`server/Analysis/Vision/VisionImagePrep.cs`):送云前对截图做**降采样**(`visionMaxEdge` 长边上限,默认 1600·压 token/少送无关像素)+ **剥离元数据**(EXIF/XMP/IPTC/ICC 不随派生图出网),再重编码 WebP;**原图字节只读、原图永不出网**,送云的只有派生图。`visionMaxEdge≤0` 则直通原字节。
-> **打码/裁剪已移除(owner 决策 2026-07-02)**:原设计的"打码身份(visionRedactRects)+ 裁剪(visionCropRect)"需按各考场 UI 逐一配矩形,运维负担 > 收益;且供应商已定为**小米 MiMo 境内云**(PIPL 无跨境)、考前已告知学员"截图可能经外部处理"。故只保留分辨率无关、免配置的降采样,不再做打码/裁剪。若未来改用无告知场景或跨境供应商,应重新评估身份最小化。
+L2 現為**視覺 LLM 識圖**(取代 OCR,見 §4)。走**雲端點**時這是全系統唯一離開區域網路的環節,按下列約束收口;走**本機自託管**(開放原始碼 MiMo + vLLM)時則**零出網**、收口第 4/5 條不適用。**✅ 派生處理已實作**(`server/Analysis/Vision/VisionImagePrep.cs`):送雲前對截圖做**降取樣**(`visionMaxEdge` 長邊上限,預設 1600·壓 token/少送無關像素)+ **剝離中繼資料**(EXIF/XMP/IPTC/ICC 不隨派生圖出網),再重編碼 WebP;**原圖位元組唯讀、原圖永不出網**,送雲的只有派生圖。`visionMaxEdge≤0` 則直通原位元組。
+> **打碼/裁剪已移除(owner 決策 2026-07-02)**:原設計的"打碼身分(visionRedactRects)+ 裁剪(visionCropRect)"需按各考場 UI 逐一配矩形,維運負擔 > 收益;且供應商已定為**小米 MiMo 境內雲**(PIPL 無跨境)、考前已告知學員"截圖可能經外部處理"。故只保留解析度無關、免設定的降取樣,不再做打碼/裁剪。若未來改用無告知場景或跨境供應商,應重新評估身分最小化。
 
-1. **最小化上传**：不是每张截图都送云。先经 L1 本地初筛 + pHash 去重，**只把"需要视觉判定"的图**（命中可疑信号、或基线层抽样）送云，压低数量与成本。
-2. **降采样**：送云前按 `visionMaxEdge`（长边上限·默认 1600）缩小分辨率，压 token、少送无关像素；`≤0` 则直通原字节。
-3. **剥离元数据**：派生图重编码 WebP 时不带 EXIF / XMP / IPTC / ICC，元数据不随图出网。
-4. **无留存供应商**：选支持"不留存请求数据"的视觉端点，并在合规说明里写明；供应商=小米 MiMo 境内云（PIPL 无跨境）。
-5. **传输加密 + 合规告知**：HTTPS；考前告知学员"截图可能经外部处理"，与供应商签数据处理协议。
-6. **原图永不出网**：证据原图只存在局域网服务器（原图字节只读），云端只收到**降采样 + 剥元数据后的派生图**。
+1. **最小化上傳**：不是每張截圖都送雲。先經 L1 本機初篩 + pHash 去重，**只把"需要視覺判定"的圖**（命中可疑信號、或基線層抽樣）送雲，壓低數量與成本。
+2. **降取樣**：送雲前按 `visionMaxEdge`（長邊上限·預設 1600）縮小解析度，壓 token、少送無關像素；`≤0` 則直通原位元組。
+3. **剝離中繼資料**：派生圖重編碼 WebP 時不帶 EXIF / XMP / IPTC / ICC，中繼資料不隨圖出網。
+4. **無留存供應商**：選支援"不留存請求資料"的視覺端點，並在合規說明裡寫明；供應商=小米 MiMo 境內雲（PIPL 無跨境）。
+5. **傳輸加密 + 合規告知**：HTTPS；考前告知學員"截圖可能經外部處理"，與供應商籤資料處理協定。
+6. **原圖永不出網**：證據原圖只存在區域網路伺服器（原圖位元組唯讀），雲端只收到**降取樣 + 剝中繼資料後的派生圖**。
 
-> 成本提示：每场约 4500 张截图，若全量送云约 $5–7/场；上面的"最小化上传 + 只送触发型"能再砍一大截。
+> 成本提示：每場約 4500 張截圖，若全量送雲約 $5–7/場；上面的"最小化上傳 + 只送觸發型"能再砍一大截。
 
-## 6. 编程考专项：大段粘贴 + 击键节奏
-- **大段粘贴**：Agent 监听剪贴板，记录粘贴长度 + 是否粘入 IDE / 答题区；超阈值即高风险并触发抓图。**默认只记元数据（长度 / 行数），不上传明文内容**；命中后按策略可留哈希或截断样本。
-- **击键节奏**（**⚠️ 前端埋点无落点·2026-07-03 更正**）：原设计假设"判题网页前端埋点"，但**实际判题走外部洛谷(luogu.com.cn) OJ**（学员本地 IDE 写码 → 提交洛谷 → wentian 爬洛谷同步通过题数,见 `WenTian/server/luoguSync.js`）——**洛谷是外部站,无法埋点**。故击键前端节奏采集**不可实现**。**实际替代信号**：Agent 的 **OS 级剪贴板/粘贴检测**（`ClipboardWatcher` + `大段粘贴`,已实现）覆盖"粘贴外部写好的代码"这一核心信号,不依赖判题页。**服务器击键旁路 `/ingest/keystroke`(KSK 验签+归档) 保留**:若日后出现自控的本地提交页,可即接。
+## 6. 編程考專項：大段粘貼 + 擊鍵節奏
+- **大段粘貼**：Agent 監聽剪貼板，記錄粘貼長度 + 是否粘入 IDE / 答題區；超閾值即高風險並觸發抓圖。**預設只記中繼資料（長度 / 行數），不上傳明文內容**；命中後按策略可留雜湊或截斷樣本。
+- **擊鍵節奏**（**⚠️ 前端埋點無落點·2026-07-03 更正**）：原設計假設"判題網頁前端埋點"，但**實際判題走外部洛谷(luogu.com.cn) OJ**（學員本機 IDE 寫碼 → 提交洛谷 → wentian 爬洛谷同步通過題數,見 `WenTian/server/luoguSync.js`）——**洛谷是外部站,無法埋點**。故擊鍵前端節奏採集**不可實作**。**實際替代信號**：Agent 的 **OS 級剪貼板/粘貼檢測**（`ClipboardWatcher` + `大段粘贴`,已實作）覆蓋"粘貼外部寫好的程式碼"這一核心信號,不相依判題頁。**伺服器擊鍵旁路 `/ingest/keystroke`(KSK 驗籤+歸檔) 保留**:若日後出現自控的本機提交頁,可即接。
 
-## 7. 存储后端与估算
+## 7. 儲存後端與估算
 
-**SQLite（事件 + `image_embeddings` BLOB 表存 embedding·**C# 暴力余弦检索**·不依赖 sqlite-vec 原生扩展） + 文件系统（图片，按 exam/seat 分目录）。**
+**SQLite（事件 + `image_embeddings` BLOB 表存 embedding·**C# 暴力餘弦檢索**·不相依 sqlite-vec 原生擴充） + 檔案系統（圖片，按 exam/seat 分目錄）。**
 
-| 数据（30 人 × 2h） | 单人 | 全场 |
+| 資料（30 人 × 2h） | 單人 | 全場 |
 |---|---|---|
-| 元数据事件 | <1 MB | ~30 MB |
-| 截图（~150 张 ×150KB，1080p WebP q75） | ~20–30 MB | ~0.7–1 GB |
+| 中繼資料事件 | <1 MB | ~30 MB |
+| 截圖（~150 張 ×150KB，1080p WebP q75） | ~20–30 MB | ~0.7–1 GB |
 | embedding（150×512×fp16） | ~0.15 MB | ~5 MB |
-| **合计** | **~25–35 MB** | **~1 GB** |
+| **合計** | **~25–35 MB** | **~1 GB** |
 
-对比全程录屏（每人数 GB）仍是数量级节省；1TB 笔记本可存约 1000 场。
+對比全程錄屏（每人數 GB）仍是數量級節省；1TB 筆記本可存約 1000 場。
 
-## 8. 向量化与检索（明确边界）
-- **CLIP embedding = 检索索引，不是存储替代**。用途：按图搜图（选一张已知作弊图捞全场相似画面）、聚类。
-- **不可逆**：~1KB 向量无法还原百万像素截图（信息论硬约束）。**证据永远是 WebP 原图**，embedding 只是找到它的钥匙。
-- pHash 管"近似帧去重"，CLIP 管"语义相似检索"，分工不重叠。
-- **✅ M3 已实现（2026-07-03·owner 拍板）**：**provider-agnostic 图像嵌入器**（`IImageEmbedder`）；**规模小(单场几千图)→ C# 暴力余弦 KNN,不依赖 sqlite-vec 原生扩展**（embedding 存普通 `image_embeddings` BLOB 表）；**仅嵌证据图**(is_evidence·省算力·后台 `ImageEmbedService` 补扫)；`POST /api/exams/{id}/search-image` 暴力余弦 top-N + 看板灯箱「按图搜图」。
-  - **嵌入源（★探测后定案）**：`probe-embed` 诊断实测 **小米 MiMo-V2.5 无 `/v1/embeddings` 端点**(404·模型仅 chat/vision/asr/tts)——"多模态能看图对话 ≠ 有 embeddings 端点",复用视觉 key **走不通**。故 owner 拍板走 **本地 ONNX CLIP**(`OnnxClipEmbedder`·`Microsoft.ML.OnnxRuntime` CPU·**零出网·无跨境·无需 GPU**·CLIP ViT-B/32 图像编码器 ONNX 512 维·模型部署提供)。`ClipPreprocess`(resize+center-crop 224²+CLIP 归一化)与推理解耦可单测。
-  - **其它嵌入器(备)**：`MockImageEmbedder`(确定性·测试)、`OpenAiImageEmbedder`(OpenAI 兼容 `/v1/embeddings`·复用视觉 key·**仅当某云端点确有图像 embedding 模型时**)。同一 `IImageEmbedder` 接口可切。
-  - **部署**:`embedProvider=onnx` + 模型放 `dataDir\model.onnx`(★约定文件名 = `model.onnx`,`embedOnnxModelPath` 留空即默认;推荐 HF `Qdrant/clip-ViT-B-32-vision` 原名即 model.onnx,Xenova 的 vision_model.onnx 下载后改名);启动日志「ONNX CLIP 嵌入器就绪」即成。
+## 8. 向量化與檢索（明確邊界）
+- **CLIP embedding = 檢索索引，不是儲存替代**。用途：按圖搜圖（選一張已知作弊圖撈全場相似畫面）、聚類。
+- **不可逆**：~1KB 向量無法還原百萬像素截圖（資訊論硬約束）。**證據永遠是 WebP 原圖**，embedding 只是找到它的鑰匙。
+- pHash 管"近似影格去重"，CLIP 管"語義相似檢索"，分工不重疊。
+- **✅ M3 已實作（2026-07-03·owner 拍板）**：**provider-agnostic 圖像嵌入器**（`IImageEmbedder`）；**規模小(單場幾千圖)→ C# 暴力餘弦 KNN,不相依 sqlite-vec 原生擴充**（embedding 存普通 `image_embeddings` BLOB 表）；**僅嵌證據圖**(is_evidence·省算力·後台 `ImageEmbedService` 補掃)；`POST /api/exams/{id}/search-image` 暴力餘弦 top-N + 看板燈箱「按圖搜圖」。
+  - **嵌入源（★探測後定案）**：`probe-embed` 診斷實測 **小米 MiMo-V2.5 無 `/v1/embeddings` 端點**(404·模型僅 chat/vision/asr/tts)——"多模態能看圖對話 ≠ 有 embeddings 端點",重複使用視覺 key **走不通**。故 owner 拍板走 **本機 ONNX CLIP**(`OnnxClipEmbedder`·`Microsoft.ML.OnnxRuntime` CPU·**零出網·無跨境·無需 GPU**·CLIP ViT-B/32 圖像編碼器 ONNX 512 維·模型部署提供)。`ClipPreprocess`(resize+center-crop 224²+CLIP 歸一化)與推理解耦可單測。
+  - **其它嵌入器(備)**：`MockImageEmbedder`(確定性·測試)、`OpenAiImageEmbedder`(OpenAI 相容 `/v1/embeddings`·重複使用視覺 key·**僅當某雲端點確有圖像 embedding 模型時**)。同一 `IImageEmbedder` 介面可切。
+  - **部署**:`embedProvider=onnx` + 模型放 `dataDir\model.onnx`(★約定檔案名 = `model.onnx`,`embedOnnxModelPath` 留空即預設;推薦 HF `Qdrant/clip-ViT-B-32-vision` 原名即 model.onnx,Xenova 的 vision_model.onnx 下載後改名);啟動紀錄「ONNX CLIP 嵌入器就緒」即成。
 
-## 9. 传输与可靠性
-- 事件走 **WebSocket** 实时推（看板要实时）；图片走 **HTTP 分块 POST**。
-- **断网续传**：Agent 本地缓冲 + 序号，恢复后补传、按 seq 去重。
-- **多服务器**：单机起步。**30~60 人 × 2h 单机吞吐/存储绰绰有余(余量 2~3 数量级)**,故多服务器定位为**冗余 / 高可用(防单点故障)非吞吐扩展**——如需抗单点可加一台热备;真正约束是云视觉成本与人工复核能力。
+## 9. 傳輸與可靠性
+- 事件走 **WebSocket** 即時推（看板要即時）；圖片走 **HTTP 分塊 POST**。
+- **斷網續傳**：Agent 本機緩衝 + 序號，恢復後補傳、按 seq 去重。
+- **多伺服器**：單機起步。**30~60 人 × 2h 單機吞吐/儲存綽綽有餘(餘量 2~3 數量級)**,故多伺服器定位為**冗餘 / 高可用(防單點故障)非吞吐擴充**——如需抗單點可加一臺熱備;真正約束是雲視覺成本與人工複核能力。
 
-## 10. 防篡改与完整性
-- 事件**哈希链**（`hashPrev → hashSelf`），改动 / 删除 / 插入**链中段**任一条会使后续连续性校验失败（见 §10.1；**尾部截断**是结构性盲区，不可检——诚实标注）。
-- Agent↔Server **HMAC 签名**（预共享密钥），防伪造上报。
-- **双时间戳**：Agent 本机 `ts` + Server 接收 `recvTs`；考前 NTP 对齐。
-- **管理面令牌**：`/api/*` 看板与管理写端点独立鉴权，防同网学员机操纵 config / 裁决 / 拉证据图。M2 起浏览器走 **HttpOnly cookie**（`POST /api/login` 下发，`SameSite=Strict`，JS 读不到、不进 URL），脚本客户端仍可用 `X-Horus-Admin` 头（`?t=` 兼容）。响应统一附 CSP / nosniff / X-Frame-Options / Referrer-Policy。
-- **击键旁路 KSK 签名**：`/ingest/keystroke` 由判题后端持 KSK 对整条 body 签 `X-Horus-KSig`，防同网学员机伪造 / 栽赃他人 `seatId`（见 §10.1、api-contract §2.2）。
-- 可靠性收口（M1 已实现）：事件先落盘再发、**逐条 ack 精确删除**（非范围 upto，避免共享 seq 空洞误删证据）、**序号高水位持久化**（重启不复用 seq）、断线指数退避重连 + 续传、缓冲原子压实 + 崩溃恢复。
+## 10. 防篡改與完整性
+- 事件**雜湊鏈**（`hashPrev → hashSelf`），改動 / 刪除 / 插入**鏈中段**任一條會使後續連續性檢核失敗（見 §10.1；**尾部截斷**是結構性盲區，不可檢——誠實標註）。
+- Agent↔Server **HMAC 簽名**（預共享金鑰），防偽造上報。
+- **雙時間戳**：Agent 本機 `ts` + Server 接收 `recvTs`；考前 NTP 對齊。
+- **管理面權杖**：`/api/*` 看板與管理寫端點獨立鑑權，防同網學員機操縱 config / 裁決 / 拉證據圖。M2 起瀏覽器走 **HttpOnly cookie**（`POST /api/login` 下發，`SameSite=Strict`，JS 讀不到、不進 URL），指令碼用戶端仍可用 `X-Horus-Admin` 頭（`?t=` 相容）。回應統一附 CSP / nosniff / X-Frame-Options / Referrer-Policy。
+- **擊鍵旁路 KSK 簽名**：`/ingest/keystroke` 由判題後端持 KSK 對整條 body 籤 `X-Horus-KSig`，防同網學員機偽造 / 栽贓他人 `seatId`（見 §10.1、api-contract §2.2）。
+- 可靠性收口（M1 已實作）：事件先寫入磁碟再發、**逐條 ack 精確刪除**（非範圍 upto，避免共享 seq 空洞誤刪證據）、**序號高水位持久化**（重新啟動不復用 seq）、斷線指數退避重連 + 續傳、緩衝原子壓實 + 崩潰恢復。
 
-### 10.1 残留风险（诚实标注，属威胁模型本质，非缺陷）
-- **PSK 驻留学员机**：Agent 跑在学员机、PSK 在本地配置。持 PSK 者可对事件正确签名。
-  - **✅ M2 已闭合「谎报 risk 逃逸」**：服务器**不再采信 Agent 自报 `risk` 作最终判据**——凭独立黑名单（AI 站 / 搜索引擎 / 远控工具）+ 该考试已下发白名单**重算 `server_risk`**，以**有效风险 = max(agentRisk, serverRisk)** 决定入队；`serverRisk≥阈值` 而 `agentRisk<阈值` 时记 `agent_risk_understated` 篡改标记。学员把「访问 AI 站」签成 `risk=0` 也压不住入队。大段粘贴亦从 payload 的 `len`/`lines` 独立复判,不信 Agent 的 `large` 自报。
-    - **缺口（诚实标注）**：若该考试**未下发白名单**(从未 POST `/api/exams/{id}/config`),服务器对「非黑名单」站/进程无独立判据 → `server_risk=0` 退回靠 Agent 自报;黑名单已覆盖的站(openai/baidu 等)仍兜得住,但黑名单未覆盖的小众搜题/AI 站可漏网。**缓解**:建考试应随附并下发白名单;看板宜对 active 考试无白名单给运维告警(产品/流程面)。
-  - **✅ M3 已实现「完整 canonical 复算 + 哈希链复验」**（闭合本条大半）：
-    - **ingest 时**服务器从**原始 payload 文本 + 落库字段**逐字节复算 `canonicalCore`(`EventCanonical.CoreRaw`,与 Agent 端 `Core` 逐字节一致,黄金测试锁定)、复算 `hashSelf`,要求与自报一致,否则 **`bad_hash` 拒收不落库**。于是 `hashSelf`/`sig` 成为**真正锚定 payload/字段**的取证锚点(此前 sig 只绑 hashSelf 字符串,payload 未被签名覆盖)。
-    - **离线审计** `IntegrityAudit` + `GET /api/exams/{examId}/integrity`:按 (agent,seq) 复验 ①锚点自洽(落库后 payload/字段被改 → 报 hashMismatch)②**签名自洽**(sig = HMAC-PSK,配了 PSK 时验:hashSelf 是无密钥 SHA256,非 PSK 方改 payload 后可重算 hashSelf 使①自洽,唯 sig 能识破 → 报 hashMismatch「sig 不符」)③链连续(hash_prev 链前驱,删除/插入/重排 → 报 continuityBreak)。**Agent 重启**新起链段(hash_prev=GENESIS,seq 续增)认作 `restartBoundary` 合法段起点、**不误报链断**(伪造的重启边界会被②的 sig 校验识破)。迁移前缺 machine_id 的旧行归 `unverifiable`,**不误报篡改**。
-    - **仍属结构性残留(诚实)**:持 PSK 者仍可构造**自洽的**伪造链(payload 内容本身为假、但 hashSelf/sig/链全过)——如把真实 AI 站 URL 签成判题站。此类靠截图 / L2 视觉 / 人工裁决兜底,非哈希能防。缓解:每 Agent 独立 PSK(泄露隔离到单座位)、密钥机器保护而非明文。
-    - **尾部截断不可检(诚实·第三轮补记)**:哈希链能抓「改动/删除/插入**中段**」,但**删除末尾若干条事件**只是让链变短、前缀仍完全自洽,`IntegrityAudit` 报 `ok:true`(即便配了 PSK 也不产生 hash/sig/链不符)。这是无「已签名事件计数/最大 seq 高水位锚」的哈希链**结构极限**。`hello_ack.maxSeq` 仅安全网、未持久化纳入审计。缓解:靠随机基线截图 / 人工在场 / 后续可选的「服务器侧 seq 高水位持久化 + 审计」兜底,非本里程碑范围。
-- **事件通道跨身份栽赃 + seq 抢占（共享 PSK 下真实；OIDC 路径已闭合）**：握手 `X-Horus-Auth=HMAC(PSK, exam|seat|agent)` 与事件 `sig` 都用全场共享 PSK 时，持 PSK 的学员机可冒充他人身份并抢占未来 seq；仅校验“事件体身份 == 握手 query”没有用，因为握手本身也可伪造。当前贝塔通 OIDC 路径以 per-user `sub`、PS256 id_token 校验、userinfo 身份快照和会话绑定强制事件身份一致，闭合这两条风险；`psk` / `both` 仅为 legacy / 灰度模式，仍不具备该保证。拓扑、迁移与历史判据见 [m4-identity-oidc.md](m4-identity-oidc.md)。
-- **✅ 击键旁路已签名 + 防重放（M2）**：`/ingest/keystroke` 改由**判题后端持 KSK 签名**（`X-Horus-KSig`,见 api-contract §2.2）——同网学员机无 KSK 无法伪造/栽赃他人 `seatId`；且按 `(exam,seat,ts,submissionId)` **幂等落库**,LAN 明文被嗅探后**原样重放**合法签名体也不重复入队（防灌队列 DoS）。残留:改了内容的重放会破签→401;完全新造需 KSK。
-- **签名无时效防重放（事件）**：**刻意不加事件 `ts` 时窗**——与「断网缓冲 + 续传」可靠性设计冲突（一条网络中断期缓冲的事件到达时 `ts` 天然滞后 20 分钟,时窗会误杀合法续传）；而事件重放已由 `(agent,seq)` 去重 + 签名（`ts` 已进 canonical→`hashSelf`）覆盖,持 PSK 者本可直接签新帧,时窗对其无增益。故不引入。图片靠 imageId 去重。
-- **PSK / 管理令牌留空 = 放行**：仅供本机联调。**已 fail-closed**：非 loopback 绑定却缺 PSK 或管理令牌时**拒绝启动**（`allowInsecure=true` 仅联调可绕）。KSK 未纳入硬 fail-closed（击键为次级通道,强制会误伤尚未接判题埋点的部署）；非 loopback 缺 KSK 时仅告警,生产应配。
-- **✅ 管理令牌不再落 localStorage / URL（M2）**：改 **HttpOnly cookie**（`POST /api/login` 下发,`SameSite=Strict`+`HttpOnly`）——XSS 读不到令牌、`<img>` 不再靠 `?t=` 把令牌塞进 URL（防 Referer / 日志外泄）；配 CSP 收紧脚本源防注入外链外发。`?t=` / 头仍向后兼容。
+### 10.1 殘留風險（誠實標註，屬威脅模型本質，非缺陷）
+- **PSK 駐留學員機**：Agent 跑在學員機、PSK 在本機設定。持 PSK 者可對事件正確簽名。
+  - **✅ M2 已閉合「謊報 risk 逃逸」**：伺服器**不再採信 Agent 自報 `risk` 作最終判據**——憑獨立黑名單（AI 站 / 搜索引擎 / 遠控工具）+ 該考試已下發白名單**重算 `server_risk`**，以**有效風險 = max(agentRisk, serverRisk)** 決定入隊；`serverRisk≥阈值` 而 `agentRisk<阈值` 時記 `agent_risk_understated` 篡改標記。學員把「訪問 AI 站」籤成 `risk=0` 也壓不住入隊。大段粘貼亦從 payload 的 `len`/`lines` 獨立復判,不信 Agent 的 `large` 自報。
+    - **缺口（誠實標註）**：若該考試**未下發白名單**(從未 POST `/api/exams/{id}/config`),伺服器對「非黑名單」站/處理程序無獨立判據 → `server_risk=0` 退回靠 Agent 自報;黑名單已覆蓋的站(openai/baidu 等)仍兜得住,但黑名單未覆蓋的小眾搜題/AI 站可漏網。**緩解**:建考試應隨附並下發白名單;看板宜對 active 考試無白名單給維運告警(產品/流程面)。
+  - **✅ M3 已實作「完整 canonical 復算 + 雜湊鏈複驗」**（閉合本條大半）：
+    - **ingest 時**伺服器從**原始 payload 文字 + 寫入資料庫欄位**逐位元組復算 `canonicalCore`(`EventCanonical.CoreRaw`,與 Agent 端 `Core` 逐位元組一致,黃金測試鎖定)、復算 `hashSelf`,要求與自報一致,否則 **`bad_hash` 拒收不寫入資料庫**。於是 `hashSelf`/`sig` 成為**真正錨定 payload/欄位**的取證錨點(此前 sig 只綁 hashSelf 字串,payload 未被簽名覆蓋)。
+    - **離線稽核** `IntegrityAudit` + `GET /api/exams/{examId}/integrity`:按 (agent,seq) 複驗 ①錨點自洽(寫入資料庫後 payload/欄位被改 → 報 hashMismatch)②**簽名自洽**(sig = HMAC-PSK,配了 PSK 時驗:hashSelf 是無金鑰 SHA256,非 PSK 方改 payload 後可重算 hashSelf 使①自洽,唯 sig 能識破 → 報 hashMismatch「sig 不符」)③鏈連續(hash_prev 鏈前驅,刪除/插入/重排 → 報 continuityBreak)。**Agent 重新啟動**新起鏈段(hash_prev=GENESIS,seq 續增)認作 `restartBoundary` 合法段起點、**不誤報鏈斷**(偽造的重新啟動邊界會被②的 sig 檢核識破)。遷移前缺 machine_id 的舊行歸 `unverifiable`,**不誤報篡改**。
+    - **仍屬結構性殘留(誠實)**:持 PSK 者仍可建構**自洽的**偽造鏈(payload 內容本身為假、但 hashSelf/sig/鏈全過)——如把真實 AI 站 URL 籤成判題站。此類靠截圖 / L2 視覺 / 人工裁決備援,非雜湊能防。緩解:每 Agent 獨立 PSK(洩露隔離到單座位)、金鑰機器保護而非明文。
+    - **尾部截斷不可檢(誠實·第三輪補記)**:雜湊鏈能抓「改動/刪除/插入**中段**」,但**刪除末尾若干條事件**只是讓鏈變短、前綴仍完全自洽,`IntegrityAudit` 報 `ok:true`(即便配了 PSK 也不產生 hash/sig/鏈不符)。這是無「已簽名事件計數/最大 seq 高水位錨」的雜湊鏈**結構極限**。`hello_ack.maxSeq` 僅安全網、未持久化納入稽核。緩解:靠隨機基線截圖 / 人工在場 / 後續可選的「伺服器側 seq 高水位持久化 + 稽核」備援,非本里程碑範圍。
+- **事件通道跨身分栽贓 + seq 搶佔（共享 PSK 下真實；OIDC 路徑已閉合）**：握手 `X-Horus-Auth=HMAC(PSK, exam|seat|agent)` 與事件 `sig` 都用全場共享 PSK 時，持 PSK 的學員機可冒充他人身分並搶佔未來 seq；僅檢核“事件體身分 == 握手 query”沒有用，因為握手本身也可偽造。當前貝塔通 OIDC 路徑以 per-user `sub`、PS256 id_token 檢核、userinfo 身分快照和工作階段綁定強制事件身分一致，閉合這兩條風險；`psk` / `both` 僅為 legacy / 灰度模式，仍不具備該保證。拓撲、遷移與歷史判據見 [m4-identity-oidc.md](m4-identity-oidc.md)。
+- **✅ 擊鍵旁路已簽名 + 防重放（M2）**：`/ingest/keystroke` 改由**判題後端持 KSK 簽名**（`X-Horus-KSig`,見 api-contract §2.2）——同網學員機無 KSK 無法偽造/栽贓他人 `seatId`；且按 `(exam,seat,ts,submissionId)` **冪等寫入資料庫**,LAN 明文被嗅探後**原樣重放**合法簽名體也不重複入隊（防灌佇列 DoS）。殘留:改了內容的重放會破籤→401;完全新造需 KSK。
+- **簽名無時效防重放（事件）**：**刻意不加事件 `ts` 時窗**——與「斷網緩衝 + 續傳」可靠性設計衝突（一條網路中斷期緩衝的事件到達時 `ts` 天然滯後 20 分鐘,時窗會誤殺合法續傳）；而事件重放已由 `(agent,seq)` 去重 + 簽名（`ts` 已進 canonical→`hashSelf`）覆蓋,持 PSK 者本可直接籤新影格,時窗對其無增益。故不引入。圖片靠 imageId 去重。
+- **PSK / 管理權杖留空 = 放行**：僅供本機整合測試。**已 fail-closed**：非 loopback 綁定卻缺 PSK 或管理權杖時**拒絕啟動**（`allowInsecure=true` 僅整合測試可繞）。KSK 未納入硬 fail-closed（擊鍵為次級通道,強制會誤傷尚未接判題埋點的部署）；非 loopback 缺 KSK 時僅告警,生產應配。
+- **✅ 管理權杖不再落 localStorage / URL（M2）**：改 **HttpOnly cookie**（`POST /api/login` 下發,`SameSite=Strict`+`HttpOnly`）——XSS 讀不到權杖、`<img>` 不再靠 `?t=` 把權杖塞進 URL（防 Referer / 紀錄外洩）；配 CSP 收緊指令碼源防注入外鏈外發。`?t=` / 頭仍向後相容。
 
-### 10.2 规模 / 性能（M1 已够 30 Agent × 2h；下为已修 + M2 待办）
-- **已修（第二轮复审）**：逐条 ack 改**攒批压实**（避免每 ack 全文件重写的 O(N²)）；重连退避加 **jitter**（打散多 Agent 同步重连风暴）；看板查询加索引（`events(…,risk)` 覆盖 / `evidence_image_id` 部分索引 / `agent_heartbeats(exam_id,ts)`）；`is_evidence` 回填仅对触发型图；图片体上限 8→2MB；`url_unreadable` 只在进入不可读态发一次（不再每 2s 刷爆队列）。
-- **✅ 已做（M2）读写分离**：`Db` 从「单连接 + 全局写锁」改为 **单写连接（写锁串行）+ 只读连接池（WAL 并发读）**；看板 6 个只读 GET 端点走只读池,与采集写路径**互不阻塞**（监考端每 5s 轮询不再与写抢锁）。**读与读之间也并发**(池大小默认 4)：完整性审计(全考试事件 SHA256)/归档 copy 读不再串行阻塞交互看板轮询。`:memory:` 例外（内存库每连接独立且不支持 WAL）→ 回退单连接,测试无感。连接 `Pooling=false`（单例常驻,免 Dispose 后扣文件句柄妨碍归档 VACUUM）。
-- **✅ 已做 config 持久化(闭合重启白名单退化)**：下发的每考试配置(`POST /api/exams/{id}/config`)落 `exam_config` 表,服务器重启时 `AgentHub` 回填内存缓存 → 白名单不丢,`server_risk` 复判不退化、Agent 重连 `hello` 仍能补推。
-- **单写者仍用写锁,未上 Channel（刻意）**：写锁已保证「单写者串行」,而 ack 契约要求「持久化完成才回 ack」→ 后台 Channel writer 需逐条 TCS 等完成,延迟等价、仅增队列复杂度,30 Agent 规模无吞吐收益。**异步 Channel writer 作为规模余量留后续**（真遇线程池饥饿再上）。次要:单只读连接下并发看板读之间仍串行（只读连接池属后续优化）,但已与写解耦。
-- **✅ 已做(M3)归档/清理定时任务**:`ArchiveService`(后台 `PeriodicTimer` 每 `ArchiveScanIntervalHours` 扫描 + 手动 `POST /api/archive/run`)扫描**结束超 `RetentionDays` 天**的考试,关键数据(有效风险≥阈值 或 被 suspicious_queue 引用的事件 / 其证据图 + OCR/Logo / 裁决 / **被引用或高危的击键样本** / 考试汇总 + hash 锚点)迁入独立 **archive 库**,其余就地清理,`status='archived'`,`VACUUM` 回收。**证据不丢**:pending 未裁决 → 跳过整场;copy(INSERT OR IGNORE)+ 文件移动(容忍已迁)幂等,copy 后 / delete 前崩溃重跑收敛。心跳等非关键随清理删除,整链断裂属**预期**(§13.2 复验以单条锚点为准)。
+### 10.2 規模 / 效能（M1 已夠 30 Agent × 2h；下為已修 + M2 待辦）
+- **已修（第二輪複審）**：逐條 ack 改**攢批壓實**（避免每 ack 全檔案重寫的 O(N²)）；重連退避加 **jitter**（打散多 Agent 同步重連風暴）；看板查詢加索引（`events(…,risk)` 覆蓋 / `evidence_image_id` 部分索引 / `agent_heartbeats(exam_id,ts)`）；`is_evidence` 回填僅對觸發型圖；圖片體上限 8→2MB；`url_unreadable` 只在進入不可讀態發一次（不再每 2s 刷爆佇列）。
+- **✅ 已做（M2）讀寫分離**：`Db` 從「單連接 + 全域寫鎖」改為 **單寫連接（寫鎖串行）+ 唯讀連接池（WAL 並行讀）**；看板 6 個唯讀 GET 端點走唯讀池,與採集寫路徑**互不阻塞**（監考端每 5s 輪詢不再與寫搶鎖）。**讀與讀之間也並行**(池大小預設 4)：完整性稽核(全考試事件 SHA256)/歸檔 copy 讀不再串行阻塞交互看板輪詢。`:memory:` 例外（記憶體庫每連接獨立且不支援 WAL）→ 退回單連接,測試無感。連接 `Pooling=false`（單例常駐,免 Dispose 後扣檔案句柄妨礙歸檔 VACUUM）。
+- **✅ 已做 config 持久化(閉合重新啟動白名單退化)**：下發的每考試設定(`POST /api/exams/{id}/config`)落 `exam_config` 表,伺服器重新啟動時 `AgentHub` 回填記憶體快取 → 白名單不丟,`server_risk` 復判不退化、Agent 重連 `hello` 仍能補推。
+- **單寫者仍用寫鎖,未上 Channel（刻意）**：寫鎖已保證「單寫者串行」,而 ack 契約要求「持久化完成才回 ack」→ 後台 Channel writer 需逐條 TCS 等完成,延遲等價、僅增佇列複雜度,30 Agent 規模無吞吐收益。**非同步 Channel writer 作為規模餘量留後續**（真遇執行緒池飢餓再上）。次要:單隻讀連接下並行看板讀之間仍串行（唯讀連接池屬後續優化）,但已與寫解耦。
+- **✅ 已做(M3)歸檔/清理定時任務**:`ArchiveService`(後台 `PeriodicTimer` 每 `ArchiveScanIntervalHours` 掃描 + 手動 `POST /api/archive/run`)掃描**結束超 `RetentionDays` 天**的考試,關鍵資料(有效風險≥閾值 或 被 suspicious_queue 引用的事件 / 其證據圖 + OCR/Logo / 裁決 / **被引用或高危的擊鍵樣本** / 考試彙總 + hash 錨點)遷入獨立 **archive 庫**,其餘就地清理,`status='archived'`,`VACUUM` 回收。**證據不丟**:pending 未裁決 → 跳過整場;copy(INSERT OR IGNORE)+ 檔案移動(容忍已遷)冪等,copy 後 / delete 前崩潰重跑收斂。心跳等非關鍵隨清理刪除,整鏈斷裂屬**預期**(§13.2 複驗以單條錨點為準)。
 
-## 11. 威胁覆盖矩阵（诚实标注残留盲区——因无预防层）
+## 11. 威脅覆蓋矩陣（誠實標註殘留盲區——因無預防層）
 
-| 威胁 | 捕获机制 | 残留风险 |
+| 威脅 | 捕獲機制 | 殘留風險 |
 |---|---|---|
-| 网页 AI / 联网搜题 | L1 URL 监控 + 截图 + 视觉 LLM 识图 | **无网络阻断，只能事后取证**；隐身 / 冷门浏览器抓不到 URL 时降级靠截图 |
-| 本地 IDE AI 插件 | 随机截图（代码凭空出现）+ 击键节奏 | 低频截图有盲区；插件 UI 隐蔽时靠节奏 |
-| 本地离线 LLM（另开程序） | 进程监控 + 截图 | 若在 Agent 未覆盖的第二显示器 / 设备则漏 |
-| 大段粘贴外部代码 | 剪贴板 + 击键节奏 | 手动逐字誊抄难判 |
-| 远程协助（TeamViewer 等） | 进程监控 + 截图 | 改名进程需特征库维护 |
-| 手机 / 第二设备 | **本系统不覆盖** | **需物理监考兜底** |
+| 網頁 AI / 聯網搜題 | L1 URL 監控 + 截圖 + 視覺 LLM 識圖 | **無網路阻斷，只能事後取證**；隱身 / 冷門瀏覽器抓不到 URL 時降級靠截圖 |
+| 本機 IDE AI 外掛 | 隨機截圖（程式碼憑空出現）+ 擊鍵節奏 | 低頻截圖有盲區；外掛 UI 隱蔽時靠節奏 |
+| 本機離線 LLM（另開程式） | 處理程序監控 + 截圖 | 若在 Agent 未覆蓋的第二顯示器 / 設備則漏 |
+| 大段粘貼外部程式碼 | 剪貼板 + 擊鍵節奏 | 手動逐字謄抄難判 |
+| 遠程協助（TeamViewer 等） | 處理程序監控 + 截圖 | 改名處理程序需特徵庫維護 |
+| 手機 / 第二設備 | **本系統不覆蓋** | **需物理監考備援** |
 
-> 结论：纯检测取证能覆盖"机内"作弊并留证，但**手机 / 第二设备、Agent 未覆盖的多屏**是结构性盲区，须靠现场物理监考补。
+> 結論：純檢測取證能覆蓋"機內"作弊並留證，但**手機 / 第二設備、Agent 未覆蓋的多屏**是結構性盲區，須靠現場物理監考補。
 
-## 12. 监考看板与复核
-- **实时**：座位网格 + 风险热力，红色告警弹可疑事件 + 缩略图。
-- **复核**：按 student / risk 排序的队列；点开看证据图 + 事件时间线 + 视觉 LLM 识图命中高亮；支持"按图搜图"（CLIP·暴力余弦）。
-- 系统给线索，处分由人判。
+## 12. 監考看板與複核
+- **即時**：座位網格 + 風險熱力，紅色告警彈可疑事件 + 縮略圖。
+- **複核**：按 student / risk 排序的佇列；點開看證據圖 + 事件時間線 + 視覺 LLM 識圖命中高亮；支援"按圖搜圖"（CLIP·暴力餘弦）。
+- 系統給線索，處分由人判。
 
-## 13. 隐私、留存与归档
+## 13. 隱私、留存與歸檔
 
-### 13.1 隐私
-仅考试时段采集；考前告知采集范围、留存期、**及"截图可能经外部处理（视觉 LLM 识图）"**；最小化采集（默认存元数据，图按需）。
+### 13.1 隱私
+僅考試時段採集；考前告知採集範圍、留存期、**及"截圖可能經外部處理（視覺 LLM 識圖）"**；最小化採集（預設存中繼資料，圖按需）。
 
-### 13.2 留存 30 天 → 关键数据归档
-热数据（live DB + 文件）保留 **30 天**。到期由**归档作业**处理（`ArchiveService`,后台每 `ArchiveScanIntervalHours`(默认 6h)扫描 + 运维可 `POST /api/archive/run` 手动触发,按 `exam.ended_at` 判龄）。**✅ M3 已实现**（见 [../server/Jobs/ArchiveService.cs](../server/Jobs/ArchiveService.cs)）:
+### 13.2 留存 30 天 → 關鍵資料歸檔
+熱資料（live DB + 檔案）保留 **30 天**。到期由**歸檔作業**處理（`ArchiveService`,後台每 `ArchiveScanIntervalHours`(預設 6h)掃描 + 維運可 `POST /api/archive/run` 手動觸發,按 `exam.ended_at` 判齡）。**✅ M3 已實作**（見 [../server/Jobs/ArchiveService.cs](../server/Jobs/ArchiveService.cs)）:
 
-- **迁入 archive（关键数据，长期留存）**：
-  - 被可疑项引用、或有效风险(`max(risk,server_risk)`)`≥ 阈值` 的**事件**；
-  - 这些事件的**证据图**（移入冷存目录 `archive/<exam>/<seat>/<id>.webp`，路径改写）+ 其**视觉 LLM 识图结果**（`ocr_results` / `logo_hits` 表名沿用）；
-  - **被裁决引用或高危的击键样本**（confirmed 裁决的唯一证据常是击键时间线,随裁决归档 → `archive_keystroke_samples`）；
-  - **裁决记录**（`suspicious_queue` 中 `confirmed` / `dismissed` 的条目）；
-  - **考试 / 座位元数据**与**汇总**（人数 / 告警数 / 确认违规数 / 迁移计数）；
-  - 归档事件的 **哈希锚**（`hashSelf` / `sig`），以便日后完整性复验。
-- **就地清理（不入档）**：干净基线截图、低危例行事件、心跳、被清图的 embedding。
-- **门禁**：仍有 `pending` 未裁决的考试**跳过整场**（不 purge 未决案证据，留待人工）。
-- **幂等 / 崩溃安全**：copy 用 `INSERT OR IGNORE`、证据图移动容忍已迁；copy 后 / delete 前崩溃重跑收敛,证据先落 archive 才删 live,不丢关键数据。
-- 作业完成后 `exam.status = 'archived'`，live 端 `VACUUM` 回收空间（尽力而为:与看板只读连接并发偶发 `SQLITE_BUSY` 则记 warning 下次再试,不影响正确性）。
+- **遷入 archive（關鍵資料，長期留存）**：
+  - 被可疑項引用、或有效風險(`max(risk,server_risk)`)`≥ 阈值` 的**事件**；
+  - 這些事件的**證據圖**（移入冷存目錄 `archive/<exam>/<seat>/<id>.webp`，路徑改寫）+ 其**視覺 LLM 識圖結果**（`ocr_results` / `logo_hits` 表名沿用）；
+  - **被裁決引用或高危的擊鍵樣本**（confirmed 裁決的唯一證據常是擊鍵時間線,隨裁決歸檔 → `archive_keystroke_samples`）；
+  - **裁決記錄**（`suspicious_queue` 中 `confirmed` / `dismissed` 的條目）；
+  - **考試 / 座位中繼資料**與**彙總**（人數 / 告警數 / 確認違規數 / 遷移計數）；
+  - 歸檔事件的 **雜湊錨**（`hashSelf` / `sig`），以便日後完整性複驗。
+- **就地清理（不入檔）**：乾淨基線截圖、低危例行事件、心跳、被清圖的 embedding。
+- **門禁**：仍有 `pending` 未裁決的考試**跳過整場**（不 purge 未決案證據，留待人工）。
+- **冪等 / 崩潰安全**：copy 用 `INSERT OR IGNORE`、證據圖移動容忍已遷；copy 後 / delete 前崩潰重跑收斂,證據先落 archive 才刪 live,不丟關鍵資料。
+- 作業完成後 `exam.status = 'archived'`，live 端 `VACUUM` 回收空間（盡力而為:與看板唯讀連接並行偶發 `SQLITE_BUSY` 則記 warning 下次再試,不影響正確性）。
 
-> 归档库 DDL 见 [../schema/schema-archive.sql](../schema/schema-archive.sql)；"关键数据"判据可配（默认 `risk ≥ 50` 或被任一 `suspicious_queue` 条目引用）。
-> 完整性说明：清理非关键事件会使原始哈希链**不连续**；归档保留每条关键事件的 `hashSelf` 作为独立锚点，复验以"单条事件内容 ↔ 其 `hashSelf` / `sig`"为准，不再依赖整链连续。
+> 歸檔庫 DDL 見 [../schema/schema-archive.sql](../schema/schema-archive.sql)；"關鍵資料"判據可配（預設 `risk ≥ 50` 或被任一 `suspicious_queue` 條目引用）。
+> 完整性說明：清理非關鍵事件會使原始雜湊鏈**不連續**；歸檔保留每條關鍵事件的 `hashSelf` 作為獨立錨點，複驗以"單條事件內容 ↔ 其 `hashSelf` / `sig`"為準，不再相依整鏈連續。
 
-## 14. 部署形态
-- 服务器：笔记本跑单进程（接收 + 分析 + 看板 Web + SQLite + 文件存储）。LAN / IP / localhost 访问时，**对外联网仅供视觉 LLM 识图**（走云端点时；本地自托管则零出网）。owner 2026-08-04 另行允许正式 `betaoi.cn` Web 主机启用 Cloudflare Web Analytics / RUM：只有 hostname 属于 `betaoi.cn` 且配置公开 site token 时加载，`.cc` 由 Cloudflare 自动注入；考场内网访问不触发该外联。
-- Agent：考前分发 exe，登录自启、绑定座位号、需管理员权限（采 ETW / UIAutomation / WMI），考后停止。
+## 14. 部署形態
+- 伺服器：筆記本跑單處理程序（接收 + 分析 + 看板 Web + SQLite + 檔案儲存）。LAN / IP / localhost 訪問時，**對外聯網僅供視覺 LLM 識圖**（走雲端點時；本機自託管則零出網）。owner 2026-08-04 另行允許正式 `betaoi.cn` Web 主機啟用 Cloudflare Web Analytics / RUM：只有 hostname 屬於 `betaoi.cn` 且設定公開 site token 時載入，`.cc` 由 Cloudflare 自動注入；考場內網訪問不觸發該外聯。
+- Agent：考前散布 exe，登入自啟、綁定座位號、需管理員權限（採 ETW / UIAutomation / WMI），考後停止。
 
-## 15. 分期实现
-- **M1 最小闭环**（✅ **已实现并端到端验证**：服务器 + 契约 + 看板 + **Agent 采集 / 握手 / 续传 / 断线重连**，14 项测试全绿）：Agent 采元数据 + L1 URL / 进程正则 + 事件 / 随机截图 + 服务器落库 + 简易看板。可靠性(§9)已落地：断网缓冲 + seq 续传 + 指数退避重连 + 服务器幂等去重。（接口契约见 api-contract-m1.md；构建/运行见 ../server/README.md）
-- **M2 分析增强**：**L2 视觉 LLM(识图·取代 OCR+Logo)** + 风险评分 + 可疑队列。**✅ 骨架已实现**(provider-agnostic `IVisionAnalyzer` + Mock + OpenAI 兼容 adapter + 异步后台分析 → `ocr_results` + `server_risk` 聚合 + 可疑队列)。**✅ 供应商已定并真机验证 = 小米 MiMo-V2.5 托管 API**(`token-plan-cn.xiaomimimo.com/v1`·`model=mimo-v2.5`·境内云;key 自动加密存 `visionApiKeyEnc`)。**✅ §5 派生处理已实现**(降采样 + 剥离元数据·原图永不出网;打码/裁剪已按 owner 决策移除)。**✅ 基线抽样策略已实现**(`VisionBaselineSampleRate` 确定性 1/N 抽样·未抽中标 `analysis_state=1` 终结·控云成本;默认 1=全分析)。
-- **M3 取证强化**：**✅ 已实现「哈希链完整性复验」**(ingest 时 canonical 逐字节复算 + `bad_hash` 拒收 + 离线 `GET /api/exams/{id}/integrity` 审计锚点自洽 / 链连续,迁移前旧数据归 `unverifiable` 不误报) + **✅「归档作业」**(`ArchiveService`:到龄考试关键数据转 archive 库 + 清理 live + VACUUM,pending 跳过,幂等崩溃安全)。**✅ CLIP 按图搜图已实现**(provider-agnostic 嵌入器·**本地 ONNX CLIP**(★实测 MiMo 无 `/v1/embeddings`→改本地·`OnnxClipEmbedder`·零出网 CPU)·C# 暴力余弦·无需 sqlite-vec·仅嵌证据图·`/api/exams/{id}/search-image` + 看板灯箱「按图搜图」·见 §8)。**击键前端埋点已撤(N/A)**:判题走外部洛谷、无本地判题页可埋点,核心"粘贴外部代码"信号由 Agent OS 级剪贴板/粘贴检测覆盖(见 §6);server 侧 KSK 旁路保留待未来自控提交页。**M3 全部收口**。
-- **M4 健壮性 / 身份层**（★ **2026-08-07 起 IdP 是贝塔通**，见 [m4-identity-oidc.md](m4-identity-oidc.md) 首段订正表）：**✅ OIDC 取代共享 PSK**（采集面 per-user 身份闭合 §10.1 事件通道栽赃 + seq 抢占，拓扑 A Server-Broker）+ **✅ 管理端平台准入**（`horus-admin` 平台开关决定谁能进看板，Horus 本地不判角色；远端工作站经自签 https）+ **✅ 考前预检**（`/api/preflight`：鉴权配置 / 贝塔通可达 / active 考试白名单覆盖）。**⏳ 待做**：both→oidc 现场灰度验收。
-- **M5 采集端硬化**：**✅ 已实现**——保活 / 防挂起 / 防遮蔽 / 防降权限统一为"检测 + 上报 + 看板健康告警"(4 新健康信号 + 服务器独立赋分入队 + 座位健康度)+ **三层保活看门狗**(Windows 服务 LocalSystem / 兄弟 watchdog 互拉 / 心跳告警)。纯检测·**不做内核对抗**(owner 拍板)。平台无关检测核 + 服务端 176 测试全绿(M5 批次·累计 **225 全绿**);Windows 专属(服务 / SessionLauncher / 真实 suspend·遮蔽·降权)待 owner 真机验收。详见 [m5-agent-hardening.md](m5-agent-hardening.md)。
-- **规模结论**：单场 **30~60 人 × 2h 单服务器吞吐 / 存储绰绰有余**(峰值 ~150KB/s + 十几 TPS,距 SQLite/NVMe/千兆网瓶颈 2~3 数量级)。**多服务器 = 冗余 / 高可用(防单点故障),非吞吐扩展**;按需再做。真正约束是云视觉成本与监考员人工复核能力,非服务器吞吐。
+## 15. 分期實作
+- **M1 最小閉環**（✅ **已實作並端到端驗證**：伺服器 + 契約 + 看板 + **Agent 採集 / 握手 / 續傳 / 斷線重連**，14 項測試全綠）：Agent 採中繼資料 + L1 URL / 處理程序正則 + 事件 / 隨機截圖 + 伺服器寫入資料庫 + 簡易看板。可靠性(§9)已完成實作：斷網緩衝 + seq 續傳 + 指數退避重連 + 伺服器冪等去重。（介面契約見 api-contract-m1.md；建置/執行見 ../server/README.md）
+- **M2 分析增強**：**L2 視覺 LLM(識圖·取代 OCR+Logo)** + 風險評分 + 可疑佇列。**✅ 骨架已實作**(provider-agnostic `IVisionAnalyzer` + Mock + OpenAI 相容 adapter + 非同步後台分析 → `ocr_results` + `server_risk` 聚合 + 可疑佇列)。**✅ 供應商已定並真機驗證 = 小米 MiMo-V2.5 託管 API**(`token-plan-cn.xiaomimimo.com/v1`·`model=mimo-v2.5`·境內雲;key 自動加密存 `visionApiKeyEnc`)。**✅ §5 派生處理已實作**(降取樣 + 剝離中繼資料·原圖永不出網;打碼/裁剪已按 owner 決策移除)。**✅ 基線抽樣策略已實作**(`VisionBaselineSampleRate` 確定性 1/N 抽樣·未抽中標 `analysis_state=1` 終結·控雲成本;預設 1=全分析)。
+- **M3 取證強化**：**✅ 已實作「雜湊鏈完整性複驗」**(ingest 時 canonical 逐位元組復算 + `bad_hash` 拒收 + 離線 `GET /api/exams/{id}/integrity` 稽核錨點自洽 / 鏈連續,遷移前舊資料歸 `unverifiable` 不誤報) + **✅「歸檔作業」**(`ArchiveService`:到齡考試關鍵資料轉 archive 庫 + 清理 live + VACUUM,pending 跳過,冪等崩潰安全)。**✅ CLIP 按圖搜圖已實作**(provider-agnostic 嵌入器·**本機 ONNX CLIP**(★實測 MiMo 無 `/v1/embeddings`→改本機·`OnnxClipEmbedder`·零出網 CPU)·C# 暴力餘弦·無需 sqlite-vec·僅嵌證據圖·`/api/exams/{id}/search-image` + 看板燈箱「按圖搜圖」·見 §8)。**擊鍵前端埋點已撤(N/A)**:判題走外部洛谷、無本機判題頁可埋點,核心"粘貼外部程式碼"信號由 Agent OS 級剪貼板/粘貼檢測覆蓋(見 §6);server 側 KSK 旁路保留待未來自控提交頁。**M3 全部收口**。
+- **M4 穩健性 / 身分層**（★ **2026-08-07 起 IdP 是貝塔通**，見 [m4-identity-oidc.md](m4-identity-oidc.md) 首段訂正表）：**✅ OIDC 取代共享 PSK**（採集面 per-user 身分閉合 §10.1 事件通道栽贓 + seq 搶佔，拓撲 A Server-Broker）+ **✅ 管理端平台存取資格**（`horus-admin` 平台開關決定誰能進看板，Horus 本機不判角色；遠端工作站經自籤 https）+ **✅ 考前預檢**（`/api/preflight`：鑑權設定 / 貝塔通可達 / active 考試白名單覆蓋）。**⏳ 待做**：both→oidc 現場灰度驗收。
+- **M5 採集端硬化**：**✅ 已實作**——保活 / 防掛起 / 防遮蔽 / 防降權限統一為"檢測 + 上報 + 看板健康告警"(4 新健康信號 + 伺服器獨立賦分入隊 + 座位健康度)+ **三層保活看門狗**(Windows 服務 LocalSystem / 兄弟 watchdog 互拉 / 心跳告警)。純檢測·**不做核心對抗**(owner 拍板)。平台無關檢測核 + 伺服器端 176 測試全綠(M5 批次·累計 **225 全綠**);Windows 專屬(服務 / SessionLauncher / 真實 suspend·遮蔽·降權)待 owner 真機驗收。詳見 [m5-agent-hardening.md](m5-agent-hardening.md)。
+- **規模結論**：單場 **30~60 人 × 2h 單伺服器吞吐 / 儲存綽綽有餘**(峰值 ~150KB/s + 十幾 TPS,距 SQLite/NVMe/千兆網瓶頸 2~3 數量級)。**多伺服器 = 冗餘 / 高可用(防單點故障),非吞吐擴充**;按需再做。真正約束是雲視覺成本與監考員人工複核能力,非伺服器吞吐。
 
-## 16. 已采用默认值（次要项，可随时调）
+## 16. 已採用預設值（次要項，可隨時調）
 
-| 项 | 默认 |
+| 項 | 預設 |
 |---|---|
-| 大段粘贴阈值 | ≥200 字符 或 ≥5 行 |
-| 切窗爆发阈值 | ≥5 次 / 30s |
-| pHash 去重 | dHash 汉明距离 ≤3；基线层不去重 |
-| 击键特征 | keydown 时间线 + paste 事件 |
-| 留存期 | **30 天**，到期关键数据转 archive，其余清理 |
-| 关键数据判据 | `risk ≥ 50` 或被 `suspicious_queue` 引用（可配） |
-| 多服务器 | 单机起步，预留水平扩展 |
+| 大段粘貼閾值 | ≥200 字元 或 ≥5 行 |
+| 切窗爆發閾值 | ≥5 次 / 30s |
+| pHash 去重 | dHash 漢明距離 ≤3；基線層不去重 |
+| 擊鍵特徵 | keydown 時間線 + paste 事件 |
+| 留存期 | **30 天**，到期關鍵資料轉 archive，其餘清理 |
+| 關鍵資料判據 | `risk ≥ 50` 或被 `suspicious_queue` 引用（可配） |
+| 多伺服器 | 單機起步，預留水平擴充 |
 
 ## 17. 配套交付物
-- 接口契约：[api-contract-m1.md](api-contract-m1.md)
+- 介面契約：[api-contract-m1.md](api-contract-m1.md)
 - live DDL：[../schema/schema.sql](../schema/schema.sql)
 - archive DDL：[../schema/schema-archive.sql](../schema/schema-archive.sql)
-- Agent 采集端：[../agent/](../agent/)（`Horus.Agent` net8.0-windows + 平台无关核 `Horus.Agent.Core`）
+- Agent 採集端：[../agent/](../agent/)（`Horus.Agent` net8.0-windows + 平台無關核 `Horus.Agent.Core`）

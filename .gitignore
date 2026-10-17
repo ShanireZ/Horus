@@ -1,12 +1,12 @@
 # === .NET (agent/) ===
 [Bb]in/
 [Oo]bj/
-# 成品发布物(真机验收包·体积大·含运行时/原生库)——不入 git,只在磁盘 dist/。
-# ⚠★★★ **必须写成 `/dist/`（前导斜杠锚到仓库根）**：写 `dist/` 会匹配**任意层级**
-#   叫 dist 的目录 —— 2026-08-27 实测它把 `docs/dist/`（随下载包分发的用户文档，
-#   本该入库）一起挡掉了，而 **`git status` 对被忽略的路径恒为空集**，
-#   ⇒ **`git add -A` 之后那几个文件根本不出现，看起来像「没改过」**。
-#   ★ 判它用 `git check-ignore -v <路径>`，别用 `git status`。
+# 成品發佈物(真機驗收包·體積大·含執行環境/原生庫)——不入 git,只在磁碟 dist/。
+# ⚠★★★ **必須寫成 `/dist/`（前導斜槓錨到儲存庫根）**：寫 `dist/` 會匹配**任意層級**
+#   叫 dist 的目錄 —— 2026-08-27 實測它把 `docs/dist/`（隨下載包散布的使用者文件，
+#   本該入庫）一起擋掉了，而 **`git status` 對被忽略的路徑恆為空集**，
+#   ⇒ **`git add -A` 之後那幾個檔案根本不出現，看起來像「沒改過」**。
+#   ★ 判它用 `git check-ignore -v <路径>`，別用 `git status`。
 /dist/
 .vs/
 *.user
@@ -15,37 +15,37 @@
 *.binlog
 [Tt]est[Rr]esults/
 
-# === 编辑器 ===
+# === 編輯器 ===
 .vscode/
 .idea/
 *.swp
 
-# === Horus 运行时 / 机密(切勿提交) ===
-# 真实配置含 PSK / 管理令牌 / 视觉 API key —— 只提交 *.sample.json,真值放 *.config.json
+# === Horus 執行環境 / 機密(切勿提交) ===
+# 真實設定含 PSK / 管理權杖 / 視覺 API key —— 只提交 *.sample.json,真值放 *.config.json
 agent.config.json
 **/agent.config.json
 server.config.json
 **/server.config.json
-# Agent 断网缓冲:运行时目录紧贴 exe(agent/Program.cs 用 AppContext.BaseDirectory/buffer),
-# 即只会落在 agent/bin 或发布物 dist 之下;仅列运行时子目录,
-# 避免笼统 **/buffer/ 在 Windows git 大小写不敏感下误吞源码目录 agentcore/Buffer/。
+# Agent 斷網緩衝:執行環境目錄緊貼 exe(agent/Program.cs 用 AppContext.BaseDirectory/buffer),
+# 即只會落在 agent/bin 或發佈物 dist 之下;僅列執行環境子目錄,
+# 避免籠統 **/buffer/ 在 Windows git 大小寫不敏感下誤吞原始碼目錄 agentcore/Buffer/。
 agent/bin/**/buffer/
 dist/**/buffer/
-# 服务器运行时:SQLite 库与证据截图
+# 伺服器執行環境:SQLite 庫與證據截圖
 *.db
 *.db-wal
 *.db-shm
 *.sqlite
 /images/
 /archive/
-# 开发期从 server/ 起服务时的运行时数据目录(dataDir=./data → server/data;仅列运行时子目录,
-# 避免笼统 server/data/ 在 Windows git 大小写不敏感下误吞源码目录 server/Data/)
+# 開發期從 server/ 起服務時的執行環境資料目錄(dataDir=./data → server/data;僅列執行環境子目錄,
+# 避免籠統 server/data/ 在 Windows git 大小寫不敏感下誤吞原始碼目錄 server/Data/)
 server/data/images/
 server/data/archive/
-# CLIP ONNX 模型(~335MB·超 GitHub 单文件 100MB 上限)——部署时人工放置,不入 git
+# CLIP ONNX 模型(~335MB·超 GitHub 單檔案 100MB 上限)——部署時人工放置,不入 git
 *.onnx
 
-# === 证书 / 环境机密(切勿提交) ===
+# === 證書 / 環境機密(切勿提交) ===
 .env
 .env.*
 !.env.example
@@ -55,7 +55,7 @@ server/data/archive/
 *.pem
 *.log
 
-# === 依赖(未来服务器端) ===
+# === 相依(未來伺服器端) ===
 node_modules/
 
 # === OS ===
@@ -63,18 +63,18 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
-# 注意:agents.md 为项目准则,必须跟踪,勿在此排除。
+# 注意:agents.md 為專案準則,必須跟蹤,勿在此排除。
 
-# === 主页（web/）的品牌资产 ===
-# ★★★ 这一份是**装配出来的副本，不入库**。权威在 assets/brand/，
-#   而那份本身已经是 BetaPass/std/brand/horus/ 的逐字节镜像（见其 PROVENANCE.md）——
-#   再入库一份就是**第三份抄件**：上游换一次 logo，三处一起过期而彼此自洽，
-#   ★ 本仓内任何判据都看不见那个分歧。
-# ⇒ 装配与部署命令见 web/README.md。
+# === 主頁（web/）的品牌資產 ===
+# ★★★ 這一份是**裝配出來的副本，不入庫**。權威在 assets/brand/，
+#   而那份本身已經是 BetaPass/std/brand/horus/ 的逐位元組鏡像（見其 PROVENANCE.md）——
+#   再入庫一份就是**第三份抄件**：上游換一次 logo，三處一起過期而彼此自洽，
+#   ★ 本儲存庫內任何判據都看不見那個分歧。
+# ⇒ 裝配與部署命令見 web/README.md。
 web/assets/
 
-# === 待上传 R2 的下载物（dist-r2/）===
-# ★ 200 MB 的二进制，不入库。装配命令见 docs/dist/README.md 与 web/README.md。
-# ⚠ 与 dist/ 不同的是：它是**每次从当前源码重建**的，不是手工维护的快照 ——
-#   dist/ 那份 2026-08-27 被发现是 07-03 的，二进制与文档一起过期且彼此自洽。
+# === 待上傳 R2 的下載物（dist-r2/）===
+# ★ 200 MB 的二進制，不入庫。裝配命令見 docs/dist/README.md 與 web/README.md。
+# ⚠ 與 dist/ 不同的是：它是**每次從當前原始碼重建**的，不是手動維護的快照 ——
+#   dist/ 那份 2026-08-27 被發現是 07-03 的，二進制與文件一起過期且彼此自洽。
 dist-r2/

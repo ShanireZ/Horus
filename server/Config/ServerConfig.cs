@@ -3,213 +3,213 @@ using System.Text.Json.Serialization;
 
 namespace Horus.Server.Config;
 
-/// 服务器配置(从 server.config.json 加载,camelCase)。record 便于用 with 施加环境变量覆盖。
+/// 伺服器設定(從 server.config.json 載入,camelCase)。record 便於用 with 施加環境變數覆蓋。
 public sealed record ServerConfig
 {
-    /// Kestrel 绑定地址(可多个,逗号分隔),如 "http://0.0.0.0:8080"。默认 8080 与 Agent 内置默认 / dist 成品 / 部署文档一致。
+    /// Kestrel 綁定位址(可多個,逗號分隔),如 "http://0.0.0.0:8080"。默认 8080 與 Agent 內置預設 / dist 成品 / 部署文件一致。
     public string Urls { get; init; } = "http://0.0.0.0:8080";
 
-    /// 数据根目录:SQLite 文件与截图原图都在此下。
+    /// 資料根目錄:SQLite 檔案與截圖原圖都在此下。
     public string DataDir { get; init; } = "./data";
 
-    /// SQLite 文件路径;":memory:" 走内存(测试用)。相对路径相对 DataDir。
+    /// SQLite 檔案路徑;":memory:" 走記憶體(測試用)。相對路徑相對 DataDir。
     public string DbPath { get; init; } = "horus.db";
 
-    /// 预共享 HMAC 密钥(base64)。与 Agent 同一把。留空则**关闭验签**(仅本地联调,生产必须配)。
+    /// 預共享 HMAC 金鑰(base64)。與 Agent 同一把。留空則**關閉驗籤**(僅本機整合測試,生產必須配)。
     public string? PskBase64 { get; init; }
 
-    /// 管理/看板令牌。所有 /api/* 请求需带 X-Horus-Admin 头(图片字节端点可用 ?t= 查询)。
-    /// 留空则关闭管理鉴权(仅本地联调)。防止学员机调 /api/exams/{id}/config 关掉全场检测。
+    /// 管理/看板權杖。所有 /api/* 請求需帶 X-Horus-Admin 頭(圖片位元組端點可用 ?t= 查詢)。
+    /// 留空則關閉管理鑑權(僅本機整合測試)。防止學員機調 /api/exams/{id}/config 關掉全場檢測。
     public string? AdminToken { get; init; }
 
-    /// 击键旁路密钥(base64)。判题后端持它对 /ingest/keystroke 提交体签名(X-Horus-KSig)。
-    /// 留空则**关闭击键鉴权**(仅本地联调)。防同网学员机伪造/栽赃他人击键样本。与采集 PSK / 管理令牌相互独立。
+    /// 擊鍵旁路金鑰(base64)。判題後端持它對 /ingest/keystroke 提交體簽名(X-Horus-KSig)。
+    /// 留空則**關閉擊鍵鑑權**(僅本機整合測試)。防同網學員機偽造/栽贓他人擊鍵樣本。與採集 PSK / 管理權杖相互獨立。
     public string? KeystrokeSecretBase64 { get; init; }
 
-    /// 允许在非 loopback 绑定下缺 PSK / 管理令牌启动(裸奔)。默认 false = fail-closed。仅联调开。
+    /// 允許在非 loopback 綁定下缺 PSK / 管理權杖啟動(裸奔)。預設 false = fail-closed。僅整合測試開。
     public bool AllowInsecure { get; init; }
 
-    /// 启动成功后自动在默认浏览器打开管理端看板(仅 Windows 交互式运行的真 exe;测试宿主/输出重定向/服务化不弹)。
+    /// 啟動成功後自動在預設瀏覽器打開管理端看板(僅 Windows 交互式執行的真 exe;測試宿主/輸出重定向/服務化不彈)。
     public bool OpenDashboard { get; init; } = true;
 
-    /// Cloudflare Web Analytics 公开 site token。仅未来启用的 betaoi.cn 正式主机手动加载；cc 由 Cloudflare 自动注入；LAN/IP 下不出网。
+    /// Cloudflare Web Analytics 公開 site token。僅未來啟用的 betaoi.cn 正式主機手動載入；cc 由 Cloudflare 自動注入；LAN/IP 下不出網。
     public string? CloudflareWebAnalyticsToken { get; init; } = "c113fb69d7e84d38a645c5160f6f1bda";
 
-    // ---- M4 身份层:wentian OIDC 取代共享 PSK(见 docs/m4-identity-oidc.md)----
-    /// 采集面鉴权模式:"psk"(默认·共享 PSK·M1-M3 原样) | "oidc"(仅 OIDC 会话) | "both"(共存·迁移期回退网)。
+    // ---- M4 身分層:wentian OIDC 取代共享 PSK(見 docs/m4-identity-oidc.md)----
+    /// 採集面鑑權模式:"psk"(預設·共享 PSK·M1-M3 原樣) | "oidc"(僅 OIDC 工作階段) | "both"(共存·遷移期退回網)。
     public string AuthMode { get; init; } = "psk";
-    /// 贝塔通 OIDC issuer。OIDC 模式必配，不提供静默默认。
-    /// P147/P149 当前为 pass.betaoi.cc；cn 休眠。issuer 标识符与端点前缀分别配置。
-    /// 切换 issuer 后重新登录；现场配置由具体部署操作审阅，本轮不批量改设备。
+    /// 貝塔通 OIDC issuer。OIDC 模式必配，不提供靜默預設。
+    /// P147/P149 當前為 pass.betaoi.cc；cn 休眠。issuer 標識符與端點前綴分別設定。
+    /// 切換 issuer 後重新登入；現場設定由具體部署操作審閱，本輪不批量改設備。
     public string? OidcIssuer { get; init; }
-    /// 协议端点的取回前缀，留空使用 issuer；根路径为 /auth、/token、/jwks、/me、/session/end。
-    /// 保留手写配置与覆盖能力，不做运行时 discovery 或开启休眠 cn。
+    /// 協定端點的取回前綴，留空使用 issuer；根路徑為 /auth、/token、/jwks、/me、/session/end。
+    /// 保留手寫設定與覆蓋能力，不做執行環境 discovery 或開啟休眠 cn。
     public string? OidcEndpointBase { get; init; }
-    /// Horus 在 wentian 注册的 client_id(默认 horus-client)。
+    /// Horus 在 wentian 註冊的 client_id(預設 horus-client)。
     public string? OidcClientId { get; init; }
-    /// client_secret 明文(仅联调;生产用 OidcClientSecretEnc 或 env HORUS_OIDC_SECRET)。Server-Broker:secret 只在服务器。
+    /// client_secret 明文(僅整合測試;生產用 OidcClientSecretEnc 或 env HORUS_OIDC_SECRET)。Server-Broker:secret 只在伺服器。
     public string? OidcClientSecret { get; init; }
-    /// client_secret DPAPI 密文(与视觉 key 同机制,见 SecretProtect)。
+    /// client_secret DPAPI 密文(與視覺 key 同機制,見 SecretProtect)。
     public string? OidcClientSecretEnc { get; init; }
-    /// wentian 的 JWKS(RSA 公钥)内联 JSON:局域网离线验 id_token 用,免运行时拉取。留空则启动时从 issuer 拉取 + 缓存。
+    /// wentian 的 JWKS(RSA 公鑰)內聯 JSON:區域網路離線驗 id_token 用,免執行環境拉取。留空則啟動時從 issuer 拉取 + 快取。
     public string? OidcJwksJson { get; init; }
-    /// 采集会话的 **absolute** 门(分钟):建会话时写死的到期时刻。★ **任何活动都推不动它**。
-    /// 默认 **360(6 小时)**,与贝塔通给的默认值一致(其 P88)。
+    /// 採集工作階段的 **absolute** 門(分鐘):建工作階段時寫死的到期時刻。★ **任何活動都推不動它**。
+    /// 預設 **360(6 小時)**,與貝塔通給的預設值一致(其 P88)。
     ///
-    /// ★★ **它必须覆盖得住一整场考试**:考试 2–3 小时,而学员往往在开考前就登录了。
-    ///   不够长的表现是**考到一半被踢**,而重登要完整走一遍浏览器授权(取消 SSO 后还要输密码)。
-    ///   开考预检(其 P91)因此改为 **Horus 自己算自己的剩余** —— 原设计靠 IdP 下发一个 claim
-    ///   告诉 RP「你的会话还剩多久」,那条随取消 SSO 一并作废。
-    /// ★ 各平台**完全自由调这三个值、不登记、贝塔通不拦**(其 P90 已取消原来那条
-    ///   「RP 的 absolute 不得超过 IdP 的」)。兜底改由永不放弃的撤权重投承担。
+    /// ★★ **它必須覆蓋得住一整場考試**:考試 2–3 小時,而學員往往在開考前就登入了。
+    ///   不夠長的表現是**考到一半被踢**,而重登要完整走一遍瀏覽器授權(取消 SSO 後還要輸密碼)。
+    ///   開考預檢(其 P91)因此改為 **Horus 自己算自己的剩餘** —— 原設計靠 IdP 下發一個 claim
+    ///   告訴 RP「你的工作階段還剩多久」,那條隨取消 SSO 一併作廢。
+    /// ★ 各平台**完全自由調這三個值、不登記、貝塔通不攔**(其 P90 已取消原來那條
+    ///   「RP 的 absolute 不得超過 IdP 的」)。備援改由永不放棄的撤權重投承擔。
     public int OidcSessionMinutes { get; init; } = 360;
 
-    // ---- 三道门的另外两道(贝塔通 P88–P92·两条链路共用) ----
-    // ★ 采集端与看板**共用这两个值**:三道门的数值口径对两者相同,不同的只是「谁来发心跳、
-    //   `active` 怎么算」(看板用 visibilityState + 输入事件;采集端用机器用户活动)。
-    /// **idle** 门(分钟):距最后一次「人还在」多久算失效。默认 30。挡的是**页面开着但人走了**。
-    /// ★ `last_seen_at` **只由带 `active: true` 的心跳更新**,任何业务请求都不续它(其 P92)。
+    // ---- 三道門的另外兩道(貝塔通 P88–P92·兩條連線路徑共用) ----
+    // ★ 採集端與看板**共用這兩個值**:三道門的數值口徑對兩者相同,不同的只是「誰來發心跳、
+    //   `active` 怎麼算」(看板用 visibilityState + 輸入事件;採集端用機器使用者活動)。
+    /// **idle** 門(分鐘):距最後一次「人還在」多久算失效。預設 30。擋的是**頁面開著但人走了**。
+    /// ★ `last_seen_at` **只由帶 `active: true` 的心跳更新**,任何業務請求都不續它(其 P92)。
     public int SessionIdleMinutes { get; init; } = 30;
-    /// **心跳**门(分钟):距最后一次收到心跳多久算失效。默认 15(= 5 分钟间隔 × 容忍 3 次)。
-    /// 挡的是**关页面 / 关浏览器走人**;与 idle 挡的是两件事,**不要合并**。
+    /// **心跳**門(分鐘):距最後一次收到心跳多久算失效。預設 15(= 5 分鐘間隔 × 容忍 3 次)。
+    /// 擋的是**關頁面 / 關瀏覽器走人**;與 idle 擋的是兩件事,**不要合併**。
     public int SessionHeartbeatMinutes { get; init; } = 15;
 
-    /// **开考预检**用的预计考试时长(分钟),默认 180。★ 它**不参与任何鉴权判定**,
-    /// 只用来回答一个问题:「你这次登录的剩余寿命够不够撑完一场考试」(贝塔通 P91)。
+    /// **開考預檢**用的預計考試時長(分鐘),預設 180。★ 它**不參與任何鑑權判定**,
+    /// 只用來回答一個問題:「你這次登入的剩餘壽命夠不夠撐完一場考試」(貝塔通 P91)。
     ///
-    /// ★★ 原设计是**靠 IdP 下发一个 claim** 告诉 RP「你的会话还剩多久」,
-    ///   **取消 SSO(其 P84)之后那条已作废** —— 改为 Horus 按自己的 absolute 自己算。
-    /// ★ 两个客户端上它的意义不同,见 `docs/m4-identity-oidc.md`:
-    ///   采集端每场考试都是**新登录**,所以剩余恒为满,这个检查真正能逮到的是
-    ///   **`oidcSessionMinutes` 配短了**;监考看板那边监考员可能几小时前就登录了,
-    ///   剩余不足是会真实发生的。
+    /// ★★ 原設計是**靠 IdP 下發一個 claim** 告訴 RP「你的工作階段還剩多久」,
+    ///   **取消 SSO(其 P84)之後那條已作廢** —— 改為 Horus 按自己的 absolute 自己算。
+    /// ★ 兩個用戶端上它的意義不同,見 `docs/m4-identity-oidc.md`:
+    ///   採集端每場考試都是**新登入**,所以剩餘恆為滿,這個檢查真正能逮到的是
+    ///   **`oidcSessionMinutes` 配短了**;監考看板那邊監考員可能幾小時前就登入了,
+    ///   剩餘不足是會真實發生的。
     public int ExpectedExamMinutes { get; init; } = 180;
 
     [JsonIgnore]
     public bool OidcEnabled => AuthMode is "oidc" or "both";
     [JsonIgnore]
     public bool PskAcceptedForIngest => AuthMode is "psk" or "both";
-    /// 端点取回地址的前缀:优先 <see cref="OidcEndpointBase"/>,留空则回落 issuer(P72)。
+    /// 端點取回位址的前綴:優先 <see cref="OidcEndpointBase"/>,留空則回落 issuer(P72)。
     [JsonIgnore]
     private string? EndpointBase =>
         (string.IsNullOrEmpty(OidcEndpointBase) ? OidcIssuer : OidcEndpointBase)?.TrimEnd('/');
 
-    // ★★ 贝塔通的协议端点**挂在根路径**(其 docs/oidc-mounting.md:`/auth` `/token` `/me` `/jwks`
-    //    `/session/end` `/request` 已占用根命名空间),**不是** 旧 wentian 的 `/oauth/*`。
-    //    照旧路径拼会得到 404,而表现是「token 端点非 200」—— 读起来像 IdP 挂了,不像路径拼错。
-    /// OIDC token 端点。
+    // ★★ 貝塔通的協定端點**掛在根路徑**(其 docs/oidc-mounting.md:`/auth` `/token` `/me` `/jwks`
+    //    `/session/end` `/request` 已佔用根命名空間),**不是** 舊 wentian 的 `/oauth/*`。
+    //    照舊路徑拼會得到 404,而表現是「token 端點非 200」—— 讀起來像 IdP 掛了,不像路徑拼錯。
+    /// OIDC token 端點。
     [JsonIgnore]
     public string? OidcTokenEndpoint => EndpointBase is null ? null : EndpointBase + "/token";
-    /// OIDC 授权端点(建监考员登录 URL 用)。
+    /// OIDC 授權端點(建監考員登入 URL 用)。
     [JsonIgnore]
     public string? OidcAuthorizeEndpoint => EndpointBase is null ? null : EndpointBase + "/auth";
-    /// JWKS 端点(未内联 OidcJwksJson 时启动拉取用)。
+    /// JWKS 端點(未內聯 OidcJwksJson 時啟動拉取用)。
     [JsonIgnore]
     public string? OidcJwksEndpoint => EndpointBase is null ? null : EndpointBase + "/jwks";
-    /// userinfo 端点。★ **身份 claims 只在这里拿得到**,id_token 里没有(见 <see cref="Identity.Userinfo"/>)。
+    /// userinfo 端點。★ **身分 claims 只在這裡拿得到**,id_token 裡沒有(見 <see cref="Identity.Userinfo"/>)。
     [JsonIgnore]
     public string? OidcUserinfoEndpoint => EndpointBase is null ? null : EndpointBase + "/me";
-    /// RP-Initiated Logout 端点(贝塔通 P24:RP 退出连带退掉 IdP 会话)。
+    /// RP-Initiated Logout 端點(貝塔通 P24:RP 退出連帶退掉 IdP 工作階段)。
     [JsonIgnore]
     public string? OidcEndSessionEndpoint => EndpointBase is null ? null : EndpointBase + "/session/end";
 
-    // ---- M4·RBAC:监考员看板 OIDC 登录(wentian dashboard web client·取代静态 adminToken·见 m4-identity-oidc.md §10)----
-    /// 管理端鉴权模式:"token"(默认·静态 adminToken·M1-M3 原样) | "oidc"(仅 wentian 长老 OIDC 会话·R3 无令牌后门)。
+    // ---- M4·RBAC:監考員看板 OIDC 登入(wentian dashboard web client·取代靜態 adminToken·見 m4-identity-oidc.md §10)----
+    /// 管理端鑑權模式:"token"(預設·靜態 adminToken·M1-M3 原樣) | "oidc"(僅 wentian 長老 OIDC 工作階段·R3 無權杖後門)。
     public string AdminAuthMode { get; init; } = "token";
     /// wentian dashboard web client_id(如 horus-dashboard)。AdminAuthMode=oidc 必配。
     public string? OidcDashboardClientId { get; init; }
-    /// dashboard client_secret 明文(仅联调;生产用 Enc 或 env HORUS_OIDC_DASHBOARD_SECRET)。Server 持有,浏览器从不经手。
+    /// dashboard client_secret 明文(僅整合測試;生產用 Enc 或 env HORUS_OIDC_DASHBOARD_SECRET)。Server 持有,瀏覽器從不經手。
     public string? OidcDashboardClientSecret { get; init; }
-    /// dashboard client_secret DPAPI 密文(与视觉/采集 secret 同机制)。
+    /// dashboard client_secret DPAPI 密文(與視覺/採集 secret 同機制)。
     public string? OidcDashboardClientSecretEnc { get; init; }
-    /// dashboard 回调 URI(须与 wentian 注册的 OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一条精确一致,如 https://<服务器>/cb)。
+    /// dashboard 回呼 URI(須與 wentian 註冊的 OAUTH_HORUS_DASHBOARD_REDIRECT_URIS 一條精確一致,如 https://<服务器>/cb)。
     public string? OidcDashboardRedirectUri { get; init; }
-    // ---- 探活令牌的专属 `aud`(owner 2026-08-11 拍板) ----
-    // ★★ **背景**:`/internal/revoke` 与 `GET /internal/health` 的令牌此前 `aud` **完全相同**
-    //   (都是本机 client_id),于是契约里「多个入站端点唯一的区分是 `aud`」对这一对**不成立**。
-    //   owner 拍板由贝塔通给探活令牌一个专属 `aud`,把那句话恢复成**真不变量**。
-    // ★ **为什么值得改,尽管现有三家 RP 恰好都安全**:漏做「令牌 `sub` == 报文 `sub`」是**零症状**的,
-    //   把安全性押在「每一家 RP 都读懂并正确实现了契约」上不划算 —— 成均与将来的 RP 还没写。
-    /// 本机**是否期待收到贝塔通的撤权广播与存活探活**。默认 **false**(贝塔通 **P101**)。
+    // ---- 探活權杖的專屬 `aud`(owner 2026-08-11 拍板) ----
+    // ★★ **背景**:`/internal/revoke` 與 `GET /internal/health` 的權杖此前 `aud` **完全相同**
+    //   (都是本機 client_id),於是契約裡「多個入站端點唯一的區分是 `aud`」對這一對**不成立**。
+    //   owner 拍板由貝塔通給探活權杖一個專屬 `aud`,把那句話恢復成**真不變數**。
+    // ★ **為什麼值得改,儘管現有三家 RP 恰好都安全**:漏做「權杖 `sub` == 訊息 `sub`」是**零症狀**的,
+    //   把安全性押在「每一家 RP 都讀懂並正確實作了契約」上不划算 —— 成均與將來的 RP 還沒寫。
+    /// 本機**是否期待收到貝塔通的撤權廣播與存活探活**。預設 **false**(貝塔通 **P101**)。
     ///
-    /// ★★★ **P101 的判据不是「懒得开隧道」**:Horus Server 是**监考电脑上的局域网笔记本**
-    ///   (自签 HTTPS、无公网域名),而 `/internal/revoke` 与 `/internal/health` 都要求
-    ///   **贝塔通主动拨进来** —— ★ **出站 ≠ 可入站**:换 token / 取 userinfo / 拉 JWKS 全是出站,
-    ///   一直好用;这两条是入站,方向反了。**这是架构选择,不是填个表。**
+    /// ★★★ **P101 的判據不是「懶得開隧道」**:Horus Server 是**監考電腦上的區域網路筆記本**
+    ///   (自籤 HTTPS、無公用網路網域),而 `/internal/revoke` 與 `/internal/health` 都要求
+    ///   **貝塔通主動撥進來** —— ★ **出站 ≠ 可入站**:換 token / 取 userinfo / 拉 JWKS 全是出站,
+    ///   一直好用;這兩條是入站,方向反了。**這是架構選擇,不是填個表。**
     ///
-    /// ★★ **残余风险是有界的,而且这个界是被 P88 削出来的**:撤权后最长 **≤ absolute**
-    ///   (本仓 <see cref="OidcSessionMinutes"/> / <see cref="AdminSessionMinutes"/> = 6 小时,
-    ///   而契约写下时是 7 天)、**且再也登不进来**(授权阶段就被拒)、且 Server 只在考试期在线。
-    ///   ★ 换隧道能把 ≤6h 缩到分钟级,代价是**给一台装着全场监考取证与截图的机器常设一个公网入口**。
-    ///   owner 2026-08-11 拍板不换。
-    ///   ★★★ **顺带带走一条通用教训**:这个风险从 7 天缩到 6 小时是 P88 干的,
-    ///   **而没人回头重算过它** —— **口径变过之后,挂在旧口径上的风险评估要回头重算**,
-    ///   否则会为一个已经缩小十倍的风险付旧价钱。
+    /// ★★ **殘餘風險是有界的,而且這個界是被 P88 削出來的**:撤權後最長 **≤ absolute**
+    ///   (本儲存庫 <see cref="OidcSessionMinutes"/> / <see cref="AdminSessionMinutes"/> = 6 小時,
+    ///   而契約寫下時是 7 天)、**且再也登不進來**(授權階段就被拒)、且 Server 只在考試期線上。
+    ///   ★ 換隧道能把 ≤6h 縮到分鐘級,代價是**給一臺裝著全場監考取證與截圖的機器常設一個公用網路入口**。
+    ///   owner 2026-08-11 拍板不換。
+    ///   ★★★ **順帶帶走一條通用教訓**:這個風險從 7 天縮到 6 小時是 P88 乾的,
+    ///   **而沒人回頭重算過它** —— **口徑變過之後,掛在舊口徑上的風險評估要回頭重算**,
+    ///   否則會為一個已經縮小十倍的風險付舊價錢。
     ///
-    /// ★ **触发条件**(P101 写死):哪天真需要**分钟级**撤权,**上拉取模型**(Horus 主动去取),
-    ///   **不是开隧道** —— 拉取顺着本机出站-only 的拓扑,隧道方向是逆的。
-    ///   ⏳ 那个拉取端点**目前不存在**,要走得先在贝塔通侧立项。
+    /// ★ **觸發條件**(P101 寫死):哪天真需要**分鐘級**撤權,**上拉取模型**(Horus 主動去取),
+    ///   **不是開隧道** —— 拉取順著本機出站-only 的拓撲,隧道方向是逆的。
+    ///   ⏳ 那個拉取端點**目前不存在**,要走得先在貝塔通側立項。
     ///
-    /// ★ **置 false 不会关掉任何实现**:`/internal/revoke`、`/internal/health`、两道防线与它们的回归
-    ///   **全部保留**(走拉取模型那天要用同一套验签与处置)。它只改**预检怎么说话**。
+    /// ★ **置 false 不會關掉任何實作**:`/internal/revoke`、`/internal/health`、兩道防線與它們的迴歸
+    ///   **全部保留**(走拉取模型那天要用同一套驗籤與處置)。它只改**預檢怎麼說話**。
     public bool BetapassRevokePushExpected { get; init; }
 
-    /// 探活令牌 `aud` 在 client_id 之后的后缀。**必须与贝塔通签发时用的字面量一致**。
-    /// ★ 做成配置是因为对侧尚未落地:字面量对不上时这是**改配置**而不是改代码。
+    /// 探活權杖 `aud` 在 client_id 之後的後綴。**必須與貝塔通簽發時用的字面值一致**。
+    /// ★ 做成設定是因為對側尚未完成實作:字面值對不上時這是**改設定**而不是改程式碼。
     public string OidcHealthAudienceSuffix { get; init; } = "#health";
 
-    /// 探活是否**额外接受**旧口径(`aud` = client_id 本身)。默认 **false**(只认专属 `aud`)。
+    /// 探活是否**額外接受**舊口徑(`aud` = client_id 本身)。預設 **false**(只認專屬 `aud`)。
     ///
-    /// ★★ **2026-08-11 对侧 P100**:其 `healthProbeAudience()` 发的是 `&lt;client_id&gt;#health`,
-    ///   契约也明写「`/internal/revoke` 只认裸 `client_id`、`/internal/health` **只认**
-    ///   `&lt;client_id&gt;#health`」。默认因此从过渡期的**新旧都收**收窄成**只认专属值** ——
-    ///   留着旧值就等于让「`aud` 拦不住撤权/探活这一对」的例外继续存在,而消灭它正是 P100 的目的。
-    ///   ★ **注意口径**:2026-08-11 核实时,贝塔通与问天录两侧的改动都还**只在工作树里、尚未提交**
-    ///   (`git log -S"healthProbeAudience"` 为空),**owner 尚未 push/部署**。
-    ///   决策本身是 owner 拍的、代码也写好了,但「线上跑的是哪一版」是另一回事 —— 逃生口就是为它留的。
+    /// ★★ **2026-08-11 對側 P100**:其 `healthProbeAudience()` 發的是 `&lt;client_id&gt;#health`,
+    ///   契約也明寫「`/internal/revoke` 只認裸 `client_id`、`/internal/health` **只認**
+    ///   `&lt;client_id&gt;#health`」。預設因此從過渡期的**新舊都收**收窄成**只認專屬值** ——
+    ///   留著舊值就等於讓「`aud` 攔不住撤權/探活這一對」的例外繼續存在,而消滅它正是 P100 的目的。
+    ///   ★ **注意口徑**:2026-08-11 核即時,貝塔通與問天錄兩側的改動都還**只在工作樹裡、尚未提交**
+    ///   (`git log -S"healthProbeAudience"` 為空),**owner 尚未 push/部署**。
+    ///   決策本身是 owner 拍的、程式碼也寫好了,但「線上跑的是哪一版」是另一回事 —— 逃生口就是為它留的。
     ///
-    /// ★ 这一项因此**降级为逃生口**:只有在「代码已更新、但线上跑的贝塔通还是 P100 之前的版本」
-    ///   那段窗口里才置 true。
+    /// ★ 這一項因此**降級為逃生口**:只有在「程式碼已更新、但線上跑的貝塔通還是 P100 之前的版本」
+    ///   那段視窗裡才置 true。
     ///
-    /// ★★★ **把这个默认值的依赖链写死在这里,因为它跨仓库**:
-    ///   「默认只认专属值」**依赖对侧真的发专属值**。那份改动 2026-08-11 时还只在对侧工作树里 ——
-    ///   owner 若始终没推,本仓的探活会**恒 401**。
-    ///   ★ **而那件事的代价确实很小,理由本身是核过的、不是猜的**:对侧
+    /// ★★★ **把這個預設值的相依鏈寫死在這裡,因為它跨儲存庫庫**:
+    ///   「預設只認專屬值」**相依對側真的發專屬值**。那份改動 2026-08-11 時還只在對側工作樹裡 ——
+    ///   owner 若始終沒推,本儲存庫的探活會**恆 401**。
+    ///   ★ **而那件事的代價確實很小,理由本身是核過的、不是猜的**:對側
     ///   `git show HEAD:src/identity/health/probe.ts` 第 81 行是
-    ///   `res.ok ? {online:true} : {online:true, error:...}` —— **非 2xx 也算在线**
-    ///   (`5bb16b6`,已确认是其 HEAD 的祖先,不是工作树)。所以恒 401 的后果只是
-    ///   「在其后台显示成**在线但 HTTP 401**」,**不会**挂起撤权重投。
-    ///   ★★ **接手要复核就跑这两条**,别读文件:
+    ///   `res.ok ? {online:true} : {online:true, error:...}` —— **非 2xx 也算線上**
+    ///   (`5bb16b6`,已確認是其 HEAD 的祖先,不是工作樹)。所以恆 401 的後果只是
+    ///   「在其後台顯示成**線上但 HTTP 401**」,**不會**掛起撤權重投。
+    ///   ★★ **接手要複核就跑這兩條**,別讀檔案:
     ///     `git -C ../BetaPass show HEAD:src/identity/health/probe.ts | grep res.ok`
     ///     `git -C ../BetaPass log -S healthProbeAudience -- src/`
-    ///   —— **`git log -1` 告诉你的是 HEAD,不是磁盘上是什么**;并行会话下工作树常年是脏的,
-    ///   直接读文件几乎必错(本轮同一天两个方向各错了一次)。
+    ///   —— **`git log -1` 告訴你的是 HEAD,不是磁碟上是什麼**;並行工作階段下工作樹常年是髒的,
+    ///   直接讀檔案幾乎必錯(本輪同一天兩個方向各錯了一次)。
     ///
-    /// ★★★ **但这两条命令回答的是「仓库里是什么」,而这个开关关心的是「线上跑的是什么」。**
-    ///   工作树 → 提交 → **部署**,三层各错一次都够呛,而**没有任何 git 命令答得出第三层**。
-    ///   ★ 所以真正的判据不在这两条命令上,而在**跑起来的行为**:看
-    ///   `GET /api/preflight` 的 `health_audience`(本机认哪些 `aud`)+ 贝塔通后台那条
-    ///   「端点异常 / HTTP 401」。★★ **两边都正常 = 口径对上了**;
-    ///   本机认专属值而对侧后台一直报 401 = 线上贝塔通还是旧版,**这才是该开逃生口的时刻**。
+    /// ★★★ **但這兩條命令回答的是「儲存庫裡是什麼」,而這個開關關心的是「線上跑的是什麼」。**
+    ///   工作樹 → 提交 → **部署**,三層各錯一次都夠嗆,而**沒有任何 git 命令答得出第三層**。
+    ///   ★ 所以真正的判據不在這兩條命令上,而在**跑起來的行為**:看
+    ///   `GET /api/preflight` 的 `health_audience`(本機認哪些 `aud`)+ 貝塔通後台那條
+    ///   「端點異常 / HTTP 401」。★★ **兩邊都正常 = 口徑對上了**;
+    ///   本機認專屬值而對側後台一直報 401 = 線上貝塔通還是舊版,**這才是該開逃生口的時刻**。
     public bool OidcHealthAudienceAcceptLegacy { get; init; }
 
-    /// 登出回跳地址(RP-Initiated Logout 的 `post_logout_redirect_uri`)。
-    /// 留空则按 <see cref="OidcDashboardRedirectUri"/> **同源**推导 `/logout/done`。
+    /// 登出回跳位址(RP-Initiated Logout 的 `post_logout_redirect_uri`)。
+    /// 留空則按 <see cref="OidcDashboardRedirectUri"/> **同源**推導 `/logout/done`。
     ///
-    /// ★★ **必须在贝塔通后台的「登出回跳地址」一栏登记**,且与这里**精确一致** ——
-    ///   没登记时上游会忽略它,用户会停在贝塔通自己的「已退出」页,回不到 Horus。
-    ///   ★ 那**不算故障**:本地会话在跳走**之前**就已经清掉了(见 AdminOidcEndpoints 的
-    ///   `/admin/logout`),用户确实已经退出,只是少了一次回跳。
+    /// ★★ **必須在貝塔通後台的「登出回跳位址」一欄登記**,且與這裡**精確一致** ——
+    ///   沒登記時上游會忽略它,使用者會停在貝塔通自己的「已退出」頁,回不到 Horus。
+    ///   ★ 那**不算故障**:本機工作階段在跳走**之前**就已經清掉了(見 AdminOidcEndpoints 的
+    ///   `/admin/logout`),使用者確實已經退出,只是少了一次回跳。
     public string? OidcPostLogoutRedirectUri { get; init; }
-    /// 管理会话的 **absolute** 门(分钟):监考员登录后凭证寿命。默认 **360(6 小时)**,同采集面。
-    /// idle 与心跳两道门走共用的 <see cref="SessionIdleMinutes"/> / <see cref="SessionHeartbeatMinutes"/>。
+    /// 管理工作階段的 **absolute** 門(分鐘):監考員登入後憑證壽命。預設 **360(6 小時)**,同採集面。
+    /// idle 與心跳兩道門走共用的 <see cref="SessionIdleMinutes"/> / <see cref="SessionHeartbeatMinutes"/>。
     public int AdminSessionMinutes { get; init; } = 360;
 
     [JsonIgnore]
     public bool DashboardOidcEnabled => string.Equals(AdminAuthMode, "oidc", StringComparison.OrdinalIgnoreCase);
 
-    /// 实际使用的登出回跳地址:显式配置优先,否则按 dashboard 回调**同源**推导 `/logout/done`。
-    /// 两者都取不到时返回 null —— 那时登出仍然照走,只是不带 `post_logout_redirect_uri`。
+    /// 實際使用的登出回跳位址:顯式設定優先,否則按 dashboard 回呼**同源**推導 `/logout/done`。
+    /// 兩者都取不到時回傳 null —— 那時登出仍然照走,只是不帶 `post_logout_redirect_uri`。
     [JsonIgnore]
     public string? PostLogoutRedirectUriEffective
     {
@@ -222,104 +222,104 @@ public sealed record ServerConfig
         }
     }
 
-    // ---- HTTPS(远端监考工作站 OIDC 回调须 https;自签证书启动生成/加载)----
-    /// 自签证书 pfx 路径(相对 DataDir)。留空则在 DataDir 下自动生成 horus-https.pfx。仅当 Urls 含 https 时生效。
+    // ---- HTTPS(遠端監考工作站 OIDC 回呼須 https;自簽證書啟動生成/載入)----
+    /// 自簽證書 pfx 路徑(相對 DataDir)。留空則在 DataDir 下自動生成 horus-https.pfx。僅當 Urls 含 https 時生效。
     public string? HttpsCertPath { get; init; }
-    /// 自签证书 pfx 密码(留空=无密码)。
+    /// 自簽證書 pfx 密碼(留空=無密碼)。
     public string? HttpsCertPassword { get; init; }
-    /// 自签证书额外 SAN 主机/IP(逗号分隔),如服务器 LAN IP / 主机名(localhost/127.0.0.1 自动含)。
+    /// 自簽證書額外 SAN 主機/IP(逗號分隔),如伺服器 LAN IP / 主機名(localhost/127.0.0.1 自動含)。
     public string? HttpsSanHosts { get; init; }
 
-    // ---- 视觉分析(L2:视觉 LLM 取代 OCR + L3 Logo,合并单一视觉级)----
-    /// 视觉分析器:留空/"off" = 关(默认) | "mock"(确定性·测试联调) | "openai"(OpenAI 兼容端点)。
+    // ---- 視覺分析(L2:視覺 LLM 取代 OCR + L3 Logo,合併單一視覺級)----
+    /// 視覺分析器:留空/"off" = 關(預設) | "mock"(確定性·測試整合測試) | "openai"(OpenAI 相容端點)。
     public string? VisionProvider { get; init; }
-    /// OpenAI 兼容视觉端点基址(DeepSeek-V4 / MiMo-V2.5 / Qwen-VL / GLM-4V 通用)。provider="openai" 时用。
+    /// OpenAI 相容視覺端點基址(DeepSeek-V4 / MiMo-V2.5 / Qwen-VL / GLM-4V 通用)。provider="openai" 時用。
     public string? VisionBaseUrl { get; init; }
-    /// 视觉模型名(如 deepseek-v4-pro / MiMo-V2.5)。
+    /// 視覺模型名(如 deepseek-v4-pro / MiMo-V2.5)。
     public string? VisionModel { get; init; }
-    /// 视觉端点 API key **明文**(仅联调;生产请用 visionApiKeyEnc 加密存储)。env HORUS_VISION_KEY 覆盖。
+    /// 視覺端點 API key **明文**(僅整合測試;生產請用 visionApiKeyEnc 加密儲存)。env HORUS_VISION_KEY 覆蓋。
     public string? VisionApiKey { get; init; }
-    /// 视觉端点 API key **DPAPI 密文**(base64·配置文件不存明文)。在部署机上跑 `protect-secret` 生成。见 SecretProtect。
+    /// 視覺端點 API key **DPAPI 密文**(base64·設定檔案不存明文)。在部署機上跑 `protect-secret` 生成。見 SecretProtect。
     public string? VisionApiKeyEnc { get; init; }
-    /// 视觉判定入可疑队列的置信度阈值(默认 60)。
+    /// 視覺判定入可疑佇列的信賴度閾值(預設 60)。
     public int VisionConfidenceThreshold { get; init; } = 60;
-    /// 是否也分析随机基线图(默认 false = 只分析触发型,§5 最小化上传/成本)。
+    /// 是否也分析隨機基線圖(預設 false = 只分析觸發型,§5 最小化上傳/成本)。
     public bool VisionAnalyzeBaseline { get; init; }
-    /// 基线分析抽样率 N:`VisionAnalyzeBaseline=true` 时只分析 **1/N** 的随机基线图(确定性按 imageId 抽样·控云成本)。
-    /// 默认 1 = 全分析(保持既有语义);设 >1 抽样(如 10 ≈ 分析 10%),其余基线标 analysis_state=1 终结、补偿重扫不再拾回。
+    /// 基線分析抽樣率 N:`VisionAnalyzeBaseline=true` 時只分析 **1/N** 的隨機基線圖(確定性按 imageId 抽樣·控雲成本)。
+    /// 預設 1 = 全分析(保持既有語義);設 >1 抽樣(如 10 ≈ 分析 10%),其餘基線標 analysis_state=1 終結、補償重掃不再拾回。
     public int VisionBaselineSampleRate { get; init; } = 1;
-    /// 补偿重扫间隔(分钟):周期性拾回 analysis_state=0 的触发型证据图(被队列丢弃 / 服务器重启丢内存队列 / 临时云失败的)。默认 5;≤0=关闭。
+    /// 補償重掃間隔(分鐘):週期性拾回 analysis_state=0 的觸發型證據圖(被佇列丟棄 / 伺服器重新啟動丟記憶體佇列 / 臨時雲失敗的)。預設 5;≤0=關閉。
     public double VisionBackstopMinutes { get; init; } = 5;
-    /// 单张图视觉分析的最大认领次数(含失败):临时云失败由补偿重扫重试,达此上限则放弃(防端点持续失败时死循环重扫)。默认 5。
+    /// 單張圖視覺分析的最大認領次數(含失敗):臨時雲失敗由補償重掃重試,達此上限則放棄(防端點持續失敗時死循環重掃)。預設 5。
     public int VisionMaxAttempts { get; init; } = 5;
-    /// 视觉分析并发度(单 reader 之外:一次批量拉取 N 张并行送视觉端点,提速单场大批量)。默认 1 = 串行、不压端点;上限 8。
+    /// 視覺分析並行度(單 reader 之外:一次批量拉取 N 張並行送視覺端點,提速單場大批量)。預設 1 = 串行、不壓端點;上限 8。
     public int VisionConcurrency { get; init; } = 1;
 
-    // ---- §5 送云前的派生处理(owner 决策 2026-07-02:不再打码/裁剪,只降采样;供应商=境内云 MiMo·PIPL 无跨境)----
-    /// 送云图长边像素上限(降采样·省 token/少送无关像素·顺带剥离元数据)。默认 1600;0=不降采样直通。
+    // ---- §5 送雲前的派生處理(owner 決策 2026-07-02:不再打碼/裁剪,只降取樣;供應商=境內雲 MiMo·PIPL 無跨境)----
+    /// 送雲圖長邊像素上限(降取樣·省 token/少送無關像素·順帶剝離中繼資料)。預設 1600;0=不降取樣直通。
     public int VisionMaxEdge { get; init; } = 1600;
 
-    // ---- M3 CLIP 按图搜图(provider-agnostic 嵌入器·C# 暴力余弦·无需 sqlite-vec·仅嵌证据/可疑图)----
-    /// 图像嵌入器:留空/"off"=关(默认) | "mock"(确定性·测试联调) | "openai"(OpenAI 兼容 /v1/embeddings)。
+    // ---- M3 CLIP 按圖搜圖(provider-agnostic 嵌入器·C# 暴力餘弦·無需 sqlite-vec·僅嵌證據/可疑圖)----
+    /// 圖像嵌入器:留空/"off"=關(預設) | "mock"(確定性·測試整合測試) | "openai"(OpenAI 相容 /v1/embeddings)。
     public string? EmbedProvider { get; init; }
-    /// 嵌入端点基址;**留空则复用 `VisionBaseUrl`**(KEY一致·同 provider)。/embeddings 从此拼。
+    /// 嵌入端點基址;**留空則重複使用 `VisionBaseUrl`**(KEY一致·同 provider)。/embeddings 從此拼。
     public string? EmbedBaseUrl { get; init; }
-    /// 嵌入模型名(供应商的图像/多模态 embedding 模型)。provider=openai 必配。
+    /// 嵌入模型名(供應商的圖像/多模態 embedding 模型)。provider=openai 必配。
     public string? EmbedModel { get; init; }
-    /// 嵌入 API key 明文;**留空则复用视觉 key**(KEY一致)。env HORUS_EMBED_KEY 覆盖。
+    /// 嵌入 API key 明文;**留空則重複使用視覺 key**(KEY一致)。env HORUS_EMBED_KEY 覆蓋。
     public string? EmbedApiKey { get; init; }
-    /// 嵌入 API key DPAPI 密文(同视觉机制)。
+    /// 嵌入 API key DPAPI 密文(同視覺機制)。
     public string? EmbedApiKeyEnc { get; init; }
-    /// 嵌入维度(暴力余弦无所谓维度·仅记录/校验)。默认 512(CLIP ViT-B/32)。
+    /// 嵌入維度(暴力餘弦無所謂維度·僅記錄/檢核)。預設 512(CLIP ViT-B/32)。
     public int EmbedDim { get; init; } = 512;
-    /// 后台嵌入补扫间隔(分钟):拾回证据/可疑图里尚无 embedding 的。默认 5;≤0=关闭。
+    /// 後台嵌入補掃間隔(分鐘):拾回證據/可疑圖裡尚無 embedding 的。預設 5;≤0=關閉。
     public double EmbedBackstopMinutes { get; init; } = 5;
-    /// 按图搜图余弦下限:低于此分的帧视为无关(CLIP 余弦对不相关图常 ≈0),过滤掉避免噪声(B1)。
-    /// 默认 0.2(CLIP 经验值);设为 ≤0 则不过滤(退回旧行为)。
+    /// 按圖搜圖餘弦下限:低於此分的影格視為無關(CLIP 餘弦對不相關圖常 ≈0),過濾掉避免噪聲(B1)。
+    /// 預設 0.2(CLIP 經驗值);設為 ≤0 則不過濾(退回舊行為)。
     public double EmbedCosineFloor { get; init; } = 0.2;
-    /// 本地 ONNX CLIP 图像编码器模型路径。**留空 = 约定名 `model.onnx`(在 DataDir 下)**——与 HF 仓
-    /// Qdrant/clip-ViT-B-32-vision 原始文件名一致,下载后免改名;也可显式指定相对(按 DataDir)或绝对路径。
+    /// 本機 ONNX CLIP 圖像編碼器模型路徑。**留空 = 約定名 `model.onnx`(在 DataDir 下)**——與 HF 倉
+    /// Qdrant/clip-ViT-B-32-vision 原始檔案名一致,下載後免改名;也可顯式指定相對(按 DataDir)或絕對路徑。
     public string? EmbedOnnxModelPath { get; init; }
-    /// ONNX 输入张量名(留空=模型第一个输入·CLIP 常为 pixel_values)。
+    /// ONNX 輸入張量名(留空=模型第一個輸入·CLIP 常為 pixel_values)。
     public string? EmbedOnnxInput { get; init; }
-    /// ONNX 输出张量名(留空=模型第一个输出·常为 image_embeds / output)。
+    /// ONNX 輸出張量名(留空=模型第一個輸出·常為 image_embeds / output)。
     public string? EmbedOnnxOutput { get; init; }
 
     [JsonIgnore]
     public bool EmbedEnabled => !string.IsNullOrWhiteSpace(EmbedProvider)
                                 && !string.Equals(EmbedProvider, "off", StringComparison.OrdinalIgnoreCase);
-    /// 嵌入端点基址(留空复用视觉)。
+    /// 嵌入端點基址(留空重複使用視覺)。
     [JsonIgnore]
     public string? EmbedBaseUrlEffective => string.IsNullOrWhiteSpace(EmbedBaseUrl) ? VisionBaseUrl : EmbedBaseUrl;
-    /// OpenAI 兼容 embeddings 端点(基址去尾斜杠 + /embeddings)。
+    /// OpenAI 相容 embeddings 端點(基址去尾斜槓 + /embeddings)。
     [JsonIgnore]
     public string? EmbedEmbeddingsEndpoint => string.IsNullOrEmpty(EmbedBaseUrlEffective) ? null : EmbedBaseUrlEffective!.TrimEnd('/') + "/embeddings";
 
-    /// 事件风险分 ≥ 此值 → 入可疑队列。默认 50(见 architecture §16)。
+    /// 事件風險分 ≥ 此值 → 入可疑佇列。預設 50(見 architecture §16)。
     public int RiskThreshold { get; init; } = 50;
 
-    // ---- M3 归档 / 清理(architecture §13/§15)----
-    /// 是否启用后台归档作业(默认 true)。:memory: 或无到龄考试时自然 no-op;测试可关闭后台、手动触发 RunOnce。
+    // ---- M3 歸檔 / 清理(architecture §13/§15)----
+    /// 是否啟用後台歸檔作業(預設 true)。:memory: 或無到齡考試時自然 no-op;測試可關閉後台、手動觸發 RunOnce。
     public bool ArchiveEnabled { get; init; } = true;
-    /// 考试**结束**多少天后转 archive 并清理 live。默认 30(§13/§16)。
+    /// 考試**結束**多少天后轉 archive 並清理 live。預設 30(§13/§16)。
     public int RetentionDays { get; init; } = 30;
-    /// 归档"关键数据"判据:事件有效风险 ≥ 此值,或被 suspicious_queue 引用。默认 50(§16)。
+    /// 歸檔"關鍵資料"判據:事件有效風險 ≥ 此值,或被 suspicious_queue 引用。預設 50(§16)。
     public int ArchiveCriticalRisk { get; init; } = 50;
-    /// 归档库 SQLite 文件路径(相对 DataDir)。默认 horus-archive.db。
+    /// 歸檔庫 SQLite 檔案路徑(相對 DataDir)。預設 horus-archive.db。
     public string ArchiveDbPath { get; init; } = "horus-archive.db";
-    /// 后台归档扫描间隔(小时)。默认 6;≤0 = 关闭后台自动扫描(仍可手动 / 测试触发)。
+    /// 後台歸檔掃描間隔(小時)。預設 6;≤0 = 關閉後台自動掃描(仍可手動 / 測試觸發)。
     public double ArchiveScanIntervalHours { get; init; } = 6;
 
-    /// 服务器侧 pHash 近重复判定:同座位相同 phash 视为重复,不另存原图。M1 用精确相等。
+    /// 伺服器側 pHash 近重複判定:同座位相同 phash 視為重複,不另存原圖。M1 用精確相等。
     public bool DedupImagesByPhash { get; init; } = true;
 
-    /// 心跳在线判定窗口(秒):最近一次心跳在此窗口内则座位在线。
+    /// 心跳線上判定視窗(秒):最近一次心跳在此視窗內則座位線上。
     public int OnlineWindowSeconds { get; init; } = 90;
 
-    /// 只读连接池大小(SQLite WAL 并发读:看板轮询 / 完整性审计 / 归档 copy 互不串行)。默认 4。:memory: 模式忽略(回退写连接)。
+    /// 唯讀連接池大小(SQLite WAL 並行讀:看板輪詢 / 完整性稽核 / 歸檔 copy 互不串行)。預設 4。:memory: 模式忽略(退回寫連接)。
     public int ReadPoolSize { get; init; } = 4;
 
-    /// "最近风险"统计窗口(秒):座位热力取此窗口内事件的最大 risk。
+    /// "最近風險"統計視窗(秒):座位熱力取此視窗內事件的最大 risk。
     public int RecentRiskWindowSeconds { get; init; } = 300;
 
     [JsonIgnore]

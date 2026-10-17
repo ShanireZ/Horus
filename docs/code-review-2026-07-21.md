@@ -1,115 +1,115 @@
 ---
 type: audit
-title: Horus 代码审查报告（2026-07-21）
+title: Horus 程式碼審查報告（2026-07-21）
 ---
 
-# Horus 代码审查报告（2026-07-21）
+# Horus 程式碼審查報告（2026-07-21）
 
-审查范围：`contracts/`(Horus.Contracts)、`agentcore/`(Horus.Agent.Core)、`agent/`(Horus.Agent)、`server/`(Horus.Server) 全部源码（约 80 个 .cs 文件，排除 obj/ 生成物）。
+審查範圍：`contracts/`(Horus.Contracts)、`agentcore/`(Horus.Agent.Core)、`agent/`(Horus.Agent)、`server/`(Horus.Server) 全部原始碼（約 80 個 .cs 檔案，排除 obj/ 生成物）。
 
-总体结论：项目经过多轮独立安全/逻辑/性能审计（225 测试全绿、M1–M5 + 身份层 + 归档均已实现），工程质量很高，核心安全不变量（哈希链、HMAC 验签、canonical 两端逐字节一致、fail-closed、读写分离、断网续传）落地扎实。以下为本次审查发现的剩余问题，按严重程度分级。
+總體結論：專案經過多輪獨立安全/邏輯/效能稽核（225 測試全綠、M1–M5 + 身分層 + 歸檔均已實作），工程品質很高，核心安全不變數（雜湊鏈、HMAC 驗籤、canonical 兩端逐位元組一致、fail-closed、讀寫分離、斷網續傳）完成實作紮實。以下為本次審查發現的剩餘問題，按嚴重程度分級。
 
 ---
 
-## 一、BUG / 逻辑错误
+## 一、BUG / 邏輯錯誤
 
-### [中] 1. `ImageIngest` 缺少请求体大小上限，且 body 在验签/鉴权前全量读入内存
-**文件**：`server/Ingest/ImageIngest.cs`（HandleAsync，约 41–52 行）
-- 图片通道把 `req.Body` 完整读入 `MemoryStream`（`CopyToAsync`）后才做 PSK/OIDC 验签。
-- 全程**没有**像 `KeystrokeIngest` 那样的 `MaxBodyBytes` 显式上限（后者有声明 `Content-Length` 检查 + 实际 `ms.Length` 检查）。
-- 兜底仅靠 `Program.cs:172` 的 Kestrel 全局 `MaxRequestBodySize = 2MB`。这意味着：
-  - 未鉴权者（LAN 内任意能触达端点的机器）每次可强制服务器缓冲最多 2MB；
-  - 若将来全局上限被调大，此处没有任何独立熔断。
-- **建议**：在读取 body 前先查 `Content-Length` 并拒绝超限（与 `KeystrokeIngest` 一致），把鉴权失败/超限的判定前移，降低内存压力与放大攻击面。
+### [中] 1. `ImageIngest` 缺少請求體大小上限，且 body 在驗籤/鑑權前全量讀入記憶體
+**檔案**：`server/Ingest/ImageIngest.cs`（HandleAsync，約 41–52 行）
+- 圖片通道把 `req.Body` 完整讀入 `MemoryStream`（`CopyToAsync`）後才做 PSK/OIDC 驗籤。
+- 全程**沒有**像 `KeystrokeIngest` 那樣的 `MaxBodyBytes` 顯式上限（後者有聲明 `Content-Length` 檢查 + 實際 `ms.Length` 檢查）。
+- 備援僅靠 `Program.cs:172` 的 Kestrel 全域 `MaxRequestBodySize = 2MB`。這意味著：
+  - 未鑑權者（LAN 內任意能觸達端點的機器）每次可強制伺服器緩衝最多 2MB；
+  - 若將來全域上限被調大，此處沒有任何獨立熔斷。
+- **建議**：在讀取 body 前先查 `Content-Length` 並拒絕超限（與 `KeystrokeIngest` 一致），把鑑權失敗/超限的判定前移，降低記憶體壓力與放大攻擊面。
 
-### [低] 2. `ParseConfidence` 对 `1` / `1.0` 的边界歧义
-**文件**：`server/Analysis/Vision/OpenAiCompatibleVisionAnalyzer.cs:140-142`
+### [低] 2. `ParseConfidence` 對 `1` / `1.0` 的邊界歧義
+**檔案**：`server/Analysis/Vision/OpenAiCompatibleVisionAnalyzer.cs:140-142`
 ```csharp
 if (d > 0 && d < 1) d *= 100;
 ```
-- 若视觉模型以 0–1 概率返回 `1.0`（意图 100%），因 `d < 1` 为 false → 保持 `1` → 被钳成 1 分。
-- 后果：`confidence:1` 且 `suspicious:true` 的图，因 `1 < cfg.VisionConfidenceThreshold(默认 50)` 而**不进可疑队列、也不标证据**。
-- 属文档 §F9 已知权衡（刻意不把整数 `1` 放大成 100），但 `1.0` 这一浮点边界不鲁棒。
-- **建议**：prompt 已要求 `0-100`，可在解析层对 `== 1.0` 显式归为"整数原样"（即保持 1）或要求供应商严格 0–100；并在真机 smoke 里确认 MiMo 实际返回格式。
+- 若視覺模型以 0–1 概率回傳 `1.0`（意圖 100%），因 `d < 1` 為 false → 保持 `1` → 被鉗成 1 分。
+- 後果：`confidence:1` 且 `suspicious:true` 的圖，因 `1 < cfg.VisionConfidenceThreshold(默认 50)` 而**不進可疑佇列、也不標證據**。
+- 屬文件 §F9 已知權衡（刻意不把整數 `1` 放大成 100），但 `1.0` 這一浮點邊界不魯棒。
+- **建議**：prompt 已要求 `0-100`，可在解析層對 `== 1.0` 顯式歸為"整數原樣"（即保持 1）或要求供應商嚴格 0–100；並在真機 smoke 裡確認 MiMo 實際回傳格式。
 
-### [中] 3. `BrowserUrlSource` 地址栏读取脆弱且低效（对抗网页 AI 的第一防线）
-**文件**：`agent/Signals/BrowserUrlSource.cs:81-102`（含自身 TODO 注释）
-- 每 2s 对前台浏览器窗口 `root.FindAll(TreeScope.Descendants, Edit 条件)` **全树遍历**，取第一个"像 URL"的 `Edit` 控件值。
-- 问题：
-  1. **可靠性**：未区分浏览器工具栏结构，多标签 / 地址栏结构变化 / 隐身模式可能读错或读不到 → 触发"url_unreadable"降级（仅强制抓图，靠人工看），削弱第一防线。
-  2. **性能**：每次 poll 全树 UIA 遍历，CPU 开销随窗口复杂度上升。
-- 代码已自承 TODO："生产应按浏览器缓存 AutomationElement / 用更窄的条件(toolbar→edit)"。
-- **建议**：按浏览器类型缓存关键 `AutomationElement`、用 `Condition` 收窄到地址栏（toolbar 内的 edit），或在 UIAutomation 不可用时有更明确的降级策略。这是"检测取证"体系里权重最高的一条信号，值得优先加固。
+### [中] 3. `BrowserUrlSource` 位址欄讀取脆弱且低效（對抗網頁 AI 的第一防線）
+**檔案**：`agent/Signals/BrowserUrlSource.cs:81-102`（含自身 TODO 註解）
+- 每 2s 對前台瀏覽器視窗 `root.FindAll(TreeScope.Descendants, Edit 条件)` **全樹遍歷**，取第一個"像 URL"的 `Edit` 控件值。
+- 問題：
+  1. **可靠性**：未區分瀏覽器工具欄結構，多標籤 / 位址欄結構變化 / 隱身模式可能讀錯或讀不到 → 觸發"url_unreadable"降級（僅強制抓圖，靠人工看），削弱第一防線。
+  2. **效能**：每次 poll 全樹 UIA 遍歷，CPU 開銷隨視窗複雜度上升。
+- 程式碼已自承 TODO："生產應按瀏覽器快取 AutomationElement / 用更窄的條件(toolbar→edit)"。
+- **建議**：按瀏覽器類型快取關鍵 `AutomationElement`、用 `Condition` 收窄到位址欄（toolbar 內的 edit），或在 UIAutomation 不可用時有更明確的降級策略。這是"檢測取證"體系裡權重最高的一條信號，值得優先加固。
 
-### [中] 4. 多显示器盲区（实现层面未覆盖第二屏）
-**文件**：`agent/Capture/ScreenshotCapturer.cs:64-72`（含 TODO 注释）
-- `GrabPrimaryScreen()` 只抓主显示器。第二显示器上的网页 AI / 远程协助工具 / IDE 插件**完全漏采**。
-- 架构 §11 已诚实标注"Agent 未覆盖的多屏是结构盲区"，但实现上仍是待补功能。
-- **建议**：实现 `Screen.AllScreens` 遍历各屏各抓一张（注意基线/触发抓图的 seq 与去重逻辑要随之扩展），并配合"遮蔽检测"覆盖 DRM 保护窗口。
+### [中] 4. 多顯示器盲區（實作層面未覆蓋第二屏）
+**檔案**：`agent/Capture/ScreenshotCapturer.cs:64-72`（含 TODO 註解）
+- `GrabPrimaryScreen()` 只抓主顯示器。第二顯示器上的網頁 AI / 遠程協助工具 / IDE 外掛**完全漏採**。
+- 架構 §11 已誠實標註"Agent 未覆蓋的多屏是結構盲區"，但實作上仍是待補功能。
+- **建議**：實作 `Screen.AllScreens` 遍歷各屏各抓一張（注意基線/觸發抓圖的 seq 與去重邏輯要隨之擴充），並配合"遮蔽檢測"覆蓋 DRM 保護視窗。
 
 ### [低] 5. `POST /api/exams` 空 seatId 可被插入
-**文件**：`server/Api/Endpoints.cs:569-603`
-- 校验逻辑：`if (sid.Length > 0 && !IsSafeId(sid)) return BadRequest` —— 仅当 `sid` 非空且非法时拒绝。
-- 但插入用 `(string?)sn["seatId"] ?? ""`：空 `seatId` 通过校验、被原样插入 `seats(seat_id="")`。
-- **建议**：显式拒绝空 `seatId`（与 `examId` 同等级校验）。属数据质量问题，不致命但会污染看板/席位关联。
+**檔案**：`server/Api/Endpoints.cs:569-603`
+- 檢核邏輯：`if (sid.Length > 0 && !IsSafeId(sid)) return BadRequest` —— 僅當 `sid` 非空且非法時拒絕。
+- 但插入用 `(string?)sn["seatId"] ?? ""`：空 `seatId` 通過檢核、被原樣插入 `seats(seat_id="")`。
+- **建議**：顯式拒絕空 `seatId`（與 `examId` 同等級檢核）。屬資料品質問題，不致命但會汙染看板/席位關聯。
 
-### [低] 6. `Envelope.Serialize` 重复输出 `seq`
-**文件**：`contracts/Wire.cs:143-154`
-- 信封同时序列化 `seq = e.Seq`（外层）与 `@event = e`（内层含 `seq`）。两份 `seq` 值相同、层级不同，无害但冗余，且人为增加每帧体积。
-- **建议**：外层 `seq` 用于快速路由、内层 `seq` 用于验签，可考虑去掉内层 `seq`（服务器已从 `hashSelf` 复算），或反之。属可读性/体积优化，非功能 bug。
-
----
-
-## 二、功能待完善 / 部分实现
-
-以下内容在架构文档中已标注"待 owner 真机验收 / 灰度验收"，列于此供跟踪：
-
-1. **M5 Windows 专属硬化待真机验收**：`Watchdog` / `WindowsService` / `SessionLauncher` 中真实 suspend / obscure / 降权检测路径，文档 §15 标注"待 owner 真机验收"。
-2. **`both→oidc` 灰度现场验收**：架构 §15 标注为待办；`/api/preflight` 已能报告"仍有 N 个座位走 PSK"作为 go/no-go 信号。
-3. **`ClipboardWatcher` 干净关停**：`agent/Signals/ClipboardWatcher.cs` TODO 注明依赖进程退出回收，未实现消息泵干净退出（`Application.ExitThread`）。
-4. **`ForegroundWindowSource` 事件驱动化**：TODO 建议用 `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)` 替代轮询降开销（需消息循环）。
-5. **`ProcessWatcher` 改用 ETW**：TODO 注明低延迟可走 ETW；当前依赖 `Process.Start` 事件，`CommandLine` 需管理员权限才非空（影响远控工具命令行特征提取）。
-6. **多显示器抓屏**：见 BUG#4。
-7. **击键前端埋点已移除（N/A）**：判题走外部洛谷、无本地判题页可埋点；由 Agent OS 级剪贴板/粘贴检测覆盖（架构 §6），属设计决策而非遗漏。
+### [低] 6. `Envelope.Serialize` 重複輸出 `seq`
+**檔案**：`contracts/Wire.cs:143-154`
+- 信封同時序列化 `seq = e.Seq`（外層）與 `@event = e`（內層含 `seq`）。兩份 `seq` 值相同、層級不同，無害但冗餘，且人為增加每影格體積。
+- **建議**：外層 `seq` 用於快速路由、內層 `seq` 用於驗籤，可考慮去掉內層 `seq`（伺服器已從 `hashSelf` 復算），或反之。屬可讀性/體積優化，非功能 bug。
 
 ---
 
-## 三、代码质量
+## 二、功能待完善 / 部分實作
 
-1. **Agent 端日志用 `Console.WriteLine/Console.Error`** 而非注入 `ILogger`（`agent/Program.cs`、`agent/Signals/*` 等），与 Server 端结构化日志不一致，难统一收集/分级。（影响可维护性，非缺陷）
-2. **风险分魔法数散落多处**：`40/70/80/60/55/50` 等出现在 `RiskModel.Derive`、`Suspicion`、Agent 的 `BrowserUrlSource`(80/40)、`Program.cs`(M5 健康分 60/55)、`KeystrokeIngest.RiskFrom`(70/60/55)。Agent 自报分与服务器复判分各自的"真相来源"易漂移，建议集中为常量/配置。
-3. **`Endpoints.MapApi` 单方法约 700 行**：可读性差，建议按资源（exams / seats / suspicious / images / archive / auth）拆分成多个映射方法或 partial 类。
-4. **`RiskModel` 与 `Suspicion` 的"信号类型→风险/类别"双套逻辑靠注释同步**：新增 `SignalType` 时需在三处（枚举、`RiskModel.Derive`、`Suspicion.KindFor`）同步，`Suspicion.cs` 顶部已用总表约束，但仍是手动。建议用单一 `SignalType → (risk, kind, source)` 映射表驱动。
-5. **`ImageIngest` 与 `KeystrokeIngest` 的 body 读取 + 大小校验 + 鉴权顺序高度重复**：可抽成共享中间件/helper，避免两路安全逻辑日后分叉（BUG#1 正是此类分叉的体现）。
-6. **`async void Handle` 在 `agent/Program.cs`**：作为事件回调可接受（已自捕获异常），但 fire-and-forget 的异常栈在诊断时不直观，建议在关键路径加 `TaskScheduler.UnobservedTaskException` 兜底或显式日志。
+以下內容在架構文件中已標註"待 owner 真機驗收 / 灰度驗收"，列於此供跟蹤：
 
----
-
-## 四、性能待优化
-
-1. **`VisionAnalysisService` 单 reader 串行（`SingleReader = true`）**：逐张送视觉 LLM，单场数千张图时吞吐受限（网络 IO 串行）。当前按"不压视觉端点/不占 ingest 热路径"保守设计，可接受；若单场量大，可考虑受限并发（Channel 限流 2–4）提速。
-2. **`/api/exams/{id}/seats` 每行含多个相关子查询**：虽整条是单 SQL，但 SQLite 对每行执行内部子查询（座位数 × ~6 子查询）。30 座位量级可接受（<200 次查询），更大规模可改 JOIN + 窗口函数一次性聚合。
-3. **`IntegrityAudit.Run` 一次性拉全考试事件进内存**：按 agent 分组、seq 升序处理，极大考试（数千事件）内存 O(N)。当前规模 OK；超大规模可改为流式/分批。
-4. **`search-image` 每次把整场 embedding 全读进内存再暴力余弦**（`ImageSearchStore.GetExam`）：当前单场几千张 × 512 维，OK；若上量可考虑分页或常驻内存索引（已明确不引 sqlite-vec）。
-5. **`Db` 只读连接池固定 4**：完整性审计（全考试 SHA256）/ 归档 copy 读与看板 5s 轮询并行时可能排队；文档已说明为后续优化，当前不阻塞正确性。
+1. **M5 Windows 專屬硬化待真機驗收**：`Watchdog` / `WindowsService` / `SessionLauncher` 中真實 suspend / obscure / 降權檢測路徑，文件 §15 標註"待 owner 真機驗收"。
+2. **`both→oidc` 灰度現場驗收**：架構 §15 標註為待辦；`/api/preflight` 已能報告"仍有 N 個座位走 PSK"作為 go/no-go 信號。
+3. **`ClipboardWatcher` 乾淨關停**：`agent/Signals/ClipboardWatcher.cs` TODO 註明相依處理程序退出回收，未實作訊息泵乾淨退出（`Application.ExitThread`）。
+4. **`ForegroundWindowSource` 事件驅動化**：TODO 建議用 `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)` 替代輪詢降開銷（需訊息循環）。
+5. **`ProcessWatcher` 改用 ETW**：TODO 註明低延遲可走 ETW；當前相依 `Process.Start` 事件，`CommandLine` 需管理員權限才非空（影響遠控工具命令行特徵提取）。
+6. **多顯示器抓屏**：見 BUG#4。
+7. **擊鍵前端埋點已移除（N/A）**：判題走外部洛谷、無本機判題頁可埋點；由 Agent OS 級剪貼板/粘貼檢測覆蓋（架構 §6），屬設計決策而非遺漏。
 
 ---
 
-## 五、已确认正确 / 无问题（抽样核对）
+## 三、程式碼品質
 
-- **canonical 两端一致**：`EventCanonical.Core`(typed) 与 `CoreRaw`(raw text) 字段顺序、类型、null 处理一致；服务器 `VerifyHashSelf` 能锚定 payload。由 `CanonicalTests` 锁定的黄金测试覆盖。
-- **断网续传 / seq 高水位**：`LocalBuffer` + `UplinkClient.NextSeq/AlignSeq` 设计正确，无 seq 复用；`RecoverCrashedRewrite`/`CleanupOrphans` 崩溃恢复完备。
-- **读写分离**：`Db` 单写连接 + 只读连接池 + `:memory:` 回退正确。
-- **OIDC 验签**：`OidcTokenValidator` 验 alg/kid/签名/iss/aud/exp/nbf/nonce，角色 fail-safe 到 `disciple`，正确。
-- **归档幂等/崩溃安全**：门禁 + 墓碑 + 复制 + 清理顺序正确，`MoveToArchive` 与 `DeleteLive` 幂等。
-- **管理面鉴权**：HttpOnly + SameSite=Strict cookie、FixedTimeEquals、CSP/nosniff/X-Frame-Options/Referrer-Policy 齐备。
+1. **Agent 端紀錄用 `Console.WriteLine/Console.Error`** 而非注入 `ILogger`（`agent/Program.cs`、`agent/Signals/*` 等），與 Server 端結構化紀錄不一致，難統一收集/分級。（影響可維護性，非缺陷）
+2. **風險分魔法數散落多處**：`40/70/80/60/55/50` 等出現在 `RiskModel.Derive`、`Suspicion`、Agent 的 `BrowserUrlSource`(80/40)、`Program.cs`(M5 健康分 60/55)、`KeystrokeIngest.RiskFrom`(70/60/55)。Agent 自報分與伺服器復判分各自的"真相來源"易漂移，建議集中為常數/設定。
+3. **`Endpoints.MapApi` 單方法約 700 行**：可讀性差，建議按資源（exams / seats / suspicious / images / archive / auth）拆分成多個映射方法或 partial 類。
+4. **`RiskModel` 與 `Suspicion` 的"信號類型→風險/類別"雙套邏輯靠註解同步**：新增 `SignalType` 時需在三處（枚舉、`RiskModel.Derive`、`Suspicion.KindFor`）同步，`Suspicion.cs` 頂部已用總表約束，但仍是手動。建議用單一 `SignalType → (risk, kind, source)` 映射表驅動。
+5. **`ImageIngest` 與 `KeystrokeIngest` 的 body 讀取 + 大小檢核 + 鑑權順序高度重複**：可抽成共享中介軟體/helper，避免兩路安全邏輯日後分叉（BUG#1 正是此類分叉的體現）。
+6. **`async void Handle` 在 `agent/Program.cs`**：作為事件回呼可接受（已自捕獲異常），但 fire-and-forget 的異常棧在診斷時不直觀，建議在關鍵路徑加 `TaskScheduler.UnobservedTaskException` 備援或顯式紀錄。
 
 ---
 
-## 优先级建议
+## 四、效能待優化
 
-| 优先级 | 项 |
+1. **`VisionAnalysisService` 單 reader 串行（`SingleReader = true`）**：逐張送視覺 LLM，單場數千張圖時吞吐受限（網路 IO 串行）。當前按"不壓視覺端點/不佔 ingest 熱路徑"保守設計，可接受；若單場量大，可考慮受限並行（Channel 限流 2–4）提速。
+2. **`/api/exams/{id}/seats` 每行含多個相關子查詢**：雖整條是單 SQL，但 SQLite 對每行執行內部子查詢（座位數 × ~6 子查詢）。30 座位量級可接受（<200 次查詢），更大規模可改 JOIN + 視窗函式一次性聚合。
+3. **`IntegrityAudit.Run` 一次性拉全考試事件進記憶體**：按 agent 分組、seq 升序處理，極大考試（數千事件）記憶體 O(N)。當前規模 OK；超大規模可改為流式/分批。
+4. **`search-image` 每次把整場 embedding 全讀進記憶體再暴力餘弦**（`ImageSearchStore.GetExam`）：當前單場幾千張 × 512 維，OK；若上量可考慮分頁或常駐記憶體索引（已明確不引 sqlite-vec）。
+5. **`Db` 唯讀連接池固定 4**：完整性稽核（全考試 SHA256）/ 歸檔 copy 讀與看板 5s 輪詢並行時可能排隊；文件已說明為後續優化，當前不阻塞正確性。
+
+---
+
+## 五、已確認正確 / 無問題（抽樣核對）
+
+- **canonical 兩端一致**：`EventCanonical.Core`(typed) 與 `CoreRaw`(raw text) 欄位順序、類型、null 處理一致；伺服器 `VerifyHashSelf` 能錨定 payload。由 `CanonicalTests` 鎖定的黃金測試覆蓋。
+- **斷網續傳 / seq 高水位**：`LocalBuffer` + `UplinkClient.NextSeq/AlignSeq` 設計正確，無 seq 重複使用；`RecoverCrashedRewrite`/`CleanupOrphans` 崩潰恢復完備。
+- **讀寫分離**：`Db` 單寫連接 + 唯讀連接池 + `:memory:` 退回正確。
+- **OIDC 驗籤**：`OidcTokenValidator` 驗 alg/kid/簽名/iss/aud/exp/nbf/nonce，角色 fail-safe 到 `disciple`，正確。
+- **歸檔冪等/崩潰安全**：門禁 + 墓碑 + 複製 + 清理順序正確，`MoveToArchive` 與 `DeleteLive` 冪等。
+- **管理面鑑權**：HttpOnly + SameSite=Strict cookie、FixedTimeEquals、CSP/nosniff/X-Frame-Options/Referrer-Policy 齊備。
+
+---
+
+## 優先級建議
+
+| 優先級 | 項 |
 |---|---|
-| P1（建议本迭代修） | BUG#1（ImageIngest body 上限）、BUG#3（BrowserUrl 读取加固） |
-| P2 | BUG#4（多显示器）、BUG#2（置信度边界）、代码质量#2/#5（风险常量集中、ingest helper 去重） |
-| P3 | BUG#5（空 seatId）、BUG#6、其余性能/可读性项、第二节待办项（按 owner 真机验收排期） |
+| P1（建議本迭代修） | BUG#1（ImageIngest body 上限）、BUG#3（BrowserUrl 讀取加固） |
+| P2 | BUG#4（多顯示器）、BUG#2（信賴度邊界）、程式碼品質#2/#5（風險常數集中、ingest helper 去重） |
+| P3 | BUG#5（空 seatId）、BUG#6、其餘效能/可讀性項、第二節待辦項（按 owner 真機驗收排期） |

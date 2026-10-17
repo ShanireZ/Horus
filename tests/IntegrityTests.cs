@@ -9,8 +9,8 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// M3 哈希链完整性复验:①ingest 时复算 hashSelf 拒收「hashSelf 不承诺其 payload」的帧;
-/// ②/integrity 离线审计发现落库后篡改(hash 不符)与删除/重排(链断)。
+/// M3 雜湊鏈完整性複驗:①ingest 時復算 hashSelf 拒收「hashSelf 不承諾其 payload」的影格;
+/// ②/integrity 離線稽核發現寫入資料庫後篡改(hash 不符)與刪除/重排(鏈斷)。
 public class IntegrityTests
 {
     private const string Exam = "E1", Seat = "A07", Agent = "ag-A07", Machine = "PC-A07";
@@ -25,7 +25,7 @@ public class IntegrityTests
         r.EnsureSuccessStatusCode();
     }
 
-    /// 构造一条已封链事件,返回(信封 JSON, 本条 hashSelf) —— 便于把 hashSelf 串给下一条作 hashPrev。
+    /// 建構一條已封鏈事件,回傳(信封 JSON, 本條 hashSelf) —— 便於把 hashSelf 串給下一條作 hashPrev。
     private static (string json, string hashSelf) BuildEvent(
         SignalType type, Dictionary<string, object?> payload, int risk, long seq, string hashPrev,
         string exam = Exam, string seat = Seat, string agent = Agent, string machine = Machine)
@@ -41,14 +41,14 @@ public class IntegrityTests
         return (Envelope.Serialize(stamped, sig), hashSelf);
     }
 
-    /// 发送一条 window_focus,回读 ack。返回本条 hashSelf。
+    /// 傳送一條 window_focus,回讀 ack。回傳本條 hashSelf。
     private static async Task<string> SendChainedAsync(WebSocket ws, long seq, string hashPrev)
     {
         (string json, string hashSelf) = BuildEvent(
             SignalType.WindowFocus, new() { ["title"] = "题目" + seq, ["process"] = "acrobat" }, 0, seq, hashPrev);
         await Ws.SendAsync(ws, json);
         JsonElement ack = await Ws.ReceiveAsync(ws);
-        Assert.Equal("ack", ack.GetProperty("type").GetString());   // 合法链每条都 ack(不误伤)
+        Assert.Equal("ack", ack.GetProperty("type").GetString());   // 合法鏈每條都 ack(不誤傷)
         return hashSelf;
     }
 
@@ -88,19 +88,19 @@ public class IntegrityTests
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);
 
-        // 为 payload=P(访问 AI 站)正确封链,得合法 hashSelf/sig;然后把信封里的 url 篡改为判题站(P'),
-        // hashSelf/sig 保持不变 —— sig 仍验得过(只绑 hashSelf),但 hashSelf 不再承诺 P' → bad_hash。
+        // 為 payload=P(訪問 AI 站)正確封鏈,得合法 hashSelf/sig;然後把信封裡的 url 篡改為判題站(P'),
+        // hashSelf/sig 保持不變 —— sig 仍驗得過(只綁 hashSelf),但 hashSelf 不再承諾 P' → bad_hash。
         (string json, _) = BuildEvent(SignalType.BrowserUrl,
             new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = false }, 80, 1, "GENESIS");
         string tampered = json.Replace("chat.openai.com", "judge.exam.cn");
-        Assert.NotEqual(json, tampered);   // 确保确实改动了
+        Assert.NotEqual(json, tampered);   // 確保確實改動了
 
         await Ws.SendAsync(ws, tampered);
         JsonElement err = await Ws.ReceiveAsync(ws);
         Assert.Equal("error", err.GetProperty("type").GetString());
         Assert.Equal("bad_hash", err.GetProperty("code").GetString());
 
-        // 未落库
+        // 未寫入資料庫
         JsonElement events = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/events?seatId={Seat}");
         Assert.Equal(0, events.GetArrayLength());
     }
@@ -117,7 +117,7 @@ public class IntegrityTests
         await Ws.ReceiveAsync(ws);
         await SendChainedAsync(ws, 1, "GENESIS");
 
-        // 直接改库(模拟 DB 层篡改 / 存储损坏):payload 被改,但 hash_self 未随之更新 → 锚点不再自洽
+        // 直接改庫(模擬 DB 層篡改 / 儲存損壞):payload 被改,但 hash_self 未隨之更新 → 錨點不再自洽
         Db db = app.Services.GetRequiredService<Db>();
         db.Write(conn =>
         {
@@ -132,15 +132,15 @@ public class IntegrityTests
         JsonElement mism = agent.GetProperty("hashMismatches");
         Assert.Equal(1, mism.GetArrayLength());
         Assert.Equal(1, mism[0].GetProperty("seq").GetInt64());
-        // 链连续本身没断(只改了内容,没删没插)→ continuityBreaks 为空
+        // 鏈連續本身沒斷(只改了內容,沒刪沒插)→ continuityBreaks 為空
         Assert.Equal(0, agent.GetProperty("continuityBreaks").GetArrayLength());
     }
 
     [Fact]
     public async Task 迁移前旧事件缺machineId_标不可验_不误报篡改()
     {
-        // 闭合审计 High:M3 前落库的旧事件 machine_id=NULL,canonicalCore 含 machineId 无从复算 →
-        // 必须归为 unverifiable,**不能**误报"hash 不符(疑篡改)"污染取证结论。
+        // 閉合稽核 High:M3 前寫入資料庫的舊事件 machine_id=NULL,canonicalCore 含 machineId 無從復算 →
+        // 必須歸為 unverifiable,**不能**誤報"hash 不符(疑篡改)"汙染取證結論。
         using var app = new TestApp();
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http);
@@ -150,7 +150,7 @@ public class IntegrityTests
         await Ws.ReceiveAsync(ws);
         await SendChainedAsync(ws, 1, "GENESIS");
 
-        // 模拟迁移前旧行:machine_id 置 NULL(内容/hash 未动)
+        // 模擬遷移前舊行:machine_id 置 NULL(內容/hash 未動)
         Db db = app.Services.GetRequiredService<Db>();
         db.Write(conn =>
         {
@@ -159,18 +159,18 @@ public class IntegrityTests
         });
 
         JsonElement rep = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/integrity");
-        Assert.True(rep.GetProperty("ok").GetBoolean());                       // 无篡改证据
-        Assert.Equal(1, rep.GetProperty("totalUnverifiable").GetInt32());       // 但诚实标注 1 条不可验
+        Assert.True(rep.GetProperty("ok").GetBoolean());                       // 無篡改證據
+        Assert.Equal(1, rep.GetProperty("totalUnverifiable").GetInt32());       // 但誠實標註 1 條不可驗
         Assert.Equal(0, rep.GetProperty("totalHashOk").GetInt32());
         JsonElement agent = rep.GetProperty("agents")[0];
         Assert.Equal(1, agent.GetProperty("unverifiable").GetInt32());
-        Assert.Equal(0, agent.GetProperty("hashMismatches").GetArrayLength());  // 关键:不误报篡改
+        Assert.Equal(0, agent.GetProperty("hashMismatches").GetArrayLength());  // 關鍵:不誤報篡改
     }
 
     [Fact]
     public async Task 已归档考试_integrity返回applicable_false_不伪装全绿()
     {
-        // 闭合审计 Med:归档后 live 事件清空,端点不应返回空的 ok:true(误导"已核验干净")。
+        // 閉合稽核 Med:歸檔後 live 事件清空,端點不應回傳空的 ok:true(誤導"已核驗乾淨")。
         using var app = new TestApp();
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http);
@@ -190,9 +190,9 @@ public class IntegrityTests
         JsonElement rep = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/integrity");
         Assert.Equal("archived", rep.GetProperty("status").GetString());
         Assert.False(rep.GetProperty("applicable").GetBoolean());
-        Assert.False(rep.TryGetProperty("ok", out _));   // 不再有会被误读为"全绿"的 ok 字段
+        Assert.False(rep.TryGetProperty("ok", out _));   // 不再有會被誤讀為"全綠"的 ok 欄位
 
-        // 不存在的考试 → 404
+        // 不存在的考試 → 404
         HttpResponseMessage nf = await http.GetAsync("/api/exams/NOPE/integrity");
         Assert.Equal(System.Net.HttpStatusCode.NotFound, nf.StatusCode);
     }
@@ -211,7 +211,7 @@ public class IntegrityTests
         string h2 = await SendChainedAsync(ws, 2, h1);
         await SendChainedAsync(ws, 3, h2);
 
-        // 删除中间那条(seq=2)→ 第 3 条的 hash_prev(=h2)不再等于新前驱(第 1 条 h1)→ 链断
+        // 刪除中間那條(seq=2)→ 第 3 條的 hash_prev(=h2)不再等於新前驅(第 1 條 h1)→ 鏈斷
         Db db = app.Services.GetRequiredService<Db>();
         db.Write(conn =>
         {
@@ -222,7 +222,7 @@ public class IntegrityTests
         JsonElement rep = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/integrity");
         Assert.False(rep.GetProperty("ok").GetBoolean());
         JsonElement agent = rep.GetProperty("agents")[0];
-        // 每条自身 hash 仍自洽(没改内容)→ hashMismatches 空;但链断在第 3 条
+        // 每條自身 hash 仍自洽(沒改內容)→ hashMismatches 空;但鏈斷在第 3 條
         Assert.Equal(0, agent.GetProperty("hashMismatches").GetArrayLength());
         JsonElement breaks = agent.GetProperty("continuityBreaks");
         Assert.Equal(1, breaks.GetArrayLength());
@@ -232,12 +232,12 @@ public class IntegrityTests
     [Fact]
     public async Task 归档中考试_事件被短路不落库_仍ack()
     {
-        // #7:归档"读快照→DELETE WHERE exam_id"之间到达的 late-ingest 会被无锚点删。修=status='archiving' 后 ingest 短路。
+        // #7:歸檔"讀快照→DELETE WHERE exam_id"之間到達的 late-ingest 會被無錨點刪。修=status='archiving' 後 ingest 短路。
         using var app = new TestApp();
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http);
 
-        // 直接置 archiving(模拟归档进行中)
+        // 直接置 archiving(模擬歸檔進行中)
         Db db = app.Services.GetRequiredService<Db>();
         db.Write(conn =>
         {
@@ -248,19 +248,19 @@ public class IntegrityTests
         using WebSocket ws = await app.ConnectEventsAsync(Exam, Seat, Agent);
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);                                        // hello_ack
-        JsonElement ended = await Ws.ReceiveAsync(ws);                    // 考试派发:非 active 考试 hello 即补发 exam_ended
+        JsonElement ended = await Ws.ReceiveAsync(ws);                    // 考試派發:非 active 考試 hello 即補發 exam_ended
         Assert.Equal("exam_ended", ended.GetProperty("type").GetString());
-        await SendChainedAsync(ws, 1, "GENESIS");   // 内含 ack 断言:仍 ack(让 Agent 停发)
+        await SendChainedAsync(ws, 1, "GENESIS");   // 內含 ack 斷言:仍 ack(讓 Agent 停發)
 
         JsonElement events = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/events?seatId={Seat}");
-        Assert.Equal(0, events.GetArrayLength());   // 归档中:未落库(不会被随后的 DELETE 无锚点删)
+        Assert.Equal(0, events.GetArrayLength());   // 歸檔中:未寫入資料庫(不會被隨後的 DELETE 無錨點刪)
     }
 
     [Fact]
     public async Task Agent重启后新链段_GENESIS锚点_不误报链断()
     {
-        // #1:Agent 每次进程启动新建 HashChain,重启后首条 hash_prev=GENESIS,但 seq 续增。
-        // 审计应把它认作**重启锚点**(合法段起点),而非删除/插入的 continuityBreak。
+        // #1:Agent 每次處理程序啟動新建 HashChain,重新啟動後首條 hash_prev=GENESIS,但 seq 續增。
+        // 稽核應把它認作**重新啟動錨點**(合法段起點),而非刪除/插入的 continuityBreak。
         using var app = new TestApp();
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http);
@@ -270,21 +270,21 @@ public class IntegrityTests
         await Ws.ReceiveAsync(ws);
         string h1 = await SendChainedAsync(ws, 1, "GENESIS");
         await SendChainedAsync(ws, 2, h1);
-        await SendChainedAsync(ws, 3, "GENESIS");   // 模拟重启:seq 续到 3,新链段从 GENESIS 起
+        await SendChainedAsync(ws, 3, "GENESIS");   // 模擬重新啟動:seq 續到 3,新鏈段從 GENESIS 起
 
         JsonElement rep = await http.GetFromJsonAsync<JsonElement>($"/api/exams/{Exam}/integrity");
-        Assert.True(rep.GetProperty("ok").GetBoolean());                       // 重启不是篡改
+        Assert.True(rep.GetProperty("ok").GetBoolean());                       // 重新啟動不是篡改
         Assert.Equal(1, rep.GetProperty("totalRestartBoundaries").GetInt32());
         JsonElement agent = rep.GetProperty("agents")[0];
-        Assert.Equal(0, agent.GetProperty("continuityBreaks").GetArrayLength());   // 关键:不误报链断
+        Assert.Equal(0, agent.GetProperty("continuityBreaks").GetArrayLength());   // 關鍵:不誤報鏈斷
         Assert.Equal(1, agent.GetProperty("restartBoundaries").GetInt32());
     }
 
     [Fact]
     public async Task 落库后改payload并重算hashSelf但无PSK重签_审计凭sig识破()
     {
-        // #1 连带:hash_self 是无密钥 SHA256,非 PSK 篡改者改 payload 后可重算使①自洽;
-        // 唯 sig(HMAC-PSK)能识破。验证审计补的 sig 校验能抓到"hashSelf 自洽但 sig 不符"。
+        // #1 連帶:hash_self 是無金鑰 SHA256,非 PSK 篡改者改 payload 後可重算使①自洽;
+        // 唯 sig(HMAC-PSK)能識破。驗證稽核補的 sig 檢核能抓到"hashSelf 自洽但 sig 不符"。
         using var app = new TestApp();
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http);
@@ -294,7 +294,7 @@ public class IntegrityTests
         await Ws.ReceiveAsync(ws);
         await SendChainedAsync(ws, 1, "GENESIS");
 
-        // 攻击者(无 PSK):改 payload 为 P',重算 hash_self'(无密钥 SHA256)使锚点自洽;sig 仍绑旧 hash_self。
+        // 攻擊者(無 PSK):改 payload 為 P',重算 hash_self'(無金鑰 SHA256)使錨點自洽;sig 仍綁舊 hash_self。
         var core2 = new AgentEvent
         {
             ExamId = Exam, SeatId = Seat, AgentId = Agent, MachineId = Machine,
@@ -315,7 +315,7 @@ public class IntegrityTests
         Assert.False(rep.GetProperty("ok").GetBoolean());
         JsonElement agent = rep.GetProperty("agents")[0];
         JsonElement mism = agent.GetProperty("hashMismatches");
-        Assert.Equal(1, mism.GetArrayLength());                            // hashSelf 自洽,但 sig 校验失败
+        Assert.Equal(1, mism.GetArrayLength());                            // hashSelf 自洽,但 sig 檢核失敗
         Assert.Contains("sig", mism[0].GetProperty("detail").GetString());
         Assert.Equal(0, agent.GetProperty("continuityBreaks").GetArrayLength());
     }

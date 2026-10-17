@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- 平台无关的采集端核心:传输(WS/HTTP + 握手/续传/重连)、断网缓冲、配置、哈希链封装。
-       刻意为 net8.0(非 -windows),不依赖 WPF/WinForms/System.Drawing,故可被 net8.0 测试直接引用。
-       Windows 专属部分(抓屏 / 信号源)留在 Horus.Agent。 -->
+  <!-- 平台無關的採集端核心:傳輸(WS/HTTP + 握手/續傳/重連)、斷網緩衝、設定、雜湊鏈封裝。
+       刻意為 net8.0(非 -windows),不相依 WPF/WinForms/System.Drawing,故可被 net8.0 測試直接引用。
+       Windows 專屬部分(抓屏 / 信號源)留在 Horus.Agent。 -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>

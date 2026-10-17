@@ -2,7 +2,7 @@ using Horus.Agent.Model;
 
 namespace Horus.Agent.Signals;
 
-/// 信号源统一接口。各源在后台采集,经 Signal 事件吐出 RawSignal。
+/// 信號源統一介面。各源在後台採集,經 Signal 事件吐出 RawSignal。
 public interface ISignalSource : IDisposable
 {
     string Name { get; }

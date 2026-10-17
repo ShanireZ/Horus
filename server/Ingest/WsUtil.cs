@@ -3,12 +3,12 @@ using System.Text;
 
 namespace Horus.Server.Ingest;
 
-/// WebSocket 文本帧收发小工具。一条 JSON 一帧。
+/// WebSocket 文字影格收發小工具。一條 JSON 一影格。
 public static class WsUtil
 {
-    private const int MaxFrameBytes = 1 * 1024 * 1024;   // 单条消息上限 1MB,防无界帧内存耗尽
+    private const int MaxFrameBytes = 1 * 1024 * 1024;   // 單條訊息上限 1MB,防無界影格記憶體耗盡
 
-    /// 接收一整条文本消息(拼接分片)。返回 null 表示对端关闭或超限。
+    /// 接收一整條文字訊息(拼接分片)。回傳 null 表示對端關閉或超限。
     public static async Task<string?> ReceiveTextAsync(WebSocket ws, CancellationToken ct)
     {
         var buf = new byte[16 * 1024];
@@ -22,7 +22,7 @@ public static class WsUtil
 
             if (r.MessageType == WebSocketMessageType.Close) return null;
             ms.Write(buf, 0, r.Count);
-            if (ms.Length > MaxFrameBytes) return null;   // 超限 → 断开
+            if (ms.Length > MaxFrameBytes) return null;   // 超限 → 斷開
             if (r.EndOfMessage) break;
         }
         return Encoding.UTF8.GetString(ms.ToArray());

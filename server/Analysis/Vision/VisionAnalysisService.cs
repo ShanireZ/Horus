@@ -10,12 +10,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Horus.Server.Analysis.Vision;
 
-/// 异步视觉分析后台服务:图入库后入队,后台线程逐张送 IVisionAnalyzer 判定 —— **不占 ingest 热路径**
-/// (视觉调用可能几秒)。判定命中 → 落 ocr_results + 该图标证据 + 引用它的事件抬 server_risk + 入可疑队列。
-/// 未配置分析器(cfg 关)时整链 no-op,采集完全不受影响。
+/// 非同步視覺分析後台服務:圖入庫後入隊,後台執行緒逐張送 IVisionAnalyzer 判定 —— **不佔 ingest 熱路徑**
+/// (視覺呼叫可能幾秒)。判定命中 → 落 ocr_results + 該圖標證據 + 引用它的事件抬 server_risk + 入可疑佇列。
+/// 未設定分析器(cfg 關)時整鏈 no-op,採集完全不受影響。
 ///
-/// **不丢证据**:入队用**原子占位**(uploaded_to_ocr 0→1 抢到才分析)杜绝重复分析/重复入队;队列满 / 服务器重启丢内存队列时,
-/// **补偿重扫**(VisionBackstopMinutes)周期性拾回 uploaded_to_ocr=0 的触发型证据图重新入队 —— 触发型证据不会被静默丢分析。
+/// **不丟證據**:入隊用**原子佔位**(uploaded_to_ocr 0→1 搶到才分析)杜絕重複分析/重複入隊;佇列滿 / 伺服器重新啟動丟記憶體佇列時,
+/// **補償重掃**(VisionBackstopMinutes)週期性拾回 uploaded_to_ocr=0 的觸發型證據圖重新入隊 —— 觸發型證據不會被靜默丟分析。
 public sealed class VisionAnalysisService : BackgroundService
 {
     private sealed record ImgMeta(string Exam, string Seat, string Trigger, string File);
@@ -27,33 +27,33 @@ public sealed class VisionAnalysisService : BackgroundService
     private readonly IVisionAnalyzer? _analyzer;
     private readonly Channel<string> _queue =
         Channel.CreateBounded<string>(new BoundedChannelOptions(2000) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
-    // 在途去重:已入队尚未分析完的 imageId。防 ingest 首送与 backstop 反复把同一张仍在队列里的图重复入队(占满有界队列、
-    // 把新图挤掉)。原子占位(uploaded_to_ocr 0→1)保证不重复**分析**,此集合保证不重复**入队**。
+    // 在途去重:已入隊尚未分析完的 imageId。防 ingest 首送與 backstop 反覆把同一張仍在佇列裡的圖重複入隊(佔滿有界佇列、
+    // 把新圖擠掉)。原子佔位(uploaded_to_ocr 0→1)保證不重複**分析**,此集合保證不重複**入隊**。
     private readonly ConcurrentDictionary<string, byte> _inflight = new();
-    private long _rejected;   // 队列满时被拒的入队数(补偿重扫会拾回);周期性告警
+    private long _rejected;   // 佇列滿時被拒的入隊數(補償重掃會拾回);週期性告警
 
     public VisionAnalysisService(Db db, Storage storage, ServerConfig cfg, IServiceProvider sp, ILogger<VisionAnalysisService> log)
     {
         _db = db; _storage = storage; _cfg = cfg; _log = log;
-        _analyzer = sp.GetService<IVisionAnalyzer>();   // 视觉关时未注册 → null → 整链 no-op
+        _analyzer = sp.GetService<IVisionAnalyzer>();   // 視覺關時未註冊 → null → 整鏈 no-op
     }
 
     public bool Enabled => _analyzer is not null;
 
-    /// 入队待分析图(§5 最小化:只送需要文字/语义判定的图)。视觉关或空 id → no-op。
-    /// 队列满时 TryWrite 返回 false(不阻塞 ingest 热路径):计数告警,由补偿重扫拾回,不静默丢证据。
+    /// 入隊待分析圖(§5 最小化:只送需要文字/語義判定的圖)。視覺關或空 id → no-op。
+    /// 佇列滿時 TryWrite 回傳 false(不阻塞 ingest 熱路徑):計數告警,由補償重掃拾回,不靜默丟證據。
     public void Enqueue(string imageId)
     {
         if (_analyzer is null || string.IsNullOrEmpty(imageId)) return;
-        if (!_inflight.TryAdd(imageId, 0)) return;   // 已在队列/分析中 → 不重复入队
+        if (!_inflight.TryAdd(imageId, 0)) return;   // 已在佇列/分析中 → 不重複入隊
         if (!_queue.Writer.TryWrite(imageId)) { _inflight.TryRemove(imageId, out _); Interlocked.Increment(ref _rejected); }
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         if (_analyzer is null) return;
-        // 性能#1:有限并发。默认 concurrency=1 完全保持原串行语义(不压视觉端点);>1 时一次批量拉取 N 张并行送端点,
-        // 缩短单场大批量等待。各图分析相互独立(原子认领 + 入队去重保证不重复分析/入队),并行不破坏正确性。
+        // 效能#1:有限並行。預設 concurrency=1 完全保持原串行語義(不壓視覺端點);>1 時一次批量拉取 N 張並行送端點,
+        // 縮短單場大批量等待。各圖分析相互獨立(原子認領 + 入隊去重保證不重複分析/入隊),並行不破壞正確性。
         int concurrency = Math.Clamp(_cfg.VisionConcurrency, 1, 8);
         _log.LogInformation("视觉分析已启用 engine={Engine} 阈值={Th} 并发={C}", _analyzer.Engine, _cfg.VisionConfidenceThreshold, concurrency);
         Task backstop = RunBackstopAsync(ct);
@@ -68,21 +68,21 @@ public sealed class VisionAnalysisService : BackgroundService
                 await Task.WhenAll(batch.Select(id => AnalyzeWrappedAsync(id, ct)));
             }
         }
-        catch (OperationCanceledException) { /* 停机 */ }
-        try { await backstop; } catch { /* 停机 */ }
+        catch (OperationCanceledException) { /* 停機 */ }
+        try { await backstop; } catch { /* 停機 */ }
     }
 
-    /// 单图分析包装:统一异常兜底 + 出队释放在途标记(占位仍防重复分析)。
+    /// 單圖分析包裝:統一異常備援 + 出隊釋放在途標記(佔位仍防重複分析)。
     private async Task AnalyzeWrappedAsync(string imageId, CancellationToken ct)
     {
         try { await AnalyzeOneAsync(imageId, ct); }
-        catch (OperationCanceledException) { /* 取消:外层循环将退出 */ }
+        catch (OperationCanceledException) { /* 取消:外層循環將退出 */ }
         catch (Exception ex) { _log.LogError(ex, "视觉分析异常 image={Image}", imageId); }
         finally { _inflight.TryRemove(imageId, out _); }
     }
 
-    /// 补偿重扫:周期性拾回 uploaded_to_ocr=0 的**触发型**证据图(被队列拒收 / 服务器重启丢内存队列的)重新入队。
-    /// 原子占位保证重入队幂等(正在分析的会占位失败,不重复分析)。VisionBackstopMinutes≤0 关闭。
+    /// 補償重掃:週期性拾回 uploaded_to_ocr=0 的**觸發型**證據圖(被佇列拒收 / 伺服器重新啟動丟記憶體佇列的)重新入隊。
+    /// 原子佔位保證重入隊冪等(正在分析的會佔位失敗,不重複分析)。VisionBackstopMinutes≤0 關閉。
     private async Task RunBackstopAsync(CancellationToken ct)
     {
         if (_cfg.VisionBackstopMinutes <= 0) return;
@@ -94,14 +94,14 @@ public sealed class VisionAnalysisService : BackgroundService
                 long dropped = Interlocked.Exchange(ref _rejected, 0);
                 if (dropped > 0) _log.LogWarning("视觉队列曾满,{N} 张图被拒入队(将由补偿重扫拾回)", dropped);
 
-                // trigger 过滤须与 ImageIngest 的入队判据一致:开了基线分析则重扫也纳入基线图(否则被拒/丢队的基线图永不拾回,
-                // _rejected 告警对基线成虚假承诺);默认只重扫触发型证据图(§5 最小化)。
+                // trigger 過濾須與 ImageIngest 的入隊判據一致:開了基線分析則重掃也納入基線圖(否則被拒/丟隊的基線圖永不拾回,
+                // _rejected 告警對基線成虛假承諾);預設只重掃觸發型證據圖(§5 最小化)。
                 string triggerFilter = _cfg.VisionAnalyzeBaseline ? "" : " AND i.trigger LIKE 'event:%'";
                 var ids = _db.Read(conn =>
                 {
                     var list = new List<string>();
-                    // 拾回 analysis_state=0(未终结:临时云失败/被拒队/重启丢队)且 attempts 未超上限的图(闭合 F1)。
-                    // 排除归档中/已归档考试的图(不给归档窗口塞新分析结果 → 避免孤儿 pending)。
+                    // 拾回 analysis_state=0(未終結:臨時雲失敗/被拒隊/重新啟動丟隊)且 attempts 未超上限的圖(閉合 F1)。
+                    // 排除歸檔中/已歸檔考試的圖(不給歸檔視窗塞新分析結果 → 避免孤兒 pending)。
                     using SqliteCommand c = conn.Cmd(
                         @"SELECT i.image_id FROM images i JOIN exams e ON i.exam_id=e.exam_id
                           WHERE i.analysis_state=0 AND i.analysis_attempts<@max" + triggerFilter + @"
@@ -114,22 +114,22 @@ public sealed class VisionAnalysisService : BackgroundService
                 int requeued = 0;
                 foreach (string id in ids)
                 {
-                    if (!_inflight.TryAdd(id, 0)) continue;                 // 仍在队列/分析中 → 不重复入队
+                    if (!_inflight.TryAdd(id, 0)) continue;                 // 仍在佇列/分析中 → 不重複入隊
                     if (_queue.Writer.TryWrite(id)) requeued++;
-                    else { _inflight.TryRemove(id, out _); break; }         // 满了下轮再拾
+                    else { _inflight.TryRemove(id, out _); break; }         // 滿了下輪再拾
                 }
                 if (requeued > 0) _log.LogInformation("视觉补偿重扫:拾回 {N} 张未分析触发型证据图", requeued);
             }
         }
-        catch (OperationCanceledException) { /* 停机 */ }
+        catch (OperationCanceledException) { /* 停機 */ }
     }
 
     private async Task AnalyzeOneAsync(string imageId, CancellationToken ct)
     {
-        // **原子认领**:取元数据 → 查考试未封存 → UPDATE analysis_attempts+1 抢到(rowcount=1·attempts<上限·未终结)才分析 —— 同一写锁 body 内,
-        // 杜绝"读→分析→写"跨 await 的 TOCTOU(重复分析 / 重复入可疑队列),并对归档中/已归档考试短路(不塞孤儿分析)。
-        // **认领不置 uploaded_to_ocr**(那是"真出网"隐私审计,仅 SendsOffNetwork 分析器真送出才置)——闩锁改用 analysis_state/attempts,
-        // 使临时云失败(v=null 不终结)可由补偿重扫按 attempts<上限 重试,不再永久漏析(闭合 F1/F2)。
+        // **原子認領**:取中繼資料 → 查考試未封存 → UPDATE analysis_attempts+1 搶到(rowcount=1·attempts<上限·未終結)才分析 —— 同一寫鎖 body 內,
+        // 杜絕"讀→分析→寫"跨 await 的 TOCTOU(重複分析 / 重複入可疑佇列),並對歸檔中/已歸檔考試短路(不塞孤兒分析)。
+        // **認領不置 uploaded_to_ocr**(那是"真出網"隱私稽核,僅 SendsOffNetwork 分析器真送出才置)——閂鎖改用 analysis_state/attempts,
+        // 使臨時雲失敗(v=null 不終結)可由補償重掃按 attempts<上限 重試,不再永久漏析(閉合 F1/F2)。
         ImgMeta? meta = _db.Write<ImgMeta?>(conn =>
         {
             ImgMeta? m = null;
@@ -141,25 +141,25 @@ public sealed class VisionAnalysisService : BackgroundService
             using SqliteCommand claim = conn.Cmd(
                 "UPDATE images SET analysis_attempts=analysis_attempts+1 WHERE image_id=@id AND analysis_state=0 AND analysis_attempts<@max",
                 ("@id", imageId), ("@max", _cfg.VisionMaxAttempts));
-            return claim.ExecuteNonQuery() > 0 ? m : null;   // 抢到才分析;抢不到=已终结/占用/超上限
+            return claim.ExecuteNonQuery() > 0 ? m : null;   // 搶到才分析;搶不到=已終結/佔用/超上限
         });
         if (meta is null) return;
 
         string? full = _storage.Resolve(meta.File);
-        if (full is null || !File.Exists(full)) { MarkTerminal(imageId); return; }   // 文件已归档/清理:确定态 → 终结,不重扫
+        if (full is null || !File.Exists(full)) { MarkTerminal(imageId); return; }   // 檔案已歸檔/清理:確定態 → 終結,不重掃
         byte[] original = await File.ReadAllBytesAsync(full, ct);
 
-        // §5 送云前降采样 + 剥离元数据,只送派生字节(原图字节只读、永不出网)。
-        // 联网分析器(SendsOffNetwork=true):无法安全派生(解码失败)→ Prepare 返 null → 终结跳过(确定态·重扫也解不开),绝不泄未剥元数据的原图。
+        // §5 送雲前降取樣 + 剝離中繼資料,只送派生位元組(原圖位元組唯讀、永不出網)。
+        // 聯網分析器(SendsOffNetwork=true):無法安全派生(解碼失敗)→ Prepare 返 null → 終結跳過(確定態·重掃也解不開),絕不洩未剝中繼資料的原圖。
         byte[]? derived = VisionImagePrep.Prepare(original, _cfg, _analyzer!.SendsOffNetwork);
         if (derived is null)
         {
             _log.LogWarning("送云图无法安全派生(解码失败),跳过分析以免泄原图 image={Image}", imageId);
-            MarkTerminal(imageId);   // 派生失败是确定态(坏图每次都解不开)→ 终结,免补偿重扫死循环
+            MarkTerminal(imageId);   // 派生失敗是確定態(壞圖每次都解不開)→ 終結,免補償重掃死循環
             return;
         }
 
-        // 隐私审计:仅**联网分析器**在真正送出字节前置 uploaded_to_ocr=1(mock/本地不出网恒 0,不再撒谎)。
+        // 隱私稽核:僅**聯網分析器**在真正送出位元組前置 uploaded_to_ocr=1(mock/本機不出網恆 0,不再撒謊)。
         if (_analyzer!.SendsOffNetwork)
             _db.Write(conn => { using SqliteCommand u = conn.Cmd(
                 "UPDATE images SET uploaded_to_ocr=1 WHERE image_id=@id", ("@id", imageId)); u.ExecuteNonQuery(); });
@@ -168,9 +168,9 @@ public sealed class VisionAnalysisService : BackgroundService
             derived, new VisionContext(meta.Exam, meta.Seat, imageId, meta.Trigger), ct);
         if (v is null)
         {
-            // 临时失败(超时/5xx/网络/空 content/解析失败):未达上限**不终结**(analysis_state 保持 0)→ 补偿重扫按 attempts<上限 重试(闭合 F1)。
-            // 已达上限:置终态(state=1)放弃 —— 否则永久卡 state=0 僵尸态(claim/backstop 都按 attempts<上限 过滤,既不重试也不终结)。
-            // 与确定态失败一致:终态但无 ocr_results 行 → 看板/审计可据"state=1 且无 ocr_results"区分"放弃"与"已析干净"。
+            // 臨時失敗(超時/5xx/網路/空 content/解析失敗):未達上限**不終結**(analysis_state 保持 0)→ 補償重掃按 attempts<上限 重試(閉合 F1)。
+            // 已達上限:置終態(state=1)放棄 —— 否則永久卡 state=0 殭屍態(claim/backstop 都按 attempts<上限 過濾,既不重試也不終結)。
+            // 與確定態失敗一致:終態但無 ocr_results 行 → 看板/稽核可據"state=1 且無 ocr_results"區分"放棄"與"已析乾淨"。
             int abandoned = _db.Write(conn =>
             {
                 using SqliteCommand u = conn.Cmd(
@@ -188,14 +188,14 @@ public sealed class VisionAnalysisService : BackgroundService
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         _db.Write(conn =>
         {
-            // 分析期间(await 云调用)考试可能已进入归档:此刻图行可能已被删,写结果会 FK 失败 / 造孤儿 pending → 短路(不终结,归档已接管)。
+            // 分析期間(await 雲呼叫)考試可能已進入歸檔:此刻圖行可能已被刪,寫結果會 FK 失敗 / 造孤兒 pending → 短路(不終結,歸檔已接管)。
             if (conn.IsExamSealed(meta.Exam)) return;
 
-            // 得到判定 → 终结(成功态,不再重扫)。
+            // 得到判定 → 終結(成功態,不再重掃)。
             using (SqliteCommand fin = conn.Cmd("UPDATE images SET analysis_state=1 WHERE image_id=@id", ("@id", imageId)))
                 fin.ExecuteNonQuery();
 
-            // 落 ocr_results(engine/text/hits/confidence);同图幂等
+            // 落 ocr_results(engine/text/hits/confidence);同圖冪等
             using (SqliteCommand ins = conn.Cmd(
                 @"INSERT INTO ocr_results (image_id,engine,text,hits,confidence,created_at)
                   VALUES (@id,@eng,@txt,@hits,@conf,@ts) ON CONFLICT(image_id) DO NOTHING",
@@ -205,7 +205,7 @@ public sealed class VisionAnalysisService : BackgroundService
 
             if (!v.Suspicious || v.Confidence < _cfg.VisionConfidenceThreshold) return;
 
-            // 命中 → 该图标证据;引用它的触发型事件抬 server_risk(与元数据信号取 max);入可疑队列
+            // 命中 → 該圖標證據;引用它的觸發型事件抬 server_risk(與中繼資料信號取 max);入可疑佇列
             using (SqliteCommand ev = conn.Cmd("UPDATE images SET is_evidence=1 WHERE image_id=@id", ("@id", imageId)))
                 ev.ExecuteNonQuery();
 
@@ -221,8 +221,8 @@ public sealed class VisionAnalysisService : BackgroundService
                     ("@c", v.Confidence), ("@eid", eventId.Value)))
                     br.ExecuteNonQuery();
 
-            // F4 去重:若该事件已有 pending 队列项(ingest 期元数据信号入的),不再另插一条视觉重复项——
-            // 而是把视觉证据并入该行 note 并把 score 抬到 max(避免同一事同图两条 pending、人工裁决两次、看板计数翻倍)。
+            // F4 去重:若該事件已有 pending 佇列項(ingest 期中繼資料信號入的),不再另插一條視覺重複項——
+            // 而是把視覺證據併入該行 note 並把 score 抬到 max(避免同一事同圖兩條 pending、人工裁決兩次、看板計數翻倍)。
             if (eventId is not null)
             {
                 long? existing = null;
@@ -239,7 +239,7 @@ public sealed class VisionAnalysisService : BackgroundService
                         @"UPDATE suspicious_queue SET score=MAX(score,@sc), note=COALESCE(note,'')||@vn WHERE id=@id",
                         ("@sc", v.Confidence), ("@vn", " | vision:" + v.Evidence), ("@id", existing.Value));
                     up.ExecuteNonQuery();
-                    return;   // 已合并进既有 pending,不另插
+                    return;   // 已合併進既有 pending,不另插
                 }
             }
 
@@ -255,7 +255,7 @@ public sealed class VisionAnalysisService : BackgroundService
         });
     }
 
-    /// 把图标为已终结(analysis_state=1):确定态失败(文件缺失 / 派生失败)不由补偿重扫重试。
+    /// 把圖標為已終結(analysis_state=1):確定態失敗(檔案缺失 / 派生失敗)不由補償重掃重試。
     private void MarkTerminal(string imageId)
         => _db.Write(conn => { using SqliteCommand c = conn.Cmd(
             "UPDATE images SET analysis_state=1 WHERE image_id=@id", ("@id", imageId)); c.ExecuteNonQuery(); });

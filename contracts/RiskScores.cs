@@ -1,39 +1,39 @@
 namespace Horus.Contracts;
 
-/// 风险分常量(集中定义,Agent 自报与服务器复判共用同一份,避免两路"真相来源"漂移 · 质量#2)。
+/// 風險分常數(集中定義,Agent 自報與伺服器復判共用同一份,避免兩路"真相來源"漂移 · 品質#2)。
 ///
-/// 值即 0–100 风险分。系统只初筛、人工裁决(架构铁律 §3),故取值偏「宁高勿低」——
-/// 高分进可疑队列交人工复核,低分仅作软信号;漏报(放走作弊)比误报(多一次人工复核)代价更高。
+/// 值即 0–100 風險分。系統只初篩、人工裁決(架構鐵律 §3),故取值偏「寧高勿低」——
+/// 高分進可疑佇列交人工複核,低分僅作軟信號;漏報(放走作弊)比誤報(多一次人工複核)代價更高。
 ///
-/// Agent 端自报分与服务器 <c>RiskModel.Derive</c> 复判分都引用此处,任一处调分只需改这一份。
+/// Agent 端自報分與伺服器 <c>RiskModel.Derive</c> 復判分都引用此處,任一處調分只需改這一份。
 public static class RiskScores
 {
-    // ---- 浏览器 URL ----
-    public const int BrowserUrlAi = 80;            // 命中 AI 站黑名单(服务器独立复判)
-    public const int BrowserUrlSearch = 70;        // 命中搜索引擎黑名单
-    public const int BrowserUrlNonWhitelist = 80;  // 非白名单站(无 AI/搜索标签,但确非白名单)
-    public const int BrowserUrlUnreadable = 40;    // 地址栏读不到 → 降级:强制抓图交人工看
+    // ---- 瀏覽器 URL ----
+    public const int BrowserUrlAi = 80;            // 命中 AI 站黑名單(伺服器獨立復判)
+    public const int BrowserUrlSearch = 70;        // 命中搜索引擎黑名單
+    public const int BrowserUrlNonWhitelist = 80;  // 非白名單站(無 AI/搜索標籤,但確非白名單)
+    public const int BrowserUrlUnreadable = 40;    // 位址欄讀不到 → 降級:強制抓圖交人工看
 
-    // ---- 进程 / 远控 ----
-    public const int RemoteTool = 70;              // 远控工具进程(teamviewer/anydesk/…)
-    public const int NonWhitelistProc = 70;        // 非白名单进程
+    // ---- 處理程序 / 遠控 ----
+    public const int RemoteTool = 70;              // 遠控工具處理程序(teamviewer/anydesk/…)
+    public const int NonWhitelistProc = 70;        // 非白名單處理程序
 
-    // ---- 剪贴板 / 粘贴 ----
-    public const int LargePaste = 60;              // 大段粘贴
+    // ---- 剪貼板 / 粘貼 ----
+    public const int LargePaste = 60;              // 大段粘貼
 
-    // ---- 设备 ----
-    public const int Usb = 50;                     // USB 设备接入
+    // ---- 設備 ----
+    public const int Usb = 50;                     // USB 設備接入
 
-    // ---- 窗口行为 ----
-    public const int AltTabBurst = 40;             // 频繁 Alt+Tab
+    // ---- 視窗行為 ----
+    public const int AltTabBurst = 40;             // 頻繁 Alt+Tab
 
-    // ---- M5 采集端硬化健康信号 ----
-    public const int ScreenObscured = 60;          // 屏幕遮挡 / 黑帧
-    public const int CapabilityDegraded = 55;      // 采集能力降级(非管理员 / 信号源启动失败)
-    public const int WatchdogRestart = 55;         // 采集进程异常重启(规避取证)
+    // ---- M5 採集端硬化健康信號 ----
+    public const int ScreenObscured = 60;          // 螢幕遮擋 / 黑影格
+    public const int CapabilityDegraded = 55;      // 採集能力降級(非管理員 / 信號源啟動失敗)
+    public const int WatchdogRestart = 55;         // 採集處理程序異常重新啟動(規避取證)
 
-    // ---- 击键(发自判题后端,服务器复判同源)----
-    public const int KeystrokeIdleThenBlock = 70;  // 空窗后突现整段代码
-    public const int KeystrokePaste = 60;          // 粘贴
-    public const int KeystrokeBurst = 55;          // 超人输入速度
+    // ---- 擊鍵(發自判題後端,伺服器復判同源)----
+    public const int KeystrokeIdleThenBlock = 70;  // 空窗後突現整段程式碼
+    public const int KeystrokePaste = 60;          // 粘貼
+    public const int KeystrokeBurst = 55;          // 超人輸入速度
 }

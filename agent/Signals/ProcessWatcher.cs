@@ -5,16 +5,16 @@ using Horus.Contracts;
 
 namespace Horus.Agent.Signals;
 
-/// 进程启动/退出(WMI __InstanceCreation/DeletionEvent,事件驱动·无轮询)。
-/// 非白名单进程启动 → 高风险 + 触发抓图。
-/// 事件驱动已满足"低延迟"意图;ETW(Microsoft.Diagnostics.Tracing.TraceEvent)可作为未来更低延迟/更细事件的备选,
-/// 但需引入原生依赖且仍受"CommandLine 需管理员权限才非空"限制,故保持托管的 WMI 事件监听实现。
+/// 處理程序啟動/退出(WMI __InstanceCreation/DeletionEvent,事件驅動·無輪詢)。
+/// 非白名單處理程序啟動 → 高風險 + 觸發抓圖。
+/// 事件驅動已滿足"低延遲"意圖;ETW(Microsoft.Diagnostics.Tracing.TraceEvent)可作為未來更低延遲/更細事件的備選,
+/// 但需引入原生相依且仍受"CommandLine 需管理員權限才非空"限制,故保持託管的 WMI 事件監聽實作。
 public sealed class ProcessWatcher : ISignalSource
 {
     public string Name => "process-watcher";
     public event Action<RawSignal>? Signal;
 
-    private readonly LiveConfig _live;                 // 进程白名单可热更新
+    private readonly LiveConfig _live;                 // 處理程序白名單可熱更新
     private ManagementEventWatcher? _start, _stop;
 
     public ProcessWatcher(LiveConfig live) => _live = live;

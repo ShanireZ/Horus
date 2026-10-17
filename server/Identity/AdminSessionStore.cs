@@ -4,17 +4,17 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Identity;
 
-/// M4·RBAC:监考员看板**管理会话**(wentian dashboard OIDC 登录后派发·取代静态 adminToken)。
-/// 与采集会话 <see cref="HorusSession"/> 相互独立:此会话不绑 exam/seat/agent、无 k_sess,只承载"某长老已认证进管理端"。
-/// ★ 建会话的前提是**身份中心已在授权阶段放行**(平台 `horus-admin`,贝塔通 P83) —— 换得到 code 就是监考员。
-/// gate 校验此表(未过期)→ 放行 /api/*。见 docs/m4-identity-oidc.md §10.3。
-/// ★ 此前还存 user_type 与六项富画像(wentian `horus_profile`),已随贝塔通 P81 移除。
+/// M4·RBAC:監考員看板**管理工作階段**(wentian dashboard OIDC 登入後派發·取代靜態 adminToken)。
+/// 與採集工作階段 <see cref="HorusSession"/> 相互獨立:此工作階段不綁 exam/seat/agent、無 k_sess,只承載"某長老已認證進管理端"。
+/// ★ 建工作階段的前提是**身分中心已在授權階段放行**(平台 `horus-admin`,貝塔通 P83) —— 換得到 code 就是監考員。
+/// gate 檢核此表(未過期)→ 放行 /api/*。見 docs/m4-identity-oidc.md §10.3。
+/// ★ 此前還存 user_type 與六項富畫像(wentian `horus_profile`),已隨貝塔通 P81 移除。
 public sealed record AdminSession(
     string SessionId, string Sub, string Name, double IssuedAt, double ExpiresAt);
 
 public sealed class AdminSessionStore(Db db, ServerConfig cfg)
 {
-    /// 建管理会话并落库。两个心跳时间戳以 `now` 起步(理由同采集会话)。
+    /// 建管理工作階段並寫入資料庫。兩個心跳時間戳以 `now` 起步(理由同採集工作階段)。
     public AdminSession Create(OidcClaims claims, double now, int sessionMinutes)
     {
         string sessionId = "asess_" + Guid.NewGuid().ToString("N");
@@ -31,12 +31,12 @@ public sealed class AdminSessionStore(Db db, ServerConfig cfg)
         return new AdminSession(sessionId, claims.Sub, claims.Name, now, expiresAt);
     }
 
-    /// 看板心跳:续「心跳」那道门;★ **只有 `active: true` 才额外续 idle**。
-    /// 节流与「按字段分开」的落法与采集面完全一致,见 <see cref="SessionStore.Heartbeat"/>。
+    /// 看板心跳:續「心跳」那道門;★ **只有 `active: true` 才額外續 idle**。
+    /// 節流與「按欄位分開」的落法與採集面完全一致,見 <see cref="SessionStore.Heartbeat"/>。
     ///
-    /// ★★ **这是 `last_seen_at` 在管理面的唯一写入口**。看板是持续自动轮询的,
-    ///   任何业务请求若也续 idle,那道门就永远不会到点 —— 监考机上开着看板等于永不登出。
-    ///   admin gate(<c>Program.cs</c>)因此**只读不写**。
+    /// ★★ **這是 `last_seen_at` 在管理面的唯一寫入口**。看板是持續自動輪詢的,
+    ///   任何業務請求若也續 idle,那道門就永遠不會到點 —— 監考機上開著看板等於永不登出。
+    ///   admin gate(<c>Program.cs</c>)因此**唯讀不寫**。
     public bool Heartbeat(string sessionId, bool active, double now)
     {
         if (string.IsNullOrEmpty(sessionId)) return false;
@@ -54,10 +54,10 @@ public sealed class AdminSessionStore(Db db, ServerConfig cfg)
         });
     }
 
-    /// 按 sessionId 取管理会话;不存在或**三道门任一到点**返回 null(gate 据此拒)。
+    /// 按 sessionId 取管理工作階段;不存在或**三道門任一到點**回傳 null(gate 據此拒)。
     public AdminSession? Get(string sessionId, double now) => GetWithGate(sessionId, now).Session;
 
-    /// 同 <see cref="Get"/>,另外告诉调用方是哪一道门拦下的。
+    /// 同 <see cref="Get"/>,另外告訴呼叫方是哪一道門攔下的。
     public (AdminSession? Session, SessionGate Gate) GetWithGate(string sessionId, double now)
     {
         if (string.IsNullOrEmpty(sessionId)) return (null, SessionGate.Ok);
@@ -79,9 +79,9 @@ public sealed class AdminSessionStore(Db db, ServerConfig cfg)
         });
     }
 
-    /// 按 `sub` 吊销该人的全部管理会话(贝塔通撤权通知·rp-contract)。返回吊销条数。
-    /// ★ `reason` 只用来**留一句给用户的话**(见 <see cref="RevocationNotices"/>),
-    ///   **绝不参与「要不要清」的判断** —— 四种 reason 处置完全相同,认不出的新值也照清。
+    /// 按 `sub` 吊銷該人的全部管理工作階段(貝塔通撤權通知·rp-contract)。回傳吊銷條數。
+    /// ★ `reason` 只用來**留一句給使用者的話**(見 <see cref="RevocationNotices"/>),
+    ///   **絕不參與「要不要清」的判斷** —— 四種 reason 處置完全相同,認不出的新值也照清。
     public int RevokeBySub(string sub, string reason, double now)
         => db.Write(conn =>
         {
@@ -96,7 +96,7 @@ public sealed class AdminSessionStore(Db db, ServerConfig cfg)
             return n;
         });
 
-    /// 登出:删会话(幂等)。
+    /// 登出:刪工作階段(冪等)。
     public void Delete(string sessionId)
     {
         if (string.IsNullOrEmpty(sessionId)) return;

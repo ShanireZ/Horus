@@ -7,10 +7,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Horus.Server.Identity;
 
-/// M4·RBAC·S8:监考员看板 **OIDC 登录**(wentian dashboard web client·标准服务器端授权码 + PKCE 流)。
-/// 与采集面 <see cref="OidcExchange"/> 的差异:用 dashboard client(aud 独立、**归属 `horus-admin` 平台**)、建 <see cref="AdminSession"/>(无 ECDH/无 exam-seat 绑定)。
-/// ★ 准入不再由 claim 判据决定,而由身份中心的平台开关决定(贝塔通 P83),见 <see cref="CompleteAsync"/> 里的说明。
-/// 拓扑 R5:回调走 https(远端监考工作站可达),client_secret 只在服务器。见 docs/m4-identity-oidc.md §10.3。
+/// M4·RBAC·S8:監考員看板 **OIDC 登入**(wentian dashboard web client·標準伺服器端授權碼 + PKCE 流)。
+/// 與採集面 <see cref="OidcExchange"/> 的差異:用 dashboard client(aud 獨立、**歸屬 `horus-admin` 平台**)、建 <see cref="AdminSession"/>(無 ECDH/無 exam-seat 綁定)。
+/// ★ 存取資格不再由 claim 判據決定,而由身分中心的平台開關決定(貝塔通 P83),見 <see cref="CompleteAsync"/> 裡的說明。
+/// 拓撲 R5:回呼走 https(遠端監考工作站可達),client_secret 只在伺服器。見 docs/m4-identity-oidc.md §10.3。
 public sealed class AdminOidcFlow
 {
     private readonly HttpClient _http;
@@ -20,7 +20,7 @@ public sealed class AdminOidcFlow
     private readonly string _clientSecret;
     private readonly ILogger<AdminOidcFlow> _log;
 
-    // 登录 pending:state → (PKCE verifier, nonce, 创建时刻)。单次使用 + 10min 过期,防重放/CSRF。
+    // 登入 pending:state → (PKCE verifier, nonce, 建立時刻)。單次使用 + 10min 過期,防重放/CSRF。
     private readonly ConcurrentDictionary<string, Pending> _pending = new();
     private const double PendingTtlSeconds = 600;
 
@@ -32,7 +32,7 @@ public sealed class AdminOidcFlow
         _http = http; _validator = dashboardValidator; _sessions = sessions; _cfg = cfg; _clientSecret = clientSecret; _log = log;
     }
 
-    /// 起登录:生成 state+nonce+PKCE,存 pending,返回要重定向到的 wentian 授权 URL。
+    /// 起登入:生成 state+nonce+PKCE,存 pending,回傳要重定向到的 wentian 授權 URL。
     public string BeginLogin(double now)
     {
         Prune(now);
@@ -47,8 +47,8 @@ public sealed class AdminOidcFlow
             ["client_id"] = _cfg.OidcDashboardClientId!,
             ["redirect_uri"] = _cfg.OidcDashboardRedirectUri!,
             ["response_type"] = "code",
-            // ★ P81:只要 openid + profile(真实姓名)。**不要请求 `horus_profile`** —— 那是 wentian 的自定义 scope,
-            //   贝塔通不登记它;请求了会被裁掉,而「请求成功但 claims 是空的」正是最难查的形态。
+            // ★ P81:只要 openid + profile(真實姓名)。**不要請求 `horus_profile`** —— 那是 wentian 的自訂 scope,
+            //   貝塔通不登記它;請求了會被裁掉,而「請求成功但 claims 是空的」正是最難查的形態。
             ["scope"] = "openid profile",
             ["code_challenge"] = challenge,
             ["code_challenge_method"] = "S256",
@@ -61,17 +61,17 @@ public sealed class AdminOidcFlow
 
     public sealed record Result(bool Ok, string? Error, AdminSession? Session);
 
-    /// 完成登录:校验 state → 换 token(dashboard secret + PKCE)→ 验 id_token(aud=dashboard·nonce)→ 建管理会话。
-    /// ★ 「是不是监考员」由身份中心在**授权阶段**回答(平台 `horus-admin`),走到这里就说明已经是了。
+    /// 完成登入:檢核 state → 換 token(dashboard secret + PKCE)→ 驗 id_token(aud=dashboard·nonce)→ 建管理工作階段。
+    /// ★ 「是不是監考員」由身分中心在**授權階段**回答(平台 `horus-admin`),走到這裡就說明已經是了。
     public async Task<Result> CompleteAsync(string code, string state, double now, CancellationToken ct)
     {
         Prune(now);
         if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state)) return new Result(false, "missing_code_or_state", null);
-        if (!_pending.TryRemove(state, out Pending p)) return new Result(false, "unknown_state", null);   // 单次使用·防重放/CSRF
+        if (!_pending.TryRemove(state, out Pending p)) return new Result(false, "unknown_state", null);   // 單次使用·防重放/CSRF
         if (now - p.CreatedAt > PendingTtlSeconds) return new Result(false, "state_expired", null);
 
-        // 换 token(client_secret_post + PKCE code_verifier)。瞬时 TLS/网络失败自动重试(见 OidcHttp)。
-        // ★ access_token 也要留下 —— 真实姓名只在 userinfo 拿得到(见 Userinfo 的类注释)。
+        // 換 token(client_secret_post + PKCE code_verifier)。瞬時 TLS/網路失敗自動重試(見 OidcHttp)。
+        // ★ access_token 也要留下 —— 真實姓名只在 userinfo 拿得到(見 Userinfo 的類註解)。
         string? idToken;
         string? accessToken;
         try
@@ -103,30 +103,30 @@ public sealed class AdminOidcFlow
         if (string.IsNullOrEmpty(idToken)) return new Result(false, "no_id_token", null);
         if (string.IsNullOrEmpty(accessToken)) return new Result(false, "no_access_token", null);
 
-        // 离线验签(dashboard aud·nonce)→ 只得到 sub
+        // 離線驗籤(dashboard aud·nonce)→ 只得到 sub
         OidcSubject subject;
         try { subject = _validator.Validate(idToken!, p.Nonce, now); }
         catch (OidcValidationException ex) { _log.LogWarning("监考员 id_token 验证失败:{Msg}", ex.Message); return new Result(false, "invalid_id_token", null); }
 
-        // 取 userinfo 补齐真实姓名。★ 贝塔通的 id_token 里没有它 —— 少了这一步,看板与取证的
-        //   「监考员是谁」会恒为空,而登录本身照常成功(见 Userinfo 的类注释)。
+        // 取 userinfo 補齊真實姓名。★ 貝塔通的 id_token 裡沒有它 —— 少了這一步,看板與取證的
+        //   「監考員是誰」會恆為空,而登入本身照常成功(見 Userinfo 的類註解)。
         OidcClaims claims;
         try { claims = await Userinfo.FetchAsync(_http, _cfg.OidcUserinfoEndpoint!, accessToken!, subject, _log, ct); }
         catch (OidcValidationException ex) { _log.LogWarning("监考员 userinfo 获取失败:{Msg}", ex.Message); return new Result(false, "userinfo_failed", null); }
 
-        // ★★ **准入判据已上移到身份中心**(贝塔通 P83)。
+        // ★★ **存取資格判據已上移到身分中心**(貝塔通 P83)。
         //
-        // 此前这里判 `claims.UserType == "elder"`,而那个 claim 来自 wentian 的自定义 scope
-        // `horus_profile` —— 贝塔通 P81 停发它之后,那条判据就不存在了。
+        // 此前這裡判 `claims.UserType == "elder"`,而那個 claim 來自 wentian 的自訂 scope
+        // `horus_profile` —— 貝塔通 P81 停發它之後,那條判據就不存在了。
         //
-        // 现在:看板客户端 `horus-dashboard` 归属平台 **`horus-admin`**,采集端 `horus-client`
-        // 归属平台 `horus`。**没有 `horus-admin` 权限的人在贝塔通的授权阶段就被拒**
-        // (其 §3.2:未开通平台权限的账号在授权阶段拒,不是登录后再拒),因此**根本换不到 code**,
-        // 走不到这一行。判据只有一处、在身份中心,这正是把身份抽离出去的本意。
+        // 現在:看板用戶端 `horus-dashboard` 歸屬平台 **`horus-admin`**,採集端 `horus-client`
+        // 歸屬平台 `horus`。**沒有 `horus-admin` 權限的人在貝塔通的授權階段就被拒**
+        // (其 §3.2:未開通平台權限的帳號在授權階段拒,不是登入後再拒),因此**根本換不到 code**,
+        // 走不到這一行。判據只有一處、在身分中心,這正是把身分抽離出去的本意。
         //
-        // ★ **这条改动与 IdP 侧的平台拆分是一个原子事实**:若把 IdP 换回「采集端与看板同属一个
-        //   平台」的形态(如旧 wentian),这里就没有任何东西拦着考生进看板 —— 考生为了跑采集端
-        //   本来就有那个平台的权限。**换 IdP 前先确认它按平台把关。**
+        // ★ **這條改動與 IdP 側的平台拆分是一個原子事實**:若把 IdP 換回「採集端與看板同屬一個
+        //   平台」的形態(如舊 wentian),這裡就沒有任何東西攔著考生進看板 —— 考生為了跑採集端
+        //   本來就有那個平台的權限。**換 IdP 前先確認它按平台把關。**
         AdminSession s = _sessions.Create(claims, now, _cfg.AdminSessionMinutes);
         _log.LogInformation("监考员登录成功 sub={Sub}", claims.Sub);
         return new Result(true, null, s);

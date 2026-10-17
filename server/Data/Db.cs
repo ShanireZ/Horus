@@ -3,29 +3,29 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Data;
 
-/// SQLite 访问层:**单写连接(写锁串行) + 只读连接池(WAL 并发读)**。
+/// SQLite 訪問層:**單寫連接(寫鎖串行) + 唯讀連接池(WAL 並行讀)**。
 ///
-/// 写:所有落库经 <see cref="Write"/> 在写锁内串行(单写者,杜绝 "database is locked" 写-写冲突)。
-/// 读:纯只读查询经 <see cref="Read"/> 从**只读连接池**租借一条连接——WAL 下读不阻塞写、写不阻塞读,且
-///     **读与读之间也并发**(池大小内):看板 6 个 GET + 完整性审计(全考试事件 SHA256)+ 归档 copy 读**互不串行**,
-///     避免一个慢只读操作阻塞所有交互看板轮询(闭合 architecture §10.2「看板走独立只读连接」的读-读串行残留)。
+/// 寫:所有寫入資料庫經 <see cref="Write"/> 在寫鎖內串行(單寫者,杜絕 "database is locked" 寫-寫衝突)。
+/// 讀:純唯讀查詢經 <see cref="Read"/> 從**唯讀連接池**租借一條連接——WAL 下讀不阻塞寫、寫不阻塞讀,且
+///     **讀與讀之間也並行**(池大小內):看板 6 個 GET + 完整性稽核(全考試事件 SHA256)+ 歸檔 copy 讀**互不串行**,
+///     避免一個慢唯讀操作阻塞所有交互看板輪詢(閉合 architecture §10.2「看板走獨立唯讀連接」的讀-讀串行殘留)。
 ///
-/// **:memory: 例外**:内存库每连接独立(且不支持 WAL),无法开第二条连接看到同一份数据,故内存模式下
-///     无只读池,Read 回退写连接 + 写锁(语义与旧版单连接一致,测试不受影响)。图片原图存文件系统,不入 DB(见 Storage)。
+/// **:memory: 例外**:記憶體庫每連接獨立(且不支援 WAL),無法開第二條連接看到同一份資料,故記憶體模式下
+///     無唯讀池,Read 退回寫連接 + 寫鎖(語義與舊版單連接一致,測試不受影響)。圖片原圖存檔案系統,不入 DB(見 Storage)。
 public sealed class Db : IDisposable
 {
     private readonly SqliteConnection _write;
     private readonly object _writeGate = new();
-    private readonly SemaphoreSlim? _readSlots;               // 只读并发闸(= 池大小);:memory: 下 null
+    private readonly SemaphoreSlim? _readSlots;               // 唯讀並行閘(= 池大小);:memory: 下 null
     private readonly ConcurrentBag<SqliteConnection>? _readPool;
-    private readonly List<SqliteConnection> _allReads = new();   // 供 Dispose 释放
+    private readonly List<SqliteConnection> _allReads = new();   // 供 Dispose 釋放
 
     public Db(string dataSource, int readPoolSize = 4)
     {
         bool isMemory = dataSource == ":memory:";
 
-        // Pooling=false:连接随 Db 生命周期常驻的单例/池,连接池对其无益;
-        // 且池化会在 Dispose 后仍扣着文件句柄(-wal/-shm 无法释放),妨碍归档 VACUUM / 清理。
+        // Pooling=false:連接隨 Db 生命週期常駐的單例/池,連接池對其無益;
+        // 且池化會在 Dispose 後仍扣著檔案句柄(-wal/-shm 無法釋放),妨礙歸檔 VACUUM / 清理。
         _write = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = dataSource,
@@ -37,7 +37,7 @@ public sealed class Db : IDisposable
 
         if (!isMemory)
         {
-            // 只读连接池:Mode=ReadOnly 从物理上杜绝经此误写;WAL 让每条读已提交快照而不阻塞写者。
+            // 唯讀連接池:Mode=ReadOnly 從物理上杜絕經此誤寫;WAL 讓每條讀已提交快照而不阻塞寫者。
             int n = Math.Clamp(readPoolSize, 1, 16);
             _readSlots = new SemaphoreSlim(n, n);
             _readPool = new ConcurrentBag<SqliteConnection>();
@@ -57,7 +57,7 @@ public sealed class Db : IDisposable
         }
     }
 
-    /// 写(或读改写混合的原子序列):单写连接 + 写锁,单写者串行。
+    /// 寫(或讀改寫混合的原子序列):單寫連接 + 寫鎖,單寫者串行。
     public T Write<T>(Func<SqliteConnection, T> body)
     {
         lock (_writeGate) return body(_write);
@@ -68,16 +68,16 @@ public sealed class Db : IDisposable
         lock (_writeGate) body(_write);
     }
 
-    /// 纯只读查询:从只读连接池租借一条(WAL 并发读,不占写锁,读-读并发)。:memory: 回退写连接 + 写锁。
-    /// 注意:仅用于**无副作用**的 SELECT;任何写/读改写序列必须走 <see cref="Write"/> 以保原子性。
+    /// 純唯讀查詢:從唯讀連接池租借一條(WAL 並行讀,不佔寫鎖,讀-讀並行)。:memory: 退回寫連接 + 寫鎖。
+    /// 注意:僅用於**無副作用**的 SELECT;任何寫/讀改寫序列必須走 <see cref="Write"/> 以保原子性。
     public T Read<T>(Func<SqliteConnection, T> body)
     {
-        if (_readPool is null) { lock (_writeGate) return body(_write); }   // :memory: 回退
+        if (_readPool is null) { lock (_writeGate) return body(_write); }   // :memory: 退回
         _readSlots!.Wait();
         SqliteConnection? c = null;
         try
         {
-            _readPool.TryTake(out c);   // 闸已保证有空闲连接可取
+            _readPool.TryTake(out c);   // 閘已保證有空閒連接可取
             return body(c!);
         }
         finally
@@ -87,7 +87,7 @@ public sealed class Db : IDisposable
         }
     }
 
-    /// 兼容旧调用点:Locked == Write(既有语义 = 写锁串行)。新代码只读请显式用 Read。
+    /// 相容舊呼叫點:Locked == Write(既有語義 = 寫鎖串行)。新程式碼唯讀請顯式用 Read。
     public T Locked<T>(Func<SqliteConnection, T> body) => Write(body);
     public void Locked(Action<SqliteConnection> body) => Write(body);
 
@@ -106,7 +106,7 @@ public sealed class Db : IDisposable
     }
 }
 
-/// SqliteCommand 参数绑定小工具(null → DBNull)。
+/// SqliteCommand 參數綁定小工具(null → DBNull)。
 public static class DbExtensions
 {
     public static SqliteCommand Cmd(this SqliteConnection conn, string sql, params (string name, object? val)[] ps)
@@ -118,9 +118,9 @@ public static class DbExtensions
         return c;
     }
 
-    /// 该考试是否正在归档 / 已归档(`archiving`/`archived`)——归档窗口内 ingest 应短路,
-    /// 否则"读快照→DELETE WHERE exam_id"之间到达的新数据会被无锚点删掉(闭合 architecture §13.2 late-ingest 竞态)。
-    /// 未建考试(status=null)/active/ended 均放行(不改既有 ingest 行为)。
+    /// 該考試是否正在歸檔 / 已歸檔(`archiving`/`archived`)——歸檔視窗內 ingest 應短路,
+    /// 否則"讀快照→DELETE WHERE exam_id"之間到達的新資料會被無錨點刪掉(閉合 architecture §13.2 late-ingest 競態)。
+    /// 未建考試(status=null)/active/ended 均放行(不改既有 ingest 行為)。
     public static bool IsExamSealed(this SqliteConnection conn, string examId)
     {
         using SqliteCommand c = conn.Cmd("SELECT status FROM exams WHERE exam_id=@e", ("@e", examId));

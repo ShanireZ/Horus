@@ -3,8 +3,8 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// 锁定 canonical / 哈希 / 签名的**逐字节**格式。Agent 与 Server 共用 Horus.Contracts 的这套实现,
-/// 此测试即两端一致性的黄金基准——任何字段顺序 / 命名 / 枚举编码漂移都会被抓到。
+/// 鎖定 canonical / 雜湊 / 簽名的**逐位元組**格式。Agent 與 Server 共用 Horus.Contracts 的這套實作,
+/// 此測試即兩端一致性的黃金基準——任何欄位順序 / 命名 / 枚舉編碼漂移都會被抓到。
 public class CanonicalTests
 {
     private static AgentEvent Sample() => new()
@@ -23,7 +23,7 @@ public class CanonicalTests
             "{\"examId\":\"E1\",\"seatId\":\"A07\",\"agentId\":\"ag-A07\",\"machineId\":\"PC-A07\"," +
             "\"ts\":1750000000.5,\"type\":\"browser_url\"," +
             "\"payload\":{\"process\":\"chrome\",\"url\":\"https://chat.openai.com/\",\"whitelisted\":false}," +
-            "\"risk\":80,\"seq\":1287}";   // evidenceImageId 为 null 被省略
+            "\"risk\":80,\"seq\":1287}";   // evidenceImageId 為 null 被省略
         Assert.Equal(expected, canon);
     }
 
@@ -33,13 +33,13 @@ public class CanonicalTests
         AgentEvent e = Sample();
         string self1 = EventCanonical.HashSelf("GENESIS", e, e.Seq);
         string self2 = EventCanonical.HashSelf("GENESIS", e, e.Seq);
-        Assert.Equal(self1, self2);                 // 确定性
+        Assert.Equal(self1, self2);                 // 確定性
         Assert.Equal(64, self1.Length);             // SHA256 hex
         Assert.Matches("^[0-9a-f]{64}$", self1);
 
         string sig = EventCanonical.Sig(TestApp.Psk, self1, e.Seq);
         Assert.Equal(64, sig.Length);
-        // 服务器式验签:仅凭 hashSelf + seq 复算,不依赖 canonical
+        // 伺服器式驗籤:僅憑 hashSelf + seq 復算,不相依 canonical
         Assert.True(Crypto.FixedTimeEquals(sig, EventCanonical.Sig(TestApp.Psk, self1, e.Seq)));
     }
 
@@ -52,10 +52,10 @@ public class CanonicalTests
         Assert.Matches("^[0-9a-f]{64}$", a);
     }
 
-    // ---- M3 完整性复验:CoreRaw(服务器从原始 wire 字段复算) 必须与 Core(Agent typed 序列化) 逐字节一致 ----
-    // 任何漂移都会让服务器把**合法**事件误判为哈希不符而拒收,故此为硬门禁黄金测试。
+    // ---- M3 完整性複驗:CoreRaw(伺服器從原始 wire 欄位復算) 必須與 Core(Agent typed 序列化) 逐位元組一致 ----
+    // 任何漂移都會讓伺服器把**合法**事件誤判為雜湊不符而拒收,故此為硬門禁黃金測試。
 
-    /// 把一个 AgentEvent 的 payload 用 Json.Wire 序列化,取得服务器侧会收到的原始 payload 文本(GetRawText 等价物)。
+    /// 把一個 AgentEvent 的 payload 用 Json.Wire 序列化,取得伺服器側會收到的原始 payload 文字(GetRawText 等價物)。
     private static string PayloadRaw(AgentEvent e)
         => System.Text.Json.JsonSerializer.Serialize(e.Payload, Json.Wire);
 
@@ -88,7 +88,7 @@ public class CanonicalTests
     [InlineData(SignalType.AltTabBurst, 40)]
     public void CoreRaw_与Core逐字节一致_多类型多payload(SignalType type, int risk)
     {
-        // 含中文(非 ASCII 转义)、整数、布尔、小数 ts、嵌套对象 —— 覆盖编码器与数字格式的对齐面。
+        // 含中文(非 ASCII 轉義)、整數、布爾、小數 ts、嵌套物件 —— 覆蓋編碼器與數字格式的對齊面。
         var e = new AgentEvent
         {
             ExamId = "期末-2026", SeatId = "B12", AgentId = "ag/B12", MachineId = "PC_B12",
@@ -111,14 +111,14 @@ public class CanonicalTests
     {
         AgentEvent e = Sample();
         string hashSelf = EventCanonical.HashSelf("GENESIS", e, e.Seq);
-        // 正确 payload → 复验通过
+        // 正確 payload → 複驗通過
         Assert.True(EventCanonical.VerifyHashSelf(
             "GENESIS", e.ExamId, e.SeatId, e.AgentId, e.MachineId, e.Ts, TypeSnake(e), PayloadRaw(e), e.Risk, e.EvidenceImageId, e.Seq, hashSelf));
-        // 篡改 payload(换 url)但仍用旧 hashSelf → 复验失败
+        // 篡改 payload(換 url)但仍用舊 hashSelf → 複驗失敗
         string tampered = PayloadRaw(e).Replace("chat.openai.com", "judge.exam.cn");
         Assert.False(EventCanonical.VerifyHashSelf(
             "GENESIS", e.ExamId, e.SeatId, e.AgentId, e.MachineId, e.Ts, TypeSnake(e), tampered, e.Risk, e.EvidenceImageId, e.Seq, hashSelf));
-        // 篡改 hashPrev → 复验失败(hashSelf 也绑定前驱)
+        // 篡改 hashPrev → 複驗失敗(hashSelf 也綁定前驅)
         Assert.False(EventCanonical.VerifyHashSelf(
             "OTHER", e.ExamId, e.SeatId, e.AgentId, e.MachineId, e.Ts, TypeSnake(e), PayloadRaw(e), e.Risk, e.EvidenceImageId, e.Seq, hashSelf));
     }

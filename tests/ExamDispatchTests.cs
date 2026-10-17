@@ -11,15 +11,15 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// 考试派发 + 常态待命 + 全场远程登出(owner 决策 2026-07-03)的端到端锁定:
-/// examId 服务端派发(/oidc/active-exam 轮询 + exchange 指派)、seatId 由 OIDC 身份派生、
-/// 考试结束/全场登出以下行帧推给在线 Agent、吊销后的会话不可续用。
+/// 考試派發 + 常態待命 + 全場遠程登出(owner 決策 2026-07-03)的端到端鎖定:
+/// examId 伺服器端派發(/oidc/active-exam 輪詢 + exchange 指派)、seatId 由 OIDC 身分派生、
+/// 考試結束/全場登出以下行影格推給線上 Agent、吊銷後的工作階段不可續用。
 public class ExamDispatchTests
 {
     private static async Task CreateExamAsync(HttpClient http, string examId = "E1")
         => (await http.PostAsJsonAsync("/api/exams", new { examId, name = "T-" + examId })).EnsureSuccessStatusCode();
 
-    /// 直接建一条 OIDC 会话(绕过真 token 交换),返回 (sessionId, kSess)。
+    /// 直接建一條 OIDC 工作階段(繞過真 token 交換),回傳 (sessionId, kSess)。
     private static (string sid, byte[] k) MakeSession(TestApp app, string exam, string seat, string agent)
     {
         var store = app.Services.GetRequiredService<SessionStore>();
@@ -42,7 +42,7 @@ public class ExamDispatchTests
         return await client.ConnectAsync(uri, CancellationToken.None);
     }
 
-    // ================= /oidc/active-exam(待命轮询) =================
+    // ================= /oidc/active-exam(待命輪詢) =================
 
     [Fact]
     public async Task active_exam端点_无考试false_建考试返回id_结束后false()
@@ -67,28 +67,28 @@ public class ExamDispatchTests
     [Fact]
     public async Task 结束已归档考试_被状态守卫拒_不复活伪装ok()
     {
-        // COR-1:end 端点须有状态守卫,绝不把 archived/archiving 复活成 ended
-        // (否则绕过 /integrity 的 applicable:false 保护 → 对已清空的 live 行返回空审计伪装 ok:true)。
+        // COR-1:end 端點須有狀態守衛,絕不把 archived/archiving 復活成 ended
+        // (否則繞過 /integrity 的 applicable:false 保護 → 對已清空的 live 行回傳空稽核偽裝 ok:true)。
         using var app = new TestApp();
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http, "E1");
 
-        // 直接把考试置为已归档态(模拟归档作业已跑完)。
+        // 直接把考試置為已歸檔態(模擬歸檔作業已跑完)。
         var db = app.Services.GetRequiredService<Db>();
         db.Write(conn => { using var c = conn.Cmd("UPDATE exams SET status='archived' WHERE exam_id='E1'"); c.ExecuteNonQuery(); });
 
-        // 对已归档考试 POST /end → 被拒(404),不得复活成 ended。
+        // 對已歸檔考試 POST /end → 被拒(404),不得復活成 ended。
         var resp = await http.PostAsync("/api/exams/E1/end", null);
         Assert.Equal(System.Net.HttpStatusCode.NotFound, resp.StatusCode);
 
         string status = db.Read(conn => { using var c = conn.Cmd("SELECT status FROM exams WHERE exam_id='E1'"); return (string)c.ExecuteScalar()!; });
-        Assert.Equal("archived", status);   // 状态仍为 archived,未被复活
+        Assert.Equal("archived", status);   // 狀態仍為 archived,未被複活
     }
 
     [Fact]
     public async Task 白名单下发后GET回填_返回已存配置()
     {
-        // 看板白名单编辑器:POST 下发 → GET 读回持久化配置以回填抽屉。
+        // 看板白名單編輯器:POST 下發 → GET 讀回持久化設定以回填抽屜。
         using var app = new TestApp();
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http, "E1");
@@ -122,14 +122,14 @@ public class ExamDispatchTests
         using var app = new TestApp();
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http, "EA");
-        await Task.Delay(5);   // created_at 秒级小数,拉开一点;同刻回退 exam_id DESC 也选 EB
+        await Task.Delay(5);   // created_at 秒級小數,拉開一點;同刻退回 exam_id DESC 也選 EB
         await CreateExamAsync(http, "EB");
 
         JsonElement r = await http.GetFromJsonAsync<JsonElement>("/oidc/active-exam");
         Assert.Equal("EB", r.GetProperty("examId").GetString());
     }
 
-    // ================= seat 派生规则 =================
+    // ================= seat 派生規則 =================
 
     [Fact]
     public void SeatFrom_username为权威_空或不安全回退sub()
@@ -138,12 +138,12 @@ public class ExamDispatchTests
 
         Assert.Equal("ye_feng", ExamDispatch.SeatFrom(C("ye_feng")));
         Assert.Equal("sub-1", ExamDispatch.SeatFrom(C("")));                  // 空 username → sub
-        Assert.Equal("sub-1", ExamDispatch.SeatFrom(C("a/b")));               // 路径危险字符 → sub
+        Assert.Equal("sub-1", ExamDispatch.SeatFrom(C("a/b")));               // 路徑危險字元 → sub
         Assert.Equal("sub-1", ExamDispatch.SeatFrom(C("x..y")));              // ".." → sub
-        Assert.Equal("sub-1", ExamDispatch.SeatFrom(C(new string('a', 129)))); // 超长 → sub
+        Assert.Equal("sub-1", ExamDispatch.SeatFrom(C(new string('a', 129)))); // 超長 → sub
     }
 
-    // ================= 结束考试 → 在线推送 / 离线补发 =================
+    // ================= 結束考試 → 線上推送 / 離線補發 =================
 
     [Fact]
     public async Task 结束考试_在线Agent收到exam_ended推送()
@@ -154,7 +154,7 @@ public class ExamDispatchTests
 
         using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
-        await Ws.ReceiveAsync(ws);   // hello_ack(考试 active,无补发帧)
+        await Ws.ReceiveAsync(ws);   // hello_ack(考試 active,無補發影格)
 
         JsonElement resp = await (await http.PostAsync("/api/exams/E1/end", null)).Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(1, resp.GetProperty("notified").GetInt32());
@@ -172,7 +172,7 @@ public class ExamDispatchTests
         await CreateExamAsync(http);
         (await http.PostAsync("/api/exams/E1/end", null)).EnsureSuccessStatusCode();
 
-        // Agent 离线错过推送 → 重连 hello 时补发
+        // Agent 離線錯過推送 → 重連 hello 時補發
         using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         JsonElement ack = await Ws.ReceiveAsync(ws);
@@ -192,14 +192,14 @@ public class ExamDispatchTests
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);   // hello_ack
 
-        // 紧接着发事件,下一帧必须是 ack(而不是误发的 exam_ended)
+        // 緊接著發事件,下一影格必須是 ack(而不是誤發的 exam_ended)
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC", SignalType.WindowFocus,
             new() { ["title"] = "t" }, 0, 1));
         JsonElement frame = await Ws.ReceiveAsync(ws);
         Assert.Equal("ack", frame.GetProperty("type").GetString());
     }
 
-    // ================= 全场远程登出 =================
+    // ================= 全場遠程登出 =================
 
     [Fact]
     public async Task 全场登出_吊销会话_在线收session_revoked_重连401()
@@ -220,7 +220,7 @@ public class ExamDispatchTests
         JsonElement frame = await Ws.ReceiveAsync(ws);
         Assert.Equal("session_revoked", frame.GetProperty("type").GetString());
 
-        // 会话已吊销:DB 查无 + 重连(带旧 session)握手 401
+        // 工作階段已吊銷:DB 查無 + 重連(帶舊 session)握手 401
         var store = app.Services.GetRequiredService<SessionStore>();
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         Assert.Null(store.Get(sid, now));
@@ -245,7 +245,7 @@ public class ExamDispatchTests
         Assert.NotNull(store.Get(sid2, now));
     }
 
-    // ================= 会话探针 /oidc/session =================
+    // ================= 工作階段探針 /oidc/session =================
 
     [Fact]
     public async Task 会话探针_有效返回考试状态_吊销后invalid_无头invalid()
@@ -273,12 +273,12 @@ public class ExamDispatchTests
         (await http.PostAsync("/api/exams/E1/end", null)).EnsureSuccessStatusCode();
         JsonElement afterEnd = await Probe(sid);
         Assert.True(afterEnd.GetProperty("valid").GetBoolean());
-        Assert.Equal("ended", afterEnd.GetProperty("examStatus").GetString());   // Agent 据此排空后停采
+        Assert.Equal("ended", afterEnd.GetProperty("examStatus").GetString());   // Agent 據此排空後停採
 
         (await http.PostAsync("/api/exams/E1/logout", null)).EnsureSuccessStatusCode();
-        Assert.False((await Probe(sid)).GetProperty("valid").GetBoolean());      // 吊销后失效
+        Assert.False((await Probe(sid)).GetProperty("valid").GetBoolean());      // 吊銷後失效
 
-        Assert.False((await Probe(null)).GetProperty("valid").GetBoolean());     // 无凭证探不到任何信息
+        Assert.False((await Probe(null)).GetProperty("valid").GetBoolean());     // 無憑證探不到任何資訊
         Assert.False((await Probe("sess_bogus")).GetProperty("valid").GetBoolean());
     }
 }

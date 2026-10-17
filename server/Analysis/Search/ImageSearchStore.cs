@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Analysis.Search;
 
-/// M3 按图搜图:embedding 存取(普通 BLOB 表)+ 暴力余弦检索(规模小·无需 sqlite-vec)。
+/// M3 按圖搜圖:embedding 存取(普通 BLOB 表)+ 暴力餘弦檢索(規模小·無需 sqlite-vec)。
 public sealed class ImageSearchStore(Db db)
 {
     public void Save(string imageId, float[] vec, double now)
@@ -32,7 +32,7 @@ public sealed class ImageSearchStore(Db db)
         return r.Read() && !r.IsDBNull(0) ? VecMath.FromBytes((byte[])r.GetValue(0)) : null;
     });
 
-    /// 该考试所有已嵌入图(与 images 关联过滤 exam)。
+    /// 該考試所有已嵌入圖(與 images 關聯過濾 exam)。
     public List<(string id, float[] vec)> GetExam(string examId) => db.Read(conn =>
     {
         var list = new List<(string, float[])>();
@@ -44,8 +44,8 @@ public sealed class ImageSearchStore(Db db)
         return list;
     });
 
-    /// 暴力余弦 top-N(排除自身)。返回 (imageId, score) 降序。
-    /// cosineFloor:低于此分的帧视为无关被过滤(默认 0 不过滤);n 会被钳到 [1,100](B1/B2)。
+    /// 暴力餘弦 top-N(排除自身)。回傳 (imageId, score) 降序。
+    /// cosineFloor:低於此分的影格視為無關被過濾(預設 0 不過濾);n 會被鉗到 [1,100](B1/B2)。
     public static List<(string id, double score)> TopN(float[] query, List<(string id, float[] vec)> corpus, int n, string? excludeId, double cosineFloor = 0.0)
         => corpus.Where(c => c.id != excludeId)
                  .Select(c => (c.id, score: VecMath.Cosine(query, c.vec)))

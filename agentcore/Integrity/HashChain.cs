@@ -2,9 +2,9 @@ using Horus.Contracts;
 
 namespace Horus.Agent.Integrity;
 
-/// 事件哈希链的**有状态**封装(维护 _prev)。实际 canonical / 哈希 / 签名逻辑在
-/// Horus.Contracts.EventCanonical,与服务器验签共用同一实现。
-/// 非线程安全:调用方需串行化 Seal(保证链顺序与 seq 一致)。
+/// 事件雜湊鏈的**有狀態**封裝(維護 _prev)。實際 canonical / 雜湊 / 簽名邏輯在
+/// Horus.Contracts.EventCanonical,與伺服器驗籤共用同一實作。
+/// 非執行緒安全:呼叫方需串行化 Seal(保證鏈順序與 seq 一致)。
 public sealed class HashChain
 {
     private readonly byte[] _psk;

@@ -7,22 +7,22 @@ using SixLabors.ImageSharp.Processing;
 
 namespace Horus.Server.Analysis.Search;
 
-/// M3 按图搜图·CLIP 预处理:图像字节 → CHW float 张量(resize+center-crop 到 224² + CLIP 归一化)。
-/// **与嵌入器解耦 → 可单测**(纯像素运算,不碰 ONNX 运行时)。归一化常量取 CLIP ViT-B/32 官方值。
+/// M3 按圖搜圖·CLIP 預處理:圖像位元組 → CHW float 張量(resize+center-crop 到 224² + CLIP 歸一化)。
+/// **與嵌入器解耦 → 可單測**(純像素運算,不碰 ONNX 執行環境)。歸一化常數取 CLIP ViT-B/32 官方值。
 public static class ClipPreprocess
 {
     public const int Size = 224;
     private static readonly float[] Mean = { 0.48145466f, 0.4578275f, 0.40821073f };   // RGB
     private static readonly float[] Std = { 0.26862954f, 0.26130258f, 0.27577711f };
 
-    /// 返回 float[3*224*224](通道优先 CHW)。decode 失败抛(由调用方兜)。
+    /// 回傳 float[3*224*224](通道優先 CHW)。decode 失敗拋(由呼叫方兜)。
     public static float[] ToTensor(byte[] imageBytes)
     {
         using Image<Rgb24> img = Image.Load<Rgb24>(imageBytes);
         img.Mutate(x => x.Resize(new ResizeOptions
         {
             Size = new Size(Size, Size),
-            Mode = ResizeMode.Crop,                     // 填满再中心裁剪 ≈ CLIP 的 Resize+CenterCrop
+            Mode = ResizeMode.Crop,                     // 填滿再中心裁剪 ≈ CLIP 的 Resize+CenterCrop
             Position = AnchorPositionMode.Center,
         }));
         var t = new float[3 * Size * Size];
@@ -46,8 +46,8 @@ public static class ClipPreprocess
     }
 }
 
-/// M3 按图搜图·本地 ONNX CLIP 图像编码器(CPU 推理·无需 GPU·**零出网**)。MiMo 无 embeddings 端点故走本地。
-/// 模型 = CLIP ViT-B/32 图像编码器导出的 ONNX(512 维·部署提供)。输入/输出张量名可配(留空取模型首个)。
+/// M3 按圖搜圖·本機 ONNX CLIP 圖像編碼器(CPU 推理·無需 GPU·**零出網**)。MiMo 無 embeddings 端點故走本機。
+/// 模型 = CLIP ViT-B/32 圖像編碼器匯出的 ONNX(512 維·部署提供)。輸入/輸出張量名可配(留空取模型首個)。
 public sealed class OnnxClipEmbedder : IImageEmbedder, IDisposable
 {
     private readonly InferenceSession _session;
@@ -62,8 +62,8 @@ public sealed class OnnxClipEmbedder : IImageEmbedder, IDisposable
     {
         _session = new InferenceSession(modelPath);
         _inputName = string.IsNullOrEmpty(inputName) ? _session.InputMetadata.Keys.First() : inputName!;
-        // ★输出选择:CLIP vision_model 常有多输出(last_hidden_state + pooler_output);取错=拿到一大坨 patch 序列而非嵌入。
-        //   留空则优先名字含 embed/pool 的输出(image_embeds / pooler_output),再退首个。可用 embedOnnxOutput 显式指定。
+        // ★輸出選擇:CLIP vision_model 常有多輸出(last_hidden_state + pooler_output);取錯=拿到一大坨 patch 序列而非嵌入。
+        //   留空則優先名字含 embed/pool 的輸出(image_embeds / pooler_output),再退首個。可用 embedOnnxOutput 顯式指定。
         _outputName = SelectOutputName(_session.OutputMetadata.Keys, outputName);
         Dim = dim;
         _log = log;
@@ -81,13 +81,13 @@ public sealed class OnnxClipEmbedder : IImageEmbedder, IDisposable
             Tensor<float> t = results.First().AsTensor<float>();
             float[] vec = ExtractEmbedding(t.ToArray(), t.Dimensions.ToArray());
             if (vec.Length == 0) return Task.FromResult<float[]?>(null);
-            VecMath.Normalize(vec);   // 单位化(检索用余弦,规范化无害)
+            VecMath.Normalize(vec);   // 單位化(檢索用餘弦,規範化無害)
             return Task.FromResult<float[]?>(vec);
         }
         catch (Exception ex) { _log.LogWarning(ex, "ONNX CLIP 推理失败 image={N}B", imageBytes.Length); return Task.FromResult<float[]?>(null); }
     }
 
-    /// 选嵌入输出名:显式 override > 名含 "embed"(image_embeds) > 名含 "pool"(pooler_output) > 首个。
+    /// 選嵌入輸出名:顯式 override > 名含 "embed"(image_embeds) > 名含 "pool"(pooler_output) > 首個。
     internal static string SelectOutputName(IEnumerable<string> outputs, string? overrideName)
     {
         if (!string.IsNullOrEmpty(overrideName)) return overrideName!;
@@ -97,8 +97,8 @@ public sealed class OnnxClipEmbedder : IImageEmbedder, IDisposable
             ?? list.First();
     }
 
-    /// 从输出张量取嵌入向量(batch=1):pooled [1,D]→全 D;序列 [1,S,D]→取首位(CLS)前 D 个。
-    /// 因行主序,[0,0,d] 恰是扁平缓冲前 D 个 → 统一取「前 last-dim 个」即可。
+    /// 從輸出張量取嵌入向量(batch=1):pooled [1,D]→全 D;序列 [1,S,D]→取首位(CLS)前 D 個。
+    /// 因行主序,[0,0,d] 恰是扁平緩衝前 D 個 → 統一取「前 last-dim 個」即可。
     internal static float[] ExtractEmbedding(float[] flat, int[] dims)
     {
         if (flat.Length == 0) return flat;

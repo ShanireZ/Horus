@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Agent 与 Server 共用的线协议 / canonical / HMAC。刻意为平台无关 net8.0(非 -windows),
-       以便 Server(net8.0) 与 Agent(net8.0-windows) 都能引用,保证哈希与签名两端逐字节一致。 -->
+  <!-- Agent 與 Server 共用的線協定 / canonical / HMAC。刻意為平台無關 net8.0(非 -windows),
+       以便 Server(net8.0) 與 Agent(net8.0-windows) 都能引用,保證雜湊與簽名兩端逐位元組一致。 -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>

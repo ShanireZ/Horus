@@ -13,7 +13,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// M3 CLIP 按图搜图:向量数学 + Mock 嵌入器 + 响应解析(纯逻辑单测)。
+/// M3 CLIP 按圖搜圖:向量數學 + Mock 嵌入器 + 回應解析(純邏輯單測)。
 public class VecMathTests
 {
     [Fact]
@@ -59,7 +59,7 @@ public class MockEmbedderTests
         float[]? b = await e.EmbedAsync(img, default);
         Assert.NotNull(a);
         Assert.Equal(512, a!.Length);
-        Assert.Equal(a, b);                                   // 同字节 → 同向量
+        Assert.Equal(a, b);                                   // 同位元組 → 同向量
         Assert.True(VecMath.Cosine(a, b!) > 0.999);
     }
 
@@ -69,7 +69,7 @@ public class MockEmbedderTests
         var e = new MockImageEmbedder(512);
         float[]? a = await e.EmbedAsync(Encoding.ASCII.GetBytes("img-A"), default);
         float[]? b = await e.EmbedAsync(Encoding.ASCII.GetBytes("img-B"), default);
-        Assert.True(VecMath.Cosine(a!, b!) < 0.5);            // 伪随机 → 近正交
+        Assert.True(VecMath.Cosine(a!, b!) < 0.5);            // 偽隨機 → 近正交
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class EmbeddingParseTests
     }
 }
 
-/// M3 本地 ONNX CLIP 预处理:图像 → CHW 张量 + CLIP 归一化(纯像素·可测·不碰 ONNX 运行时)。
+/// M3 本機 ONNX CLIP 預處理:圖像 → CHW 張量 + CLIP 歸一化(純像素·可測·不碰 ONNX 執行環境)。
 public class ClipPreprocessTests
 {
     [Fact]
@@ -111,13 +111,13 @@ public class ClipPreprocessTests
         float[] t = ClipPreprocess.ToTensor(png);
         Assert.Equal(3 * 224 * 224, t.Length);       // CHW 224²
         int plane = 224 * 224;
-        Assert.Equal((1f - 0.48145466f) / 0.26862954f, t[0], 3);          // R 通道归一化
+        Assert.Equal((1f - 0.48145466f) / 0.26862954f, t[0], 3);          // R 通道歸一化
         Assert.Equal((0f - 0.4578275f) / 0.26130258f, t[plane], 3);       // G
         Assert.Equal((0f - 0.40821073f) / 0.27577711f, t[2 * plane], 3);  // B
     }
 }
 
-/// M3 本地 ONNX:输出选择 + 向量提取(CLIP vision 多输出场景·纯逻辑可测)。
+/// M3 本機 ONNX:輸出選擇 + 向量提取(CLIP vision 多輸出場景·純邏輯可測)。
 public class OnnxOutputTests
 {
     [Fact]
@@ -129,7 +129,7 @@ public class OnnxOutputTests
     {
         Assert.Equal("image_embeds", OnnxClipEmbedder.SelectOutputName(new[] { "last_hidden_state", "image_embeds" }, null));
         Assert.Equal("pooler_output", OnnxClipEmbedder.SelectOutputName(new[] { "last_hidden_state", "pooler_output" }, null));
-        Assert.Equal("out0", OnnxClipEmbedder.SelectOutputName(new[] { "out0", "out1" }, null));   // 都不含 → 首个
+        Assert.Equal("out0", OnnxClipEmbedder.SelectOutputName(new[] { "out0", "out1" }, null));   // 都不含 → 首個
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public class OnnxOutputTests
     [Fact]
     public void 取向量_序列取CLS前D()
     {
-        // [1,2,3] 序列:2 个位置 × 3 维 = 6 元;取首位(CLS)前 3 个。
+        // [1,2,3] 序列:2 個位置 × 3 維 = 6 元;取首位(CLS)前 3 個。
         var flat = new float[] { 10, 11, 12, 20, 21, 22 };
         Assert.Equal(new float[] { 10, 11, 12 }, OnnxClipEmbedder.ExtractEmbedding(flat, new[] { 1, 2, 3 }));
     }
@@ -174,10 +174,10 @@ public class TopNTests
         {
             ("self", new float[] { 1, 0, 0 }),
             ("near", new float[] { 0.9f, 0.1f, 0 }),
-            ("orth", new float[] { 0, 1, 0 }),   // 余弦 0
+            ("orth", new float[] { 0, 1, 0 }),   // 餘弦 0
         };
         List<(string id, double score)> top = ImageSearchStore.TopN(q, corpus, 10, excludeId: "self", cosineFloor: 0.2);
-        Assert.DoesNotContain(top, t => t.id == "orth");   // 近正交被滤掉
+        Assert.DoesNotContain(top, t => t.id == "orth");   // 近正交被濾掉
         Assert.Contains(top, t => t.id == "near");
     }
 
@@ -187,13 +187,13 @@ public class TopNTests
         var q = new float[] { 1, 0, 0 };
         var corpus = new List<(string, float[])>();
         for (int i = 0; i < 200; i++) corpus.Add(("n" + i, new float[] { 1, 0, 0 }));
-        // cosineFloor=-1 全过;n=1000 → 钳到 100
+        // cosineFloor=-1 全過;n=1000 → 鉗到 100
         List<(string id, double score)> top = ImageSearchStore.TopN(q, corpus, 1000, excludeId: "n0", cosineFloor: -1);
         Assert.Equal(100, top.Count);
     }
 }
 
-/// 端到端:两张相同字节图(不同 clientId)→ 嵌入 → 按图搜图返回余弦≈1 的相似帧。
+/// 端到端:兩張相同位元組圖(不同 clientId)→ 嵌入 → 按圖搜圖回傳餘弦≈1 的相似影格。
 public class ImageSearchE2ETests
 {
     private static async Task CreateExam(HttpClient http)
@@ -222,7 +222,7 @@ public class ImageSearchE2ETests
         await CreateExam(http);
         byte[] webp = Encoding.ASCII.GetBytes("RIFF-same-image-bytes-xyz-0001");
         await PostImage(http, "img_aaaa1111", webp, 1);
-        await PostImage(http, "img_bbbb2222", webp, 2);   // 相同字节·不同 clientId → 两行(跳过 pHash 去重)
+        await PostImage(http, "img_bbbb2222", webp, 2);   // 相同位元組·不同 clientId → 兩行(跳過 pHash 去重)
 
         var embed = app.Services.GetRequiredService<ImageEmbedService>();
         Assert.NotNull(await embed.EmbedImageAsync("img_aaaa1111", default));
@@ -234,7 +234,7 @@ public class ImageSearchE2ETests
         JsonElement results = j.GetProperty("results");
         Assert.True(results.GetArrayLength() >= 1);
         Assert.Equal("img_bbbb2222", results[0].GetProperty("imageId").GetString());
-        Assert.True(results[0].GetProperty("score").GetDouble() > 0.99);   // 相同字节 → 相同向量 → cosine≈1
+        Assert.True(results[0].GetProperty("score").GetDouble() > 0.99);   // 相同位元組 → 相同向量 → cosine≈1
     }
 
     [Fact]
@@ -249,6 +249,6 @@ public class ImageSearchE2ETests
         db.Write(conn => { using SqliteCommand c = conn.Cmd("UPDATE images SET is_evidence=1 WHERE image_id='img_ev000001'"); c.ExecuteNonQuery(); });
 
         await app.Services.GetRequiredService<ImageEmbedService>().RunOnceAsync(default);
-        Assert.True(app.Services.GetRequiredService<ImageSearchStore>().Has("img_ev000001"));   // 证据图被嵌入
+        Assert.True(app.Services.GetRequiredService<ImageSearchStore>().Has("img_ev000001"));   // 證據圖被嵌入
     }
 }

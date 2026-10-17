@@ -12,8 +12,8 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Api;
 
-/// 看板只读 API(/api/exams, /seats, /suspicious, /events, /images) + 管理/复核写 API
-/// (建考试、结束考试、可疑裁决)。系统给线索,处分由人裁决。
+/// 看板唯讀 API(/api/exams, /seats, /suspicious, /events, /images) + 管理/複核寫 API
+/// (建考試、結束考試、可疑裁決)。系統給線索,處分由人裁決。
 public static class Endpoints
 {
     private static double Now() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
@@ -25,17 +25,17 @@ public static class Endpoints
         ServerConfig cfg = app.Services.GetRequiredService<ServerConfig>();
         AgentHub hub = app.Services.GetRequiredService<AgentHub>();
         ArchiveService archive = app.Services.GetRequiredService<ArchiveService>();
-        AdminSessionStore adminSessions = app.Services.GetRequiredService<AdminSessionStore>();   // M4·RBAC 登出销毁
-        SessionStore sessions = app.Services.GetRequiredService<SessionStore>();                  // 采集会话(全场远程登出)
+        AdminSessionStore adminSessions = app.Services.GetRequiredService<AdminSessionStore>();   // M4·RBAC 登出銷燬
+        SessionStore sessions = app.Services.GetRequiredService<SessionStore>();                  // 採集工作階段(全場遠程登出)
         ImageSearchStore searchStore = app.Services.GetRequiredService<ImageSearchStore>();
         ImageEmbedService embedService = app.Services.GetRequiredService<ImageEmbedService>();
 
-        // ---- 登录:校验令牌 → 下发 HttpOnly cookie(免受 admin gate;否则拿不到 cookie 就进不来) ----
-        // cookie 值 = 管理令牌;JS 读不到(HttpOnly),SameSite=Strict 防 CSRF。gate 用 FixedTimeEquals 比对。
+        // ---- 登入:檢核權杖 → 下發 HttpOnly cookie(免受 admin gate;否則拿不到 cookie 就進不來) ----
+        // cookie 值 = 管理權杖;JS 讀不到(HttpOnly),SameSite=Strict 防 CSRF。gate 用 FixedTimeEquals 比對。
         app.MapPost("/api/login", async (HttpContext ctx) =>
         {
             if (!cfg.AdminAuthEnabled) return Results.Json(new { ok = true, authRequired = false });
-            // M4·RBAC(R3):oidc 模式下静态令牌登录退役,监考员走 wentian OIDC(/admin/login),无令牌后门。
+            // M4·RBAC(R3):oidc 模式下靜態權杖登入退役,監考員走 wentian OIDC(/admin/login),無權杖後門。
             if (cfg.DashboardOidcEnabled)
                 return Results.Json(new { ok = false, error = "use_oidc_login", loginUrl = "/admin/login" }, statusCode: 400);
             JsonNode? body;
@@ -46,62 +46,62 @@ public static class Endpoints
                 return Results.Json(new { ok = false, error = "invalid_token" }, statusCode: 401);
             ctx.Response.Cookies.Append("horus_admin", token, new CookieOptions
             {
-                HttpOnly = true,                 // JS 读不到 → 防 XSS 窃取
-                SameSite = SameSiteMode.Strict,  // 仅同源请求携带 → 防 CSRF
+                HttpOnly = true,                 // JS 讀不到 → 防 XSS 竊取
+                SameSite = SameSiteMode.Strict,  // 僅同源請求攜帶 → 防 CSRF
                 Path = "/",
                 IsEssential = true,
-                // 不设 Secure:LAN 走 HTTP,置 Secure 会导致 cookie 不被发送。HttpOnly+SameSite 仍防窃取与跨站。
+                // 不設 Secure:LAN 走 HTTP,置 Secure 會導致 cookie 不被髮送。HttpOnly+SameSite 仍防竊取與跨站。
             });
             return Results.Json(new { ok = true, authRequired = true });
         });
 
-        // ---- 鉴权模式(公开·gate 豁免):前端据此决定登录门显示令牌输入还是 wentian OIDC 登录按钮 ----
+        // ---- 鑑權模式(公開·gate 豁免):前端據此決定登入門顯示權杖輸入還是 wentian OIDC 登入按鈕 ----
         app.MapGet("/api/authmode", () => Results.Json(new
         {
             mode = cfg.DashboardOidcEnabled ? "oidc" : "token",
             authRequired = cfg.AdminAuthEnabled,
             loginUrl = "/admin/login",
-            // 采集面鉴权模式(psk/oidc/both):看板据此在 both 灰度期高亮仍走 PSK 的座位。
+            // 採集面鑑權模式(psk/oidc/both):看板據此在 both 灰度期高亮仍走 PSK 的座位。
             collectAuthMode = cfg.AuthMode,
-            // 按图搜图是否可用(嵌入器已配)——看板据此显示「按图搜图」按钮。
+            // 按圖搜圖是否可用(嵌入器已配)——看板據此顯示「按圖搜圖」按鈕。
             imageSearchEnabled = embedService.Enabled,
         }));
 
-        // ---- 当前登录是谁(admin 门内)----
+        // ---- 當前登入是誰(admin 門內)----
         //
-        // ★★ **这不是体验优化,是贝塔通 R9 唯一稳定生效的缓解。**
-        //   机房电脑**无还原卡**、浏览器混装国产内核因而组策略不现实、Windows 共享 PC 模式
-        //   也不现实 —— 上一个人不点退出就走时,最长 15 分钟(关了浏览器)或 30 分钟
-        //   (页面还开着)内,下一个人可以直接用他的会话。**身份层关不掉这个窗口。**
-        //   让下一个人**立刻看见这不是自己的号**,是能真正生效的那一条。
-        //   ★ 对考场尤其直接:学生轮流坐同一台机器正是常态。
+        // ★★ **這不是體驗優化,是貝塔通 R9 唯一穩定生效的緩解。**
+        //   機房電腦**無還原卡**、瀏覽器混裝國產核心因而組策略不現實、Windows 共享 PC 模式
+        //   也不現實 —— 上一個人不點退出就走時,最長 15 分鐘(關了瀏覽器)或 30 分鐘
+        //   (頁面還開著)內,下一個人可以直接用他的工作階段。**身分層關不掉這個視窗。**
+        //   讓下一個人**立刻看見這不是自己的號**,是能真正生效的那一條。
+        //   ★ 對考場尤其直接:學生輪流坐同一臺機器正是常態。
         //
-        // ★ 只回姓名与 sub —— 身份出口本来就只有三项(贝塔通 P81),这里不多给一个字段。
+        // ★ 只回姓名與 sub —— 身分出口本來就只有三項(貝塔通 P81),這裡不多給一個欄位。
         app.MapGet("/api/me", (HttpContext ctx) =>
         {
             if (!cfg.DashboardOidcEnabled) return Results.Json(new { oidc = false });
             AdminSession? s = adminSessions.Get(ctx.Request.Cookies["horus_admin"] ?? "", Now());
-            // 走得到这里说明 gate 已放行;取不到只可能是 token 模式或极窄的竞态。
+            // 走得到這裡說明 gate 已放行;取不到只可能是 token 模式或極窄的競態。
             return s is null
                 ? Results.Json(new { oidc = true })
                 : Results.Json(new { oidc = true, sub = s.Sub, name = s.Name, expiresAt = s.ExpiresAt });
         });
 
-        // ---- 存活心跳:三道门的**唯一写入口**(贝塔通 P88–P92·rp-contract「三道门与存活心跳」) ----
+        // ---- 存活心跳:三道門的**唯一寫入口**(貝塔通 P88–P92·rp-contract「三道門與存活心跳」) ----
         //
-        // 报文 `{ active: boolean }`,回 **204 无响应体**。**不查用户表、不查权限、不做重活。**
+        // 訊息 `{ active: boolean }`,回 **204 無回應體**。**不查使用者表、不查權限、不做重活。**
         //
-        // ★★ **它不是业务请求,而反过来也写死:任何业务请求都不得续 idle。**
-        //   这一条对监考看板尤其致命 —— 看板是**持续自动轮询**的,把轮询算作活动的话
-        //   idle 那道门**永远不会到点**,监考机上开着看板就等于永不登出。
-        //   落法:admin gate(`Program.cs`)只**读**会话不写时间戳,续期只发生在这一个端点里。
-        //   ★ 这正是贝塔通 P25 被翻案(P92)的直接原因。
+        // ★★ **它不是業務請求,而反過來也寫死:任何業務請求都不得續 idle。**
+        //   這一條對監考看板尤其致命 —— 看板是**持續自動輪詢**的,把輪詢算作活動的話
+        //   idle 那道門**永遠不會到點**,監考機上開著看板就等於永不登出。
+        //   落法:admin gate(`Program.cs`)只**讀**工作階段不寫時間戳,續期只發生在這一個端點裡。
+        //   ★ 這正是貝塔通 P25 被翻案(P92)的直接原因。
         //
-        // ★ 它**走 admin gate**(不在豁免名单里):要续谁的会话总得先知道是谁。
-        //   于是会话已被三道门中任一道判掉时,这里返回的是 gate 的 401 —— 前端据此弹登录门,
-        //   而不是让一个死会话被自己的心跳救活。
+        // ★ 它**走 admin gate**(不在豁免名單裡):要續誰的工作階段總得先知道是誰。
+        //   於是工作階段已被三道門中任一道判掉時,這裡回傳的是 gate 的 401 —— 前端據此彈登入門,
+        //   而不是讓一個死工作階段被自己的心跳救活。
         //
-        // ★ `token` 模式(静态 adminToken·无管理会话)下是 no-op:照回 204,免得前端刷一屏 404。
+        // ★ `token` 模式(靜態 adminToken·無管理工作階段)下是 no-op:照回 204,免得前端刷一屏 404。
         app.MapPost("/api/heartbeat", async (HttpContext ctx) =>
         {
             bool active;
@@ -117,17 +117,17 @@ public static class Endpoints
             return Results.NoContent();
         });
 
-        // ---- 按图搜图(M3·admin 门内):以一张证据图为查询,在本场已嵌入图里暴力余弦捞相似帧 ----
+        // ---- 按圖搜圖(M3·admin 門內):以一張證據圖為查詢,在本場已嵌入圖裡暴力餘弦撈相似影格 ----
         app.MapPost("/api/exams/{examId}/search-image", async (string examId, HttpContext ctx) =>
         {
             JsonNode? body;
             try { body = await JsonNode.ParseAsync(ctx.Request.Body); }
             catch (JsonException) { return Results.Json(new { ok = false, error = "bad_json" }, statusCode: 400); }
             string queryImageId = (string?)body?["imageId"] ?? "";
-            int topN = Math.Clamp((int?)body?["topN"] ?? 20, 1, 100);   // B2:上界钳制,防超大 topN 拖垮
+            int topN = Math.Clamp((int?)body?["topN"] ?? 20, 1, 100);   // B2:上界鉗制,防超大 topN 拖垮
             if (queryImageId.Length == 0) return Results.Json(new { ok = false, error = "missing_image_id" }, statusCode: 400);
 
-            // 查询图向量:已嵌入直接取;否则即时补嵌(嵌入器关则失败)。
+            // 查詢圖向量:已嵌入直接取;否則即時補嵌(嵌入器關則失敗)。
             float[]? q = searchStore.Get(queryImageId) ?? await embedService.EmbedImageAsync(queryImageId, ctx.RequestAborted);
             if (q is null)
                 return Results.Json(new { ok = false, error = embedService.Enabled ? "query_not_embeddable" : "search_disabled" }, statusCode: 400);
@@ -143,8 +143,8 @@ public static class Endpoints
             });
         });
 
-        // ---- 考前连通性 / 配置预检(admin 门内):监考员开考前一键自查,防 fail-closed 当天翻车。----
-        // 检查采集/管理端鉴权配置完整性、wentian issuer 可达(JWKS 拉取)、视觉 key、active 考试白名单覆盖(§10.1)。
+        // ---- 考前連通性 / 設定預檢(admin 門內):監考員開考前一鍵自查,防 fail-closed 當天翻車。----
+        // 檢查採集/管理端鑑權設定完整性、wentian issuer 可達(JWKS 拉取)、視覺 key、active 考試白名單覆蓋(§10.1)。
         app.MapGet("/api/preflight", async (HttpContext ctx) =>
         {
             var checks = new List<object>();
@@ -155,14 +155,14 @@ public static class Endpoints
                 checks.Add(new { id, level, label, detail });
             }
 
-            // 1) 采集面鉴权
+            // 1) 採集面鑑權
             if (cfg.OidcEnabled)
                 Add("collect_auth", string.IsNullOrEmpty(cfg.OidcIssuer) ? "fail" : "ok", "采集面 OIDC",
                     string.IsNullOrEmpty(cfg.OidcIssuer) ? "authMode=oidc/both 但未配 oidcIssuer" : $"authMode={cfg.AuthMode} · issuer={cfg.OidcIssuer}");
             else if (cfg.AuthEnabled) Add("collect_auth", "ok", "采集面 PSK", "authMode=psk(共享 PSK)");
             else Add("collect_auth", "warn", "采集面鉴权", "未配 PSK / OIDC(仅联调)");
 
-            // 2) 管理端鉴权
+            // 2) 管理端鑑權
             if (cfg.DashboardOidcEnabled)
             {
                 var missing = new List<string>();
@@ -175,9 +175,9 @@ public static class Endpoints
                 if (!string.IsNullOrEmpty(cfg.OidcDashboardRedirectUri)
                     && !cfg.OidcDashboardRedirectUri!.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                     Add("admin_redirect_https", "warn", "回调 HTTPS", "oidcDashboardRedirectUri 非 https,远端工作站将无法回调(须自签 https)");
-                // 登出回跳(贝塔通 P85):★ 这一项**只能核到本地这一半** —— 「贝塔通后台登记了没有」
-                //   本地查不到。没登记的表现是上游忽略该参数、用户停在贝塔通自己的「已退出」页;
-                //   ★ 那不算故障(本地会话在跳走之前就清掉了),但监考员会以为没退成功,所以照实提示。
+                // 登出回跳(貝塔通 P85):★ 這一項**只能核到本機這一半** —— 「貝塔通後台登記了沒有」
+                //   本機查不到。沒登記的表現是上游忽略該參數、使用者停在貝塔通自己的「已退出」頁;
+                //   ★ 那不算故障(本機工作階段在跳走之前就清掉了),但監考員會以為沒退成功,所以照實提示。
                 Add("post_logout", string.IsNullOrEmpty(cfg.PostLogoutRedirectUriEffective) ? "warn" : "ok",
                     "登出回跳",
                     string.IsNullOrEmpty(cfg.PostLogoutRedirectUriEffective)
@@ -186,10 +186,10 @@ public static class Endpoints
             }
             else Add("admin_auth", "ok", "管理端令牌", "adminAuthMode=token(静态令牌·非 OIDC)");
 
-            // 3) wentian issuer 可达性(fail-closed 关键:oidc 下不可达 = 当天登录/换 token 失败)
+            // 3) wentian issuer 可達性(fail-closed 關鍵:oidc 下不可達 = 當天登入/換 token 失敗)
             if (cfg.OidcEnabled || cfg.DashboardOidcEnabled)
             {
-                // ★ 贝塔通的 JWKS 挂在 `/jwks`(根命名空间),不是 `/.well-known/jwks.json`。
+                // ★ 貝塔通的 JWKS 掛在 `/jwks`(根命名空間),不是 `/.well-known/jwks.json`。
                 string jwksUrl = cfg.OidcJwksEndpoint!;
                 bool inlineJwks = !string.IsNullOrWhiteSpace(cfg.OidcJwksJson);
                 try
@@ -211,67 +211,67 @@ public static class Endpoints
                 }
             }
 
-            // 3.4) 探活令牌的 `aud` 口径(owner 2026-08-11 拍板给探活一个专属 aud)。
+            // 3.4) 探活權杖的 `aud` 口徑(owner 2026-08-11 拍板給探活一個專屬 aud)。
             //
-            // ★★ **这一项存在的全部理由是「别让过渡期变成永久」**:兼容分支不会自己消失,
-            //   而只要它还开着,「`aud` 拦不住撤权/探活这一对」的例外就还在 —— 那正是本次要消灭的。
-            //   把它摆在监考员每次开考都会看的那一屏上,是唯一会被真的看见的位置。
+            // ★★ **這一項存在的全部理由是「別讓過渡期變成永久」**:相容分支不會自己消失,
+            //   而只要它還開著,「`aud` 攔不住撤權/探活這一對」的例外就還在 —— 那正是本次要消滅的。
+            //   把它擺在監考員每次開考都會看的那一屏上,是唯一會被真的看見的位置。
             if (cfg.OidcEnabled || cfg.DashboardOidcEnabled)
             {
                 var verifier = ctx.RequestServices.GetService(typeof(BetapassRevokeVerifier)) as BetapassRevokeVerifier;
                 string auds = verifier is null ? "(未构造)" : string.Join(" / ", verifier.ProbeAudiences);
                 string legacy = cfg.OidcHealthAudienceAcceptLegacy ? " · ⚠ 逃生口开着(连裸 client_id 也收)" : "";
 
-                // ★★★ **这一项报的是「探活实际发生了什么」,不是「配置成什么」。**
-                //   只报配置的话它永远绿 —— 哪怕对侧一次都没探到过、或者每一发都被拒。
-                //   本仓自己反复写着「配置化最容易做成装饰品,断言必须落在**行为**上」,
-                //   而它此前恰恰就是那个装饰品。
+                // ★★★ **這一項報的是「探活實際發生了什麼」,不是「設定成什麼」。**
+                //   只報設定的話它永遠綠 —— 哪怕對側一次都沒探到過、或者每一發都被拒。
+                //   本儲存庫自己反覆寫著「設定化最容易做成裝飾品,斷言必須落在**行為**上」,
+                //   而它此前恰恰就是那個裝飾品。
                 (double? okAt, double? rejAt, string? why) =
                     ctx.RequestServices.GetRequiredService<BetapassProbeState>().Snapshot();
                 string Ago(double t) => $"{(Now() - t) / 60.0:F0} 分钟前";
 
-                // ★★ **口径由部署声明,而结论仍由行为决定** —— 两者都要,少哪个都不行:
-                //   只看配置 → 永远绿(它此前就是这个装饰品);
-                //   只看行为 → P101 下「从未探过」恒为真,变成一条**永远亮着的 warn**,
-                //   而永远亮着的告警等于没有告警,下一次真出事时没人会看。
+                // ★★ **口徑由部署聲明,而結論仍由行為決定** —— 兩者都要,少哪個都不行:
+                //   只看設定 → 永遠綠(它此前就是這個裝飾品);
+                //   只看行為 → P101 下「從未探過」恆為真,變成一條**永遠亮著的 warn**,
+                //   而永遠亮著的告警等於沒有告警,下一次真出事時沒人會看。
                 bool expectPush = cfg.BetapassRevokePushExpected;
 
                 if (rejAt is not null && (okAt is null || rejAt > okAt))
-                    // 口径对不上。最常见是线上贝塔通还是 P100 之前的版本,还在发裸 client_id。
+                    // 口徑對不上。最常見是線上貝塔通還是 P100 之前的版本,還在發裸 client_id。
                     Add("health_audience", "fail", "贝塔通探活",
                         $"最近一次探活**被拒**({Ago(rejAt.Value)}):{why}。本机在等 {auds}{legacy}"
                         + " —— 对侧后台只看得到一个 401,那边不会有人替你发现");
                 else if (okAt is not null)
-                    // ★ 探活到达了。若本机声明「不接广播」(P101),那说明**有人登记了回调** ——
-                    //   现实与声明不符,照实报出来,别因为配置说不接就不看。
+                    // ★ 探活到達了。若本機聲明「不接廣播」(P101),那說明**有人登記了回呼** ——
+                    //   現實與聲明不符,照實報出來,別因為設定說不接就不看。
                     Add("health_audience", expectPush ? "ok" : "warn", "贝塔通探活",
                         expectPush
                             ? $"最近一次探活通过({Ago(okAt.Value)}) · 本机认 {auds}{legacy}"
                             : $"探活**居然到达了**({Ago(okAt.Value)}),而本机按 P101 声明不接撤权广播 —— "
                               + $"说明有人给本机登记了回调。请确认口径,或把 betapassRevokePushExpected 置 true{legacy}");
                 else if (expectPush)
-                    // ★ 从未探过:贝塔通每 5 分钟就该来一次。服务器刚起来那几分钟属正常,
-                    //   一直没有则多半是**后台没登记撤权回调** —— 探活地址按它同源推导,
-                    //   所以那一条登记同时决定探活与撤权两件事。
+                    // ★ 從未探過:貝塔通每 5 分鐘就該來一次。伺服器剛起來那幾分鐘屬正常,
+                    //   一直沒有則多半是**後台沒登記撤權回呼** —— 探活位址按它同源推導,
+                    //   所以那一條登記同時決定探活與撤權兩件事。
                     Add("health_audience", "warn", "贝塔通探活",
                         $"**从未收到过探活**(它每 5 分钟应来一次)。服务器刚启动属正常;"
                         + $"否则多半是贝塔通后台**没登记本机的撤权回调**(探活地址按它同源推导)。本机认 {auds}{legacy}");
                 else
-                    // ★★ P101:**有意**不接。这是预期状态,不是故障 —— 把界限与触发条件一并说清,
-                    //   免得下一个人看到「没有探活」就以为链路坏了、跑去开隧道。
+                    // ★★ P101:**有意**不接。這是預期狀態,不是故障 —— 把界限與觸發條件一併說清,
+                    //   免得下一個人看到「沒有探活」就以為連線路徑壞了、跑去開隧道。
                     Add("health_audience", "ok", "撤权广播",
                         "本机**有意不接**贝塔通的撤权广播与探活(其 P101:局域网机没有可拨地址,"
                         + $"出站≠可入站)。残余有界:撤权后最长 ≤{cfg.AdminSessionMinutes / 60} 小时(本机 absolute)、"
                         + "且再也登不进来、且本机只在考试期在线。★ 需要分钟级撤权时**上拉取模型,不是开隧道**");
             }
 
-            // 3.5) 开考预检:**监考员自己这次登录**还剩多久,够不够撑完一场考试(贝塔通 P91)。
+            // 3.5) 開考預檢:**監考員自己這次登入**還剩多久,夠不夠撐完一場考試(貝塔通 P91)。
             //
-            // ★★ 原设计是靠 IdP 下发一个 claim 告诉 RP「你的会话还剩多久」——
-            //   **取消 SSO(其 P84)之后那条作废**,改为 Horus 拿自己的 absolute 自己算。
-            // ★ 这一条在看板上比在采集端上更有用:采集端每场都是新登录、剩余恒为满,
-            //   而监考员很可能几小时前就登录了 —— absolute **任何活动都推不动它**,
-            //   于是「考到一半看板自己掉了」是会真实发生的。
+            // ★★ 原設計是靠 IdP 下發一個 claim 告訴 RP「你的工作階段還剩多久」——
+            //   **取消 SSO(其 P84)之後那條作廢**,改為 Horus 拿自己的 absolute 自己算。
+            // ★ 這一條在看板上比在採集端上更有用:採集端每場都是新登入、剩餘恆為滿,
+            //   而監考員很可能幾小時前就登入了 —— absolute **任何活動都推不動它**,
+            //   於是「考到一半看板自己掉了」是會真實發生的。
             if (cfg.DashboardOidcEnabled)
             {
                 AdminSession? me = adminSessions.Get(ctx.Request.Cookies["horus_admin"] ?? "", Now());
@@ -290,7 +290,7 @@ public static class Endpoints
                 }
             }
 
-            // 4) 视觉分析 key
+            // 4) 視覺分析 key
             if (cfg.VisionEnabled)
             {
                 try
@@ -301,7 +301,7 @@ public static class Endpoints
                 catch (Exception ex) { Add("vision", "warn", "视觉分析", "key 解密失败:" + ex.Message); }
             }
 
-            // 5) active 考试白名单覆盖(§10.1 缺口)
+            // 5) active 考試白名單覆蓋(§10.1 缺口)
             List<(string id, string name)> actives = db.Read(conn =>
             {
                 var l = new List<(string, string)>();
@@ -323,7 +323,7 @@ public static class Endpoints
                 $"{noWl}/{actives.Count} 个 active 考试未下发白名单 → 非黑名单站/进程 server_risk 退回靠 Agent 自报(§10.1 缺口)");
             else Add("whitelist", "ok", "白名单覆盖", $"全部 {actives.Count} 个 active 考试已下发白名单");
 
-            // 6) both→oidc 灰度迁移状态(go/no-go:切 oidc 前须全部在线座位已走 OIDC,否则这些座位会被拒)。
+            // 6) both→oidc 灰度遷移狀態(go/no-go:切 oidc 前須全部線上座位已走 OIDC,否則這些座位會被拒)。
             int onlineTotal = 0, onlineOidc = 0;
             if (cfg.OidcEnabled)
             {
@@ -354,7 +354,7 @@ public static class Endpoints
                 else Add("migration", "ok", "迁移状态", $"both 灰度期:全部 {onlineTotal} 在线座位已走 OIDC → 可择机切 oidc 强制");
             }
 
-            // 7) CLIP 模型(按图搜图依赖):onnx provider 需本地模型文件;远程 provider 无本地文件。
+            // 7) CLIP 模型(按圖搜圖相依):onnx provider 需本機模型檔案;遠程 provider 無本機檔案。
             if (!cfg.EmbedEnabled)
                 Add("clip_model", "ok", "CLIP 模型", "按图搜图未启用(未配 embedProvider)→ 功能关闭");
             else if (string.Equals(cfg.EmbedProvider, "onnx", StringComparison.OrdinalIgnoreCase))
@@ -373,7 +373,7 @@ public static class Endpoints
             return Results.Json(new { ok = fails == 0, fails, warns, checks, activeExams, migration = new { onlineTotal, onlineOidc } });
         });
 
-        // ---- 登出:清 cookie(oidc 模式一并销毁服务器端管理会话)----
+        // ---- 登出:清 cookie(oidc 模式一併銷燬伺服器端管理工作階段)----
         app.MapPost("/api/logout", (HttpContext ctx) =>
         {
             if (cfg.DashboardOidcEnabled)
@@ -382,7 +382,7 @@ public static class Endpoints
             return Results.Json(new { ok = true });
         });
 
-        // ---- 考试列表 ----
+        // ---- 考試列表 ----
         app.MapGet("/api/exams", () =>
         {
             double cut = Now() - cfg.OnlineWindowSeconds;
@@ -408,7 +408,7 @@ public static class Endpoints
                             ("@e", examId), ("@cut", cut)),
                         pendingSuspicious = Scalar(conn,
                             "SELECT COUNT(*) FROM suspicious_queue WHERE exam_id=@e AND status='pending'", ("@e", examId)),
-                        // §10.1:未下发白名单的 active 考试,服务器对非黑名单站/进程无独立判据(server_risk 退回靠 Agent 自报)。
+                        // §10.1:未下發白名單的 active 考試,伺服器對非黑名單站/處理程序無獨立判據(server_risk 退回靠 Agent 自報)。
                         hasWhitelist = hub.GetPolicy(examId).Hosts is not null,
                     });
                 }
@@ -416,7 +416,7 @@ public static class Endpoints
             });
         });
 
-        // ---- 座位热力 ----
+        // ---- 座位熱力 ----
         app.MapGet("/api/exams/{examId}/seats", (string examId) =>
         {
             double cut = Now() - cfg.OnlineWindowSeconds;
@@ -424,10 +424,10 @@ public static class Endpoints
             return db.Read(conn =>
             {
                 var list = new List<object>();
-                // M4·S6/S7:LEFT JOIN 最近一条 OIDC 会话,看板直呈 wentian 身份画像(用户名/昵称/道号/境界/战力/头像)。
-                // 性能#2:各相关表**先按 seat_id 各自分组聚合**(hb/ev/hlt/sq 四个 CTE),再与 seats 单次 LEFT JOIN,
-                // 避免"座位 × 多个相关子查询"在 SQLite 内形成的交叉乘积(座位越多放大越明显)。
-                // SQLite 特例:oidc_sessions 用 GROUP BY + MAX(issued_at) 时其余裸列取"最大 issued_at 那一行"的值。
+                // M4·S6/S7:LEFT JOIN 最近一條 OIDC 工作階段,看板直呈 wentian 身分畫像(使用者名/暱稱/道號/境界/戰力/頭像)。
+                // 效能#2:各相關表**先按 seat_id 各自分組聚合**(hb/ev/hlt/sq 四個 CTE),再與 seats 單次 LEFT JOIN,
+                // 避免"座位 × 多個相關子查詢"在 SQLite 內形成的交叉乘積(座位越多放大越明顯)。
+                // SQLite 特例:oidc_sessions 用 GROUP BY + MAX(issued_at) 時其餘裸列取"最大 issued_at 那一行"的值。
                 using SqliteCommand c = conn.Cmd(
                     @"WITH hb AS (
                         SELECT seat_id, MAX(ts) AS last_hb FROM agent_heartbeats WHERE exam_id=@e GROUP BY seat_id
@@ -486,25 +486,25 @@ public static class Endpoints
                         agentId = NullStr(r, 3),
                         machineId = NullStr(r, 4),
                         online,
-                        // M4→both→oidc 灰度可见性:有 OIDC 会话=已迁移;在线但无会话=仍走 PSK(未迁移);离线=offline。
-                        // 近似判据(有会话行即视为 OIDC;2h 考试内会话不过期,足够指示迁移覆盖)。
+                        // M4→both→oidc 灰度可見性:有 OIDC 工作階段=已遷移;線上但無工作階段=仍走 PSK(未遷移);離線=offline。
+                        // 近似判據(有工作階段行即視為 OIDC;2h 考試內工作階段不過期,足夠指示遷移覆蓋)。
                         authMode = sub is not null ? "oidc" : (online ? "psk" : "offline"),
                         lastHeartbeatTs = lastHb,
                         lastEventTs = lastEv,
                         maxRecentRisk = r.GetInt32(7),
                         eventCount = r.GetInt32(8),
                         suspiciousCount = r.GetInt32(9),
-                        // OIDC 身份画像(未登录/PSK 模式为 null)
-                        // ★ 身份只剩三项(贝塔通 P81):sub / 真实姓名 / 用户名。
-                        //   道号 / 头像 / 境界 / 战力是问天录的业务字段,身份中心不分发;
-                        //   `userType` 更是随 P83 整个消失 —— 看板准入已由 `horus-admin` 平台开关回答。
+                        // OIDC 身分畫像(未登入/PSK 模式為 null)
+                        // ★ 身分只剩三項(貝塔通 P81):sub / 真實姓名 / 使用者名。
+                        //   道號 / 頭像 / 境界 / 戰力是問天錄的業務欄位,身分中心不散布;
+                        //   `userType` 更是隨 P83 整個消失 —— 看板存取資格已由 `horus-admin` 平台開關回答。
                         identity = sub is null ? null : new
                         {
                             sub,
                             name = NullStr(r, 11),
                             username = NullStr(r, 12),
                         },
-                        // M5 采集端硬化:该座位的健康告警数(异常重启/疑似挂起/遮屏/能力降级 事件计),看板据此标黄。
+                        // M5 採集端硬化:該座位的健康告警數(異常重新啟動/疑似掛起/遮屏/能力降級 事件計),看板據此標黃。
                         healthAlerts = r.GetInt32(13),
                     });
                 }
@@ -512,7 +512,7 @@ public static class Endpoints
             });
         });
 
-        // ---- 可疑队列（默认只看可裁决的 source='suspicion'；采集健康告警走独立 /health） ----
+        // ---- 可疑佇列（預設只看可裁決的 source='suspicion'；採集健康告警走獨立 /health） ----
         app.MapGet("/api/exams/{examId}/suspicious", (string examId, string? status, string? source) =>
         {
             string filter = string.IsNullOrEmpty(status) ? "pending" : status;
@@ -549,7 +549,7 @@ public static class Endpoints
             });
         });
 
-        // ---- 采集健康（source='health' 的采集端健康告警：屏幕遮挡/能力降级/看门狗重启；仅提示、不可裁决） ----
+        // ---- 採集健康（source='health' 的採集端健康告警：螢幕遮擋/能力降級/看門狗重新啟動；僅提示、不可裁決） ----
         app.MapGet("/api/exams/{examId}/health", (string examId) =>
         {
             return db.Read(conn =>
@@ -581,7 +581,7 @@ public static class Endpoints
             });
         });
 
-        // ---- 事件时间线 ----
+        // ---- 事件時間線 ----
         app.MapGet("/api/exams/{examId}/events", (string examId, string? seatId, int? limit) =>
         {
             int lim = Math.Clamp(limit ?? 200, 1, 2000);
@@ -616,15 +616,15 @@ public static class Endpoints
             });
         });
 
-        // ---- 哈希链完整性审计(M3):离线复验锚点自洽 + 链连续。只对未归档(live)考试有意义。 ----
-        // 管理鉴权已由全局 /api gate 覆盖。返回 { ok, totalEvents, totalHashOk, totalChainOk, totalUnverifiable, agents:[…] }。
-        // 已归档考试 live 事件已清空(整链因清理而断,§13.2)→ 不返回伪装"全绿"的空报告,而是明确 applicable:false。
+        // ---- 雜湊鏈完整性稽核(M3):離線複驗錨點自洽 + 鏈連續。只對未歸檔(live)考試有意義。 ----
+        // 管理鑑權已由全域 /api gate 覆蓋。回傳 { ok, totalEvents, totalHashOk, totalChainOk, totalUnverifiable, agents:[…] }。
+        // 已歸檔考試 live 事件已清空(整鏈因清理而斷,§13.2)→ 不回傳偽裝"全綠"的空報告,而是明確 applicable:false。
         app.MapGet("/api/exams/{examId}/integrity", (string examId) =>
             db.Read(conn =>
             {
                 string? status = Scalar<string?>(conn, "SELECT status FROM exams WHERE exam_id=@e", ("@e", examId));
                 if (status is null) return Results.NotFound(new { error = "no_such_exam" });
-                // archiving(归档进行中,可能半清理)与 archived(已清理)都不做 live 连续性审计,避免对残缺 live 数据误报链断/伪装全绿。
+                // archiving(歸檔進行中,可能半清理)與 archived(已清理)都不做 live 連續性稽核,避免對殘缺 live 資料誤報鏈斷/偽裝全綠。
                 if (status is "archived" or "archiving")
                     return Results.Json(new
                     {
@@ -634,23 +634,23 @@ public static class Endpoints
                 return Results.Json(IntegrityAudit.Run(conn, examId, cfg.Psk));
             }));
 
-        // ---- 证据图字节 ----
+        // ---- 證據圖位元組 ----
         app.MapGet("/api/images/{imageId}", async (string imageId, HttpContext ctx) =>
         {
             string? rel = db.Read(conn => Scalar<string?>(conn,
                 "SELECT file_path FROM images WHERE image_id=@id", ("@id", imageId)));
-            // 归档回落(F3):考试到龄归档后 live 行已清、原图移冷存,证据图仍应可通过端点调取取证。
+            // 歸檔回落(F3):考試到齡歸檔後 live 行已清、原圖移冷存,證據圖仍應可通過端點調取取證。
             rel ??= ArchiveImagePath(archive.ArchivePath, imageId);
             if (rel is null) { ctx.Response.StatusCode = 404; return; }
             string? full = storage.Resolve(rel);
             if (full is null || !File.Exists(full)) { ctx.Response.StatusCode = 404; return; }
             ctx.Response.ContentType = "image/webp";
-            ctx.Response.Headers["Referrer-Policy"] = "no-referrer";   // 令牌在 ?t= 查询里,别经 Referer 外泄
-            ctx.Response.Headers["Cache-Control"] = "no-store";        // 别把带令牌的 URL 落盘缓存
+            ctx.Response.Headers["Referrer-Policy"] = "no-referrer";   // 權杖在 ?t= 查詢裡,別經 Referer 外洩
+            ctx.Response.Headers["Cache-Control"] = "no-store";        // 別把帶權杖的 URL 寫入磁碟快取
             await ctx.Response.SendFileAsync(full);
         });
 
-        // ---- 证据图元数据 ----
+        // ---- 證據圖中繼資料 ----
         app.MapGet("/api/images/{imageId}/meta", (string imageId) =>
             db.Read(conn =>
             {
@@ -658,7 +658,7 @@ public static class Endpoints
                     @"SELECT image_id,seat_id,ts,trigger,phash,width,height,bytes,is_evidence,uploaded_to_ocr,analysis_state
                       FROM images WHERE image_id=@id", ("@id", imageId));
                 using SqliteDataReader r = c.ExecuteReader();
-                if (!r.Read()) return ArchiveImageMeta(archive.ArchivePath, imageId);   // 归档回落(F3)
+                if (!r.Read()) return ArchiveImageMeta(archive.ArchivePath, imageId);   // 歸檔回落(F3)
                 return Results.Json(new
                 {
                     imageId = r.GetString(0),
@@ -670,14 +670,14 @@ public static class Endpoints
                     height = NullInt(r, 6),
                     bytes = NullLong(r, 7),
                     isEvidence = r.GetInt32(8) != 0,
-                    uploadedToOcr = r.GetInt32(9) != 0,   // 隐私审计:字节是否真出网送云(mock/本地恒 false)
-                    analyzed = r.GetInt32(10) != 0,       // 视觉分析是否已终结(成功/确定态失败)
+                    uploadedToOcr = r.GetInt32(9) != 0,   // 隱私稽核:位元組是否真出網送雲(mock/本機恆 false)
+                    analyzed = r.GetInt32(10) != 0,       // 視覺分析是否已終結(成功/確定態失敗)
                     archived = false,
                 });
             }));
 
-        // ---- 归档考试只读复核(F3):到龄归档后 live 已清,关键数据在 archive 库。此端点让归档考试仍可经 HTTP 取证复核。 ----
-        // 返回 { examId, summary, adjudications:[…], events:[…关键事件…], images:[…证据图…] }。archive 库不存在/无此考试 → 404。
+        // ---- 歸檔考試唯讀複核(F3):到齡歸檔後 live 已清,關鍵資料在 archive 庫。此端點讓歸檔考試仍可經 HTTP 取證複核。 ----
+        // 回傳 { examId, summary, adjudications:[…], events:[…關鍵事件…], images:[…證據圖…] }。archive 庫不存在/無此考試 → 404。
         app.MapGet("/api/archive/exams/{examId}", (string examId) =>
         {
             if (!File.Exists(archive.ArchivePath)) return Results.NotFound(new { error = "no_archive" });
@@ -716,9 +716,9 @@ public static class Endpoints
             catch (SqliteException) { return Results.NotFound(new { error = "no_archive" }); }
         });
 
-        // ================= 管理 / 复核 (写) =================
+        // ================= 管理 / 複核 (寫) =================
 
-        // 建/更新考试 + 座位绑定
+        // 建/更新考試 + 座位綁定
         app.MapPost("/api/exams", async (HttpContext ctx) =>
         {
             JsonNode? body;
@@ -728,12 +728,12 @@ public static class Endpoints
             string examId = (string?)body["examId"] ?? "";
             string name = (string?)body["name"] ?? examId;
             if (string.IsNullOrEmpty(examId)) return Results.BadRequest(new { error = "missing_examId" });
-            if (!IsSafeId(examId)) return Results.BadRequest(new { error = "bad_examId" });   // 禁路径危险字符/超长(防目录混放·允许中文)
+            if (!IsSafeId(examId)) return Results.BadRequest(new { error = "bad_examId" });   // 禁路徑危險字元/超長(防目錄混放·允許中文)
             if (body["seats"] is JsonArray seatsPre)
                 foreach (JsonNode? sn in seatsPre)
                 {
                     string sid = (string?)sn?["seatId"] ?? "";
-                    if (sid.Length == 0) return Results.BadRequest(new { error = "empty_seatId" });   // 空 seatId 不进 seats 表(脏数据污染席位关联/看板)
+                    if (sid.Length == 0) return Results.BadRequest(new { error = "empty_seatId" });   // 空 seatId 不進 seats 表(髒資料汙染席位關聯/看板)
                     if (!IsSafeId(sid)) return Results.BadRequest(new { error = "bad_seatId" });
                 }
 
@@ -770,15 +770,15 @@ public static class Endpoints
             return Results.Json(new { ok = true, examId, seatCount });
         });
 
-        // 结束考试:落状态 + 向该考试在线 Agent 广播 exam_ended(Agent 排空缓冲后停采、登出回待命)
+        // 結束考試:落狀態 + 向該考試線上 Agent 廣播 exam_ended(Agent 排空緩衝後停採、登出回待命)
         app.MapPost("/api/exams/{examId}/end", async (string examId, HttpContext ctx) =>
         {
             if (!IsSafeId(examId)) return Results.BadRequest(new { error = "bad_examId" });
             double now = Now();
             int changed = db.Locked(conn =>
             {
-                // 状态守卫:只结束 active/ended 考试;绝不把 archiving/archived 复活成 ended
-                // (否则绕过 /integrity 的 applicable:false 保护 → 对已清空的 live 行返回空审计伪装 ok:true)。
+                // 狀態守衛:只結束 active/ended 考試;絕不把 archiving/archived 復活成 ended
+                // (否則繞過 /integrity 的 applicable:false 保護 → 對已清空的 live 行回傳空稽核偽裝 ok:true)。
                 using SqliteCommand c = conn.Cmd(
                     "UPDATE exams SET status='ended', ended_at=@ts WHERE exam_id=@e AND status IN ('active','ended')",
                     ("@ts", now), ("@e", examId));
@@ -789,8 +789,8 @@ public static class Endpoints
             return Results.Json(new { ok = true, examId, status = "ended", notified });
         });
 
-        // 全场远程登出(监考员):吊销该考试全部 OIDC 采集会话 + 通知并强断在线连接。
-        // Agent 收到 session_revoked 即弃会话回待命;重连/上报因 invalid_session 一律 401,须重新 OIDC 登录。
+        // 全場遠程登出(監考員):吊銷該考試全部 OIDC 採集工作階段 + 通知並強斷線上連接。
+        // Agent 收到 session_revoked 即棄工作階段回待命;重連/上報因 invalid_session 一律 401,須重新 OIDC 登入。
         app.MapPost("/api/exams/{examId}/logout", async (string examId, HttpContext ctx) =>
         {
             if (!IsSafeId(examId)) return Results.BadRequest(new { error = "bad_examId" });
@@ -799,10 +799,10 @@ public static class Endpoints
             return Results.Json(new { ok = true, examId, revoked, notified });
         });
 
-        // 下发配置热更新:存最新配置并推送给该考试所有在线 Agent(新连/重连 Agent 在 hello 时也会收到)
+        // 下發設定熱更新:存最新設定並推送給該考試所有線上 Agent(新連/重連 Agent 在 hello 時也會收到)
         app.MapPost("/api/exams/{examId}/config", async (string examId, HttpContext ctx) =>
         {
-            if (!IsSafeId(examId)) return Results.BadRequest(new { error = "bad_examId" });   // 与建考试端点一致(纵深:防污染配置表/内存字典键)
+            if (!IsSafeId(examId)) return Results.BadRequest(new { error = "bad_examId" });   // 與建考試端點一致(縱深:防汙染設定表/記憶體字典鍵)
             JsonNode? body;
             try { body = await JsonNode.ParseAsync(ctx.Request.Body); }
             catch (JsonException) { return Results.BadRequest(new { error = "bad_json" }); }
@@ -811,17 +811,17 @@ public static class Endpoints
             return Results.Json(new { ok = true, examId, pushedTo });
         });
 
-        // 读回该考试当前已下发/持久化的配置(供看板白名单编辑器回填);未下发过 → config:null。
+        // 讀回該考試當前已下發/持久化的設定(供看板白名單編輯器回填);未下發過 → config:null。
         app.MapGet("/api/exams/{examId}/config", (string examId) =>
         {
             if (!IsSafeId(examId)) return Results.BadRequest(new { error = "bad_examId" });
             string? cfg = hub.GetConfig(examId);
             if (cfg is null) return Results.Json(new { examId, config = (object?)null });
             try { return Results.Json(new { examId, config = JsonNode.Parse(cfg) }); }
-            catch { return Results.Json(new { examId, config = (object?)null }); }   // 存储损坏兜底
+            catch { return Results.Json(new { examId, config = (object?)null }); }   // 儲存損壞備援
         });
 
-        // 监考员点名抓图(D2):向指定在线 Agent 推 capture_now,Agent 立即抓一张(dedup 关闭)。agent 不在线 → pushed:false。
+        // 監考員點名抓圖(D2):向指定線上 Agent 推 capture_now,Agent 立即抓一張(dedup 關閉)。agent 不線上 → pushed:false。
         app.MapPost("/api/agents/{agentId}/capture", async (string agentId, HttpContext ctx) =>
         {
             string reason = "capture_now";
@@ -830,21 +830,21 @@ public static class Endpoints
                 JsonNode? body = await JsonNode.ParseAsync(ctx.Request.Body);
                 if ((string?)body?["reason"] is string rs && rs.Length > 0) reason = rs;
             }
-            catch (JsonException) { /* 无 body / 非 JSON:用默认 reason */ }
+            catch (JsonException) { /* 無 body / 非 JSON:用預設 reason */ }
             bool pushed = await hub.PushCaptureNowAsync(agentId, reason, ctx.RequestAborted);
             return Results.Json(new { ok = true, agentId, pushed });
         });
 
-        // 归档作业手动触发(运维):立即扫描到龄考试并归档 + 清理。后台每 6h 也自动跑。返回本次报告。
-        // ct 用 **ApplicationStopping** 而非 ctx.RequestAborted:归档一旦启动就跑完一批(客户端断开/超时不半途中断),
-        // 仅服务器关停才在考试之间停(每场原子安全)。
+        // 歸檔作業手動觸發(維運):立即掃描到齡考試並歸檔 + 清理。後台每 6h 也自動跑。回傳本次報告。
+        // ct 用 **ApplicationStopping** 而非 ctx.RequestAborted:歸檔一旦啟動就跑完一批(用戶端斷開/超時不半途中斷),
+        // 僅伺服器關停才在考試之間停(每場原子安全)。
         app.MapPost("/api/archive/run", () =>
         {
             ArchiveService.Report report = archive.RunOnce(Now(), app.Lifetime.ApplicationStopping);
             return Results.Json(report);
         });
 
-        // 可疑裁决(人工)
+        // 可疑裁決(人工)
         app.MapPost("/api/suspicious/{id:long}/decide", async (long id, HttpContext ctx) =>
         {
             JsonNode? body;
@@ -859,7 +859,7 @@ public static class Endpoints
 
             return db.Locked(conn =>
             {
-                // 采集健康告警(source='health')只读、不可裁决：拦截误调,保持「采集健康」面板与作弊裁决解耦。
+                // 採集健康告警(source='health')唯讀、不可裁決：攔截誤調,保持「採集健康」面板與作弊裁決解耦。
                 using (SqliteCommand chk = conn.Cmd(
                     @"SELECT 1 FROM suspicious_queue WHERE id=@id AND source='health'", ("@id", id)))
                 {
@@ -895,9 +895,9 @@ public static class Endpoints
         });
     }
 
-    /// examId / seatId 安全性:非空、≤128、不含路径危险字符(/ \ : * ? " &lt; &gt; | 控制字符)与 ".."。
-    /// **允许中文/字母数字/-_ 等普通字符**(考试名可中文)。防不同 id 经 Storage.Safe 归一到同一磁盘目录(目录混放),
-    /// 并收敛所有下游键长度。管理端点已鉴权,此为纵深收敛。internal:ExamDispatch 派生 seat 时复用同一规则。
+    /// examId / seatId 安全性:非空、≤128、不含路徑危險字元(/ \ : * ? " &lt; &gt; | 控制字元)與 ".."。
+    /// **允許中文/字母數字/-_ 等普通字元**(考試名可中文)。防不同 id 經 Storage.Safe 歸一到同一磁碟目錄(目錄混放),
+    /// 並收斂所有下游鍵長度。管理端點已鑑權,此為縱深收斂。internal:ExamDispatch 派生 seat 時重複使用同一規則。
     internal static bool IsSafeId(string id)
     {
         if (id.Length is 0 or > 128 || id.Contains("..", StringComparison.Ordinal)) return false;
@@ -906,7 +906,7 @@ public static class Endpoints
         return true;
     }
 
-    // ---- 归档库只读小工具(F3:归档后证据/元数据仍可经 HTTP 取证) ----
+    // ---- 歸檔庫唯讀小工具(F3:歸檔後證據/中繼資料仍可經 HTTP 取證) ----
     private static SqliteConnection OpenArchiveRead(string archiveDbPath)
     {
         var conn = new SqliteConnection(new SqliteConnectionStringBuilder
@@ -917,7 +917,7 @@ public static class Endpoints
         return conn;
     }
 
-    /// 归档库里该图的冷存相对路径(archive/<exam>/<seat>/<id>.webp);无归档库/无此图 → null。
+    /// 歸檔庫裡該圖的冷存相對路徑(archive/<exam>/<seat>/<id>.webp);無歸檔庫/無此圖 → null。
     private static string? ArchiveImagePath(string archiveDbPath, string imageId)
     {
         if (!File.Exists(archiveDbPath)) return null;
@@ -930,7 +930,7 @@ public static class Endpoints
         catch (SqliteException) { return null; }
     }
 
-    /// 归档库里该图的元数据(带 archived:true)+ 视觉结果;无则 404。
+    /// 歸檔庫裡該圖的中繼資料(帶 archived:true)+ 視覺結果;無則 404。
     private static IResult ArchiveImageMeta(string archiveDbPath, string imageId)
     {
         if (!File.Exists(archiveDbPath)) return Results.NotFound();
@@ -951,7 +951,7 @@ public static class Endpoints
         catch (SqliteException) { return Results.NotFound(); }
     }
 
-    // ---- 读取小工具 ----
+    // ---- 讀取小工具 ----
     private static long Scalar(SqliteConnection conn, string sql, params (string, object?)[] ps)
     {
         using SqliteCommand c = conn.Cmd(sql, ps);

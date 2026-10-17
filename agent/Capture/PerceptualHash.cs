@@ -4,10 +4,10 @@ using SixLabors.ImageSharp.Processing;
 
 namespace Horus.Agent.Capture;
 
-/// dHash:缩放到 9×8 灰度,逐行比较相邻像素 → 64 位指纹。汉明距离衡量相似度。
+/// dHash:縮放到 9×8 灰度,逐行比較相鄰像素 → 64 位指紋。漢明距離衡量相似度。
 public static class PerceptualHash
 {
-    public static ulong DHash(SixLabors.ImageSharp.Image source)   // 显式限定:UseWindowsForms 注入的 System.Drawing.Image 造成歧义
+    public static ulong DHash(SixLabors.ImageSharp.Image source)   // 顯式限定:UseWindowsForms 注入的 System.Drawing.Image 造成歧義
     {
         using Image<L8> img = source.CloneAs<L8>();
         img.Mutate(x => x.Resize(9, 8));

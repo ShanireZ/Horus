@@ -3,39 +3,39 @@ using Horus.Server.Config;
 
 namespace Horus.Server.Identity;
 
-/// 撤权通知令牌的验签器。
+/// 撤權通知權杖的驗籤器。
 ///
-/// ★★ **为什么单独一个类、且做成单例**:撤权令牌的 `aud` 可能是本机两个 client_id 中的**任意一个**
-///   (`horus-client` 采集面 / `horus-dashboard` 监考台,贝塔通 P83),而
-///   <see cref="OidcTokenValidator"/> 构造时就绑死了单一 `aud`,所以要按候选各备一个。
-///   ★ 早先的写法是**每次请求现 new** —— 那等于每一发撤权通知都重新解析一遍 JWKS 并
-///   `RSA.Create()` 若干把,而那些 RSA 句柄**从不 Dispose**,只能等 GC。
-///   端点频率低所以不会立刻出事,但这是典型的「不出症状因此不会有人来修」——
-///   预建一次、常驻,既省掉重复解析也不再泄句柄。
+/// ★★ **為什麼單獨一個類、且做成單例**:撤權權杖的 `aud` 可能是本機兩個 client_id 中的**任意一個**
+///   (`horus-client` 採集面 / `horus-dashboard` 監考臺,貝塔通 P83),而
+///   <see cref="OidcTokenValidator"/> 建構時就綁死了單一 `aud`,所以要按候選各備一個。
+///   ★ 早先的寫法是**每次請求現 new** —— 那等於每一發撤權通知都重新解析一遍 JWKS 並
+///   `RSA.Create()` 若干把,而那些 RSA 句柄**從不 Dispose**,只能等 GC。
+///   端點頻率低所以不會立刻出事,但這是典型的「不出症狀因此不會有人來修」——
+///   預建一次、常駐,既省掉重複解析也不再洩句柄。
 ///
-/// ★ 与验 id_token **共用同一套公钥**(贝塔通就是同一套签名密钥):零新增密钥材料,
-///   签名密钥轮转时这条链路自动跟着走 —— 这正是贝塔通 P44 选签名 JWT 而非共享密钥的判据。
+/// ★ 與驗 id_token **共用同一套公鑰**(貝塔通就是同一套簽名金鑰):零新增金鑰材料,
+///   簽名金鑰輪轉時這條連線路徑自動跟著走 —— 這正是貝塔通 P44 選簽名 JWT 而非共享金鑰的判據。
 ///
-/// ★★ **它同时服务两个入站端点**:`/internal/revoke`(撤权通知)与 `/internal/health`(探活,其 P94)。
-///   两者的令牌是**同一套签名密钥、同一个 `aud`(本机 client_id)、同一段 `signServiceToken`**
-///   签出来的(BetaPass `src/main.ts` 的 `signToken` 与 `revocation/notifier.ts` 并排可见),
-///   因此**验签这一层共用**,区别只在调用方还要不要报文语义 —— 见 <see cref="Verify"/> 与
+/// ★★ **它同時服務兩個入站端點**:`/internal/revoke`(撤權通知)與 `/internal/health`(探活,其 P94)。
+///   兩者的權杖是**同一套簽名金鑰、同一個 `aud`(本機 client_id)、同一段 `signServiceToken`**
+///   簽出來的(BetaPass `src/main.ts` 的 `signToken` 與 `revocation/notifier.ts` 並排可見),
+///   因此**驗籤這一層共用**,區別只在呼叫方還要不要訊息語義 —— 見 <see cref="Verify"/> 與
 ///   <see cref="VerifyProbe"/>。
-///   ★ 这一点与 rp-contract「多个入站端点按 `aud` 区分」**不冲突**:那条说的是
-///   「撤权令牌」与「资源 audience 的推送令牌」之间要互斥,而探活令牌与撤权令牌本就
-///   **有意同 aud**(贝塔通探的就是「会收撤权通知的那一端」)。真要拿探活令牌去打
-///   `/internal/revoke`,还得过报文比对那一关(`sub` 得是 client_id,清的是查无此人的会话)。
+///   ★ 這一點與 rp-contract「多個入站端點按 `aud` 區分」**不衝突**:那條說的是
+///   「撤權權杖」與「資源 audience 的推送權杖」之間要互斥,而探活權杖與撤權權杖本就
+///   **有意同 aud**(貝塔通探的就是「會收撤權通知的那一端」)。真要拿探活權杖去打
+///   `/internal/revoke`,還得過訊息比對那一關(`sub` 得是 client_id,清的是查無此人的工作階段)。
 public sealed class BetapassRevokeVerifier
 {
-    /// **撤权**候选:(client_id, 绑定该 aud 的验证器)。顺序无所谓,全部试完才算失败。
+    /// **撤權**候選:(client_id, 綁定該 aud 的驗證器)。順序無所謂,全部試完才算失敗。
     private readonly (string ClientId, OidcTokenValidator Validator)[] _candidates;
 
-    /// **探活**候选。★★ **与撤权候选分开是这次改动的全部要点** ——
-    ///   共用一份的话,给探活加一个可接受的 `aud` 会**连带放宽 `/internal/revoke`**,
-    ///   方向正好反了。回归 `探活专属aud的令牌打撤权端点_拒` 钉住这条。
+    /// **探活**候選。★★ **與撤權候選分開是這次改動的全部要點** ——
+    ///   共用一份的話,給探活加一個可接受的 `aud` 會**連帶放寬 `/internal/revoke`**,
+    ///   方向正好反了。迴歸 `探活专属aud的令牌打撤权端点_拒` 釘住這條。
     private readonly (string ClientId, OidcTokenValidator Validator)[] _probeCandidates;
 
-    /// 探活当前接受哪些 `aud`(给预检显示用,判断过渡期能不能收掉)。
+    /// 探活當前接受哪些 `aud`(給預檢顯示用,判斷過渡期能不能收掉)。
     public IReadOnlyList<string> ProbeAudiences { get; }
 
     public BetapassRevokeVerifier(string jwksJson, ServerConfig cfg)
@@ -44,9 +44,9 @@ public sealed class BetapassRevokeVerifier
             .Where(one => !string.IsNullOrEmpty(one)).Select(one => one!).Distinct(StringComparer.Ordinal)];
         _candidates = [.. clientIds.Select(id => (id, new OidcTokenValidator(jwksJson, cfg.OidcIssuer!, id)))];
 
-        // 探活:新口径 `<client_id><后缀>`;过渡期同时接受旧口径 `<client_id>` 本身。
-        // ★ 元组第一项仍是**归属的 client_id**(不是那个 aud 字面量),因为调用方要的是
-        //   「这一发探的是哪个客户端」—— 新旧两种 aud 对这个答案没有影响。
+        // 探活:新口徑 `<client_id><后缀>`;過渡期同時接受舊口徑 `<client_id>` 本身。
+        // ★ 元組第一項仍是**歸屬的 client_id**(不是那個 aud 字面值),因為呼叫方要的是
+        //   「這一發探的是哪個用戶端」—— 新舊兩種 aud 對這個答案沒有影響。
         var probe = clientIds
             .Select(id => (id, Aud: id + cfg.OidcHealthAudienceSuffix)).ToList();
         if (cfg.OidcHealthAudienceAcceptLegacy)
@@ -55,15 +55,15 @@ public sealed class BetapassRevokeVerifier
         ProbeAudiences = [.. probe.Select(p => p.Aud)];
     }
 
-    /// 本机登记了几个可接收撤权通知的客户端。0 表示这台机器根本收不了通知。
+    /// 本機登記了幾個可接收撤權通知的用戶端。0 表示這臺機器根本收不了通知。
     public int CandidateCount => _candidates.Length;
 
-    /// 验签并取出报文三要素。
+    /// 驗籤並取出訊息三要素。
     ///
-    /// ★ `aud` 必须是**本机登记的 client_id 之一**;不是就拒 —— 这一条就是
-    ///   「谁都能踢人下线」与「只有贝塔通能踢」的全部差别。
-    /// ★ 撤权令牌**没有 nonce**(它不是登录流程),故跳过 nonce 校验;
-    ///   `alg`(PS256)/ 签名 / `iss` / `aud` / `exp` **五项一个不少**。
+    /// ★ `aud` 必須是**本機登記的 client_id 之一**;不是就拒 —— 這一條就是
+    ///   「誰都能踢人下線」與「只有貝塔通能踢」的全部差別。
+    /// ★ 撤權權杖**沒有 nonce**(它不是登入流程),故跳過 nonce 檢核;
+    ///   `alg`(PS256)/ 簽名 / `iss` / `aud` / `exp` **五項一個不少**。
     public BetapassRevokeEndpoint.Notice Verify(string token)
     {
         (string clientId, JsonElement payload) = VerifyCore(token, "撤权", _candidates);
@@ -72,40 +72,40 @@ public sealed class BetapassRevokeVerifier
             ?? throw new OidcValidationException("撤权令牌缺 jti");
         string sub = BetapassRevokeEndpoint.Opt(payload, "sub")
             ?? throw new OidcValidationException("撤权令牌缺 sub");
-        // 令牌里的 `purpose` 与报文里的 `reason` 同源,用哪个都行(契约明写)。
+        // 權杖裡的 `purpose` 與訊息裡的 `reason` 同源,用哪個都行(契約明寫)。
         string reason = BetapassRevokeEndpoint.Opt(payload, "purpose") ?? "";
         return new BetapassRevokeEndpoint.Notice(jti, sub, clientId, reason);
     }
 
-    /// 验一枚**探活**令牌(贝塔通 P94 的 `GET /internal/health`),返回它打的是本机哪个 client_id。
+    /// 驗一枚**探活**權杖(貝塔通 P94 的 `GET /internal/health`),回傳它打的是本機哪個 client_id。
     ///
-    /// ★ 与 <see cref="Verify"/> 的唯一差别是**不读任何报文语义** —— 探活令牌的 claims 只有
-    ///   `iss` / `aud` / `sub`(= client_id 自己)/ `jti` / `iat` / `exp`,没有 `purpose`,
-    ///   也没有要处置的对象。**签名 / `alg` / `iss` / `aud` / `exp` 五项一个不少**,
-    ///   因为「验不验签」就是「这份接入拓扑是不是白送给任何能打到这个地址的人」的全部差别(其 P94)。
+    /// ★ 與 <see cref="Verify"/> 的唯一差別是**不讀任何訊息語義** —— 探活權杖的 claims 只有
+    ///   `iss` / `aud` / `sub`(= client_id 自己)/ `jti` / `iat` / `exp`,沒有 `purpose`,
+    ///   也沒有要處置的物件。**簽名 / `alg` / `iss` / `aud` / `exp` 五項一個不少**,
+    ///   因為「驗不驗籤」就是「這份接入拓撲是不是白送給任何能打到這個位址的人」的全部差別(其 P94)。
     ///
-    /// ★★ **探活令牌走的是自己的候选集** <see cref="_probeCandidates"/>,与撤权分开。
-    ///   owner 2026-08-11 拍板:由贝塔通给探活令牌一个**专属 `aud`**(`&lt;client_id&gt;#health`),
-    ///   把契约里「多个入站端点唯一的区分是 `aud`」从一条带例外的规则恢复成**真不变量**。
+    /// ★★ **探活權杖走的是自己的候選集** <see cref="_probeCandidates"/>,與撤權分開。
+    ///   owner 2026-08-11 拍板:由貝塔通給探活權杖一個**專屬 `aud`**(`&lt;client_id&gt;#health`),
+    ///   把契約裡「多個入站端點唯一的區分是 `aud`」從一條帶例外的規則恢復成**真不變數**。
     ///
-    /// ★★★ **拆候选集是这次改动的全部要点**:两者共用一份的话,给探活加一个可接受的 `aud`
-    ///   会**连带放宽 `/internal/revoke`** —— 方向正好反了。回归
-    ///   `探活专属aud的令牌打撤权端点_拒` 正是钉这条。
+    /// ★★★ **拆候選集是這次改動的全部要點**:兩者共用一份的話,給探活加一個可接受的 `aud`
+    ///   會**連帶放寬 `/internal/revoke`** —— 方向正好反了。迴歸
+    ///   `探活专属aud的令牌打撤权端点_拒` 正是釘這條。
     ///
-    /// ⏳ **过渡期**:贝塔通尚未落地,今天发的仍是旧口径(`aud` = client_id 本身)。
-    ///   故默认**新旧都收**(`OidcHealthAudienceAcceptLegacy`)。★★ 对侧落地后要记得置 false ——
-    ///   不收掉的话「`aud` 拦不住这一对」的例外就永久留着,而那正是本次要消灭的东西。
-    ///   `GET /api/preflight` 的 `health_audience` 一项会一直提示它还开着。
+    /// ⏳ **過渡期**:貝塔通尚未完成實作,今天發的仍是舊口徑(`aud` = client_id 本身)。
+    ///   故預設**新舊都收**(`OidcHealthAudienceAcceptLegacy`)。★★ 對側完成實作後要記得置 false ——
+    ///   不收掉的話「`aud` 攔不住這一對」的例外就永久留著,而那正是本次要消滅的東西。
+    ///   `GET /api/preflight` 的 `health_audience` 一項會一直提示它還開著。
     ///
-    /// ★ **`/internal/revoke` 那条「令牌 `sub` == 报文 `sub`」不因此撤掉**(见
-    ///   <see cref="BetapassRevokeEndpoint.BodyMatches"/>):它降级为双保险,但**本身是自洽的
-    ///   语义约束**、不依赖对侧保持任何字段 —— 而这次改动恰恰依赖对侧。两道都留着。
+    /// ★ **`/internal/revoke` 那條「權杖 `sub` == 訊息 `sub`」不因此撤掉**(見
+    ///   <see cref="BetapassRevokeEndpoint.BodyMatches"/>):它降級為雙保險,但**本身是自洽的
+    ///   語義約束**、不相依對側保持任何欄位 —— 而這次改動恰恰相依對側。兩道都留著。
     public string VerifyProbe(string token) => VerifyCore(token, "探活", _probeCandidates).ClientId;
 
-    /// 共用的验签内核:逐个候选 `aud` 试,全部试完仍不过才算失败。
-    /// ★ `expectedNonce: null` —— 这两类令牌都不是登录流程,本就没有 nonce。
-    /// ★★ **候选集由调用方传入**,不再读某个字段 —— 「撤权用哪一份、探活用哪一份」
-    ///   因此是**调用点上看得见的事实**,而不是要去读构造函数才知道的约定。
+    /// 共用的驗籤核心:逐個候選 `aud` 試,全部試完仍不過才算失敗。
+    /// ★ `expectedNonce: null` —— 這兩類權杖都不是登入流程,本就沒有 nonce。
+    /// ★★ **候選集由呼叫方傳入**,不再讀某個欄位 —— 「撤權用哪一份、探活用哪一份」
+    ///   因此是**呼叫點上看得見的事實**,而不是要去讀建構函式才知道的約定。
     private (string ClientId, JsonElement Payload) VerifyCore(
         string token, string what, (string ClientId, OidcTokenValidator Validator)[] candidates)
     {
@@ -120,7 +120,7 @@ public sealed class BetapassRevokeVerifier
             }
             catch (OidcValidationException)
             {
-                // `aud` 不是这一个,试下一个;全部试完仍不过才算失败
+                // `aud` 不是這一個,試下一個;全部試完仍不過才算失敗
             }
         }
         throw new OidcValidationException($"{what}令牌的 aud 不是本机任何一个 client_id");

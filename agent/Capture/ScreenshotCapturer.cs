@@ -10,20 +10,20 @@ using IsImage = SixLabors.ImageSharp.Image;
 
 namespace Horus.Agent.Capture;
 
-/// 抓屏 → 缩放到目标高度 → WebP 编码 → pHash →(可选去重)→ 交上传委托,返回主屏 imageId。
-/// 抓图串行化(SemaphoreSlim),避免并发触发时去重状态竞争。
-/// 多显示器(BUG#4):遍历 Screen.AllScreens 每张都抓一张(覆盖"第二显示器"盲区);主屏 imageId 作为事件关联锚点。
+/// 抓屏 → 縮放到目標高度 → WebP 編碼 → pHash →(可選去重)→ 交上傳委託,回傳主屏 imageId。
+/// 抓圖串行化(SemaphoreSlim),避免並行觸發時去重狀態競爭。
+/// 多顯示器(BUG#4):遍歷 Screen.AllScreens 每張都抓一張(覆蓋"第二顯示器"盲區);主屏 imageId 作為事件關聯錨點。
 public sealed class ScreenshotCapturer : IDisposable
 {
-    private readonly LiveConfig _live;                                     // 目标高度 / WebP 质量可热更新
+    private readonly LiveConfig _live;                                     // 目標高度 / WebP 品質可熱更新
     private readonly Func<byte[], string, ulong, Task<string?>> _upload;   // (webp, trigger, phash) => imageId
     private readonly SemaphoreSlim _sem = new(1, 1);
-    private readonly TimeSpan _minGap = TimeSpan.FromMilliseconds(1500);   // 触发型连发去抖
+    private readonly TimeSpan _minGap = TimeSpan.FromMilliseconds(1500);   // 觸發型連發去抖
     private DateTime _lastUtc = DateTime.MinValue;
-    // 每屏独立去重状态(按设备名 key,随显示器插拔动态):避免多屏互相干扰。
+    // 每屏獨立去重狀態(按設備名 key,隨顯示器插拔動態):避免多屏互相干擾。
     private readonly Dictionary<string, (ulong Phash, bool Has)> _lastByScreen = new();
 
-    /// M5 防遮蔽:每帧算出廉价 luma 统计喂给此回调(Program 接 ScreenQuality 分类 → 疑似遮蔽则上报)。可空=不检测。
+    /// M5 防遮蔽:每影格算出廉價 luma 統計餵給此回呼(Program 接 ScreenQuality 分類 → 疑似遮蔽則上報)。可空=不檢測。
     public Action<ScreenStats>? OnStats { get; set; }
 
     public ScreenshotCapturer(LiveConfig live, Func<byte[], string, ulong, Task<string?>> upload)
@@ -32,8 +32,8 @@ public sealed class ScreenshotCapturer : IDisposable
         _upload = upload;
     }
 
-    /// dedupAgainstLast=true:对静止画面做 pHash 去重(随机基线层传 false——每张都要留)。
-    /// 多显示器:每张屏各抓一张并分别上传;主屏(Primary)的 imageId 作为事件关联锚点返回。
+    /// dedupAgainstLast=true:對靜止畫面做 pHash 去重(隨機基線層傳 false——每張都要留)。
+    /// 多顯示器:每張屏各抓一張並分別上傳;主屏(Primary)的 imageId 作為事件關聯錨點回傳。
     public async Task<string?> CaptureAsync(string trigger, bool dedupAgainstLast)
     {
         await _sem.WaitAsync().ConfigureAwait(false);
@@ -42,7 +42,7 @@ public sealed class ScreenshotCapturer : IDisposable
             if (dedupAgainstLast && DateTime.UtcNow - _lastUtc < _minGap) return null;
             _lastUtc = DateTime.UtcNow;
 
-            // 多显示器:每张屏都抓(覆盖第二屏盲区 · BUG#4)。
+            // 多顯示器:每張屏都抓(覆蓋第二屏盲區 · BUG#4)。
             var screens = System.Windows.Forms.Screen.AllScreens;
             string? primaryId = null;
             bool statsReported = false;
@@ -55,24 +55,24 @@ public sealed class ScreenshotCapturer : IDisposable
                 using (IsImage img = ToImageSharp(bmp))
                 {
                     Downscale(img, _live.TargetHeight);
-                    // M5:每帧算 luma 统计喂遮蔽检测。仅主屏喂(保持原 M5 语义:单路遮蔽判定),检测失败不影响主采集。
+                    // M5:每影格算 luma 統計喂遮蔽檢測。僅主屏喂(保持原 M5 語義:單路遮蔽判定),檢測失敗不影響主採集。
                     if (OnStats is not null && !statsReported && screen.Primary)
-                        try { OnStats(ComputeLumaStats(img)); statsReported = true; } catch { /* 遮蔽检测异常吞掉 */ }
+                        try { OnStats(ComputeLumaStats(img)); statsReported = true; } catch { /* 遮蔽檢測異常吞掉 */ }
                     phash = PerceptualHash.DHash(img);
 
-                    // 每屏独立去重(静止画面跳过),避免多屏互相干扰;key=设备名(随插拔动态)。
+                    // 每屏獨立去重(靜止畫面跳過),避免多屏互相干擾;key=設備名(隨插拔動態)。
                     string key = screen.DeviceName;
                     _lastByScreen.TryGetValue(key, out var last);
                     if (dedupAgainstLast && last.Has && PerceptualHash.Hamming(phash, last.Phash) <= 3)
-                        continue;   // 该屏静止,跳过上传(继续抓其余屏)
+                        continue;   // 該屏靜止,跳過上傳(繼續抓其餘屏)
                     _lastByScreen[key] = (phash, true);
 
                     webp = EncodeWebp(img, _live.WebpQuality);
                 }
-                // 多屏时在 trigger 追加 :screen{i},服务端 isEvent 判定(StartsWith "event:")与基线抽样不受影响。
+                // 多屏時在 trigger 追加 :screen{i},伺服器端 isEvent 判定(StartsWith "event:")與基線抽樣不受影響。
                 string? id = await _upload(webp, trigger + (screens.Length > 1 ? $":screen{i}" : ""), phash).ConfigureAwait(false);
-                if (screen.Primary) primaryId = id;     // 主屏作为事件关联锚点
-                if (primaryId is null) primaryId = id;  // 无主屏时兜底
+                if (screen.Primary) primaryId = id;     // 主屏作為事件關聯錨點
+                if (primaryId is null) primaryId = id;  // 無主屏時備援
             }
             return primaryId;
         }
@@ -81,7 +81,7 @@ public sealed class ScreenshotCapturer : IDisposable
 
     private static Bitmap GrabScreen(System.Windows.Forms.Screen screen)
     {
-        // 多显示器:用各屏 Bounds(虚拟屏幕坐标)抓取,覆盖第二屏盲区(BUG#4)。
+        // 多顯示器:用各屏 Bounds(虛擬螢幕座標)抓取,覆蓋第二屏盲區(BUG#4)。
         var b = screen.Bounds;
         var bmp = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp);
@@ -104,7 +104,7 @@ public sealed class ScreenshotCapturer : IDisposable
         img.Mutate(x => x.Resize(w, targetHeight));
     }
 
-    /// 廉价 luma 统计:降到 32×32 灰度算方差(近纯色→方差≈0)。W/H 取真实截图尺寸(判坏尺寸/过小)。
+    /// 廉價 luma 統計:降到 32×32 灰度算方差(近純色→方差≈0)。W/H 取真實截圖尺寸(判壞尺寸/過小)。
     private static ScreenStats ComputeLumaStats(IsImage img)
     {
         int w = img.Width, h = img.Height;

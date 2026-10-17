@@ -9,9 +9,9 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Ingest;
 
-/// 事件通道(WebSocket /ingest/events)。见 api-contract §1。
-/// 握手校验 X-Horus-Auth;每事件校验 sig;幂等落库(agent_id,seq,type);risk≥阈值入可疑队列。
-/// M4:鉴权密钥可为共享 PSK 或 OIDC 会话 K_sess(见 IngestAuth);OIDC 路径强制事件体身份==会话身份(闭合 A1/A2)。
+/// 事件通道(WebSocket /ingest/events)。見 api-contract §1。
+/// 握手檢核 X-Horus-Auth;每事件檢核 sig;冪等寫入資料庫(agent_id,seq,type);risk≥閾值入可疑佇列。
+/// M4:鑑權金鑰可為共享 PSK 或 OIDC 工作階段 K_sess(見 IngestAuth);OIDC 路徑強制事件體身分==工作階段身分(閉合 A1/A2)。
 public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionStore sessions, ILogger<EventIngest> log)
 {
     public async Task HandleAsync(HttpContext ctx)
@@ -22,7 +22,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         string seatId = ctx.Request.Query["seatId"].ToString();
         string agentId = ctx.Request.Query["agentId"].ToString();
 
-        // 握手鉴权(见 §1.1)。M4:先解析鉴权上下文(PSK ↔ OIDC 会话共存)。
+        // 握手鑑權(見 §1.1)。M4:先解析鑑權上下文(PSK ↔ OIDC 工作階段共存)。
         string sessionId = ctx.Request.Headers["X-Horus-Session"].ToString();
         IngestAuth.Resolved auth = IngestAuth.Resolve(cfg, sessions, sessionId, examId, seatId, agentId, Now());
         if (!auth.Ok)
@@ -31,7 +31,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
             log.LogWarning("事件握手鉴权拒绝 agent={Agent} seat={Seat} 原因={Err}", agentId, seatId, auth.Error);
             return;
         }
-        if (auth.Key is not null)   // 用 PSK 或会话 K_sess 验握手
+        if (auth.Key is not null)   // 用 PSK 或工作階段 K_sess 驗握手
         {
             string got = ctx.Request.Headers["X-Horus-Auth"].ToString();
             string want = Auth.Handshake(auth.Key, examId, seatId, agentId);
@@ -45,18 +45,18 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
 
         using WebSocket ws = await ctx.WebSockets.AcceptWebSocketAsync();
         CancellationToken ct = ctx.RequestAborted;
-        AgentHub.Conn conn = hub.Register(agentId, examId, ws);   // 登记在线连接(供 config_update 下推)
+        AgentHub.Conn conn = hub.Register(agentId, examId, ws);   // 登記線上連接(供 config_update 下推)
         log.LogInformation("Agent 连接 exam={Exam} seat={Seat} agent={Agent}", examId, seatId, agentId);
 
-        // 闭合全场登出竞态:握手期(IngestAuth.Resolve 已读取会话)与 hub.Register 之间存在窗口——若此刻发生 /logout,
-        // RevokeByExam(DELETE 会话)恒先于 PushSessionRevokedAsync(遍历 _conns 强断)。故本连接若在 abort 遍历时尚未登记,
-        // 会被漏断;而收帧循环只用握手期缓存的 auth,从不复查会话。登记后立即复查一次 OIDC 会话仍在:
-        // 因 DELETE 先于 abort,凡"错过 abort"的连接必然登记于 DELETE 之后 → 此复查必发现会话已吊销 → 主动断开。
+        // 閉合全場登出競態:握手期(IngestAuth.Resolve 已讀取工作階段)與 hub.Register 之間存在視窗——若此刻發生 /logout,
+        // RevokeByExam(DELETE 工作階段)恆先於 PushSessionRevokedAsync(遍歷 _conns 強斷)。故本連接若在 abort 遍歷時尚未登記,
+        // 會被漏斷;而收影格循環只用握手期快取的 auth,從不復查工作階段。登記後立即複查一次 OIDC 工作階段仍在:
+        // 因 DELETE 先於 abort,凡"錯過 abort"的連接必然登記於 DELETE 之後 → 此複查必發現工作階段已吊銷 → 主動斷開。
         if (auth.Session is not null && sessions.Get(sessionId, Now()) is null)
         {
             hub.Unregister(agentId, conn);
             log.LogInformation("Agent 登记后发现会话已吊销/过期,断开 exam={Exam} seat={Seat} agent={Agent}", examId, seatId, agentId);
-            try { ws.Abort(); } catch { /* 已断,忽略 */ }
+            try { ws.Abort(); } catch { /* 已斷,忽略 */ }
             return;
         }
 
@@ -92,13 +92,13 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         }
         finally { hub.Unregister(agentId, conn); }
 
-        // 完成关闭握手(对端主动关闭时回一帧 Close),避免客户端 WS 报异常关闭。
+        // 完成關閉握手(對端主動關閉時回一影格 Close),避免用戶端 WS 報異常關閉。
         try
         {
             if (ws.State is WebSocketState.CloseReceived)
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
         }
-        catch { /* 连接已断,忽略 */ }
+        catch { /* 連接已斷,忽略 */ }
 
         log.LogInformation("Agent 断开 seat={Seat} agent={Agent}", seatId, agentId);
     }
@@ -114,13 +114,13 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         });
         await conn.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "hello_ack", maxSeq }), ct);
 
-        // 该考试若已设配置,连上即推一次,使新连 / 重连的 Agent 拿到当前配置
+        // 該考試若已設設定,連上即推一次,使新連 / 重連的 Agent 拿到當前設定
         string? cfgJson = hub.GetConfig(conn.ExamId);
         if (cfgJson is not null)
             await conn.SendAsync(AgentHub.BuildConfigFrame(cfgJson), ct);
 
-        // 考试派发:Agent 离线期间考试被结束/归档 → 重连 hello 时补发 exam_ended(先让上面的续传窗口存在:
-        // Agent 收到后先排空缓冲再停采回待命,end 时刻附近的证据不丢)。无考试记录(联调/psk 未建考试)不发。
+        // 考試派發:Agent 離線期間考試被結束/歸檔 → 重連 hello 時補發 exam_ended(先讓上面的續傳視窗存在:
+        // Agent 收到後先排空緩衝再停採回待命,end 時刻附近的證據不丟)。無考試記錄(整合測試/psk 未建考試)不發。
         if (examStatus is not null && examStatus != "active")
             await conn.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "exam_ended", examId = conn.ExamId }), ct);
     }
@@ -129,8 +129,8 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
     {
         if (!frame.TryGetProperty("event", out JsonElement e) || e.ValueKind != JsonValueKind.Object) return;
 
-        // BUG#6:信封外层 seq 与内层 @event.seq 冗余(线协议)。Agent 用内层 e.Seq 签名,故**以内层为权威**;
-        // 若外层与内层不一致(协议被中间改写 / 版本错配)记告警,但不阻断(仍按内层权威 seq 验签与落库)。
+        // BUG#6:信封外層 seq 與內層 @event.seq 冗餘(線協定)。Agent 用內層 e.Seq 簽名,故**以內層為權威**;
+        // 若外層與內層不一致(協定被中間改寫 / 版本錯配)記告警,但不阻斷(仍按內層權威 seq 驗籤與寫入資料庫)。
         long seq = e.TryGetProperty("seq", out JsonElement eSeqEl) && eSeqEl.TryGetInt64(out long eSeq)
             ? eSeq
             : (frame.TryGetProperty("seq", out JsonElement sq) && sq.TryGetInt64(out long s) ? s : 0);
@@ -143,8 +143,8 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         string agentId = Str(e, "agentId") ?? "";
         string machineId = Str(e, "machineId") ?? "";
 
-        // M4·闭合 A1:OIDC 路径下,事件体自报身份**必须 == 会话绑定身份**,否则是拿自己会话给他人栽赃 —— 拒收。
-        // (K_sess 只证明「是本会话所签」,不证明「身份为真」;身份真伪靠此强制 + OIDC 认证。)seq 空间归属本会话 agent → 闭合 A2。
+        // M4·閉合 A1:OIDC 路徑下,事件體自報身分**必須 == 工作階段綁定身分**,否則是拿自己工作階段給他人栽贓 —— 拒收。
+        // (K_sess 只證明「是本工作階段所籤」,不證明「身分為真」;身分真偽靠此強制 + OIDC 認證。)seq 空間歸屬本工作階段 agent → 閉合 A2。
         if (session is not null && !session.IdentityMatches(examId, seatId, agentId))
         {
             await link.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "error", code = "identity_mismatch", seq }), ct);
@@ -159,7 +159,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         string? hashSelf = Str(e, "hashSelf");
         string payloadRaw = e.TryGetProperty("payload", out JsonElement pe) ? pe.GetRawText() : "{}";
 
-        // 验签:sig = HMAC(key, hashSelf + "\n" + seq)。key = PSK 或 OIDC 会话 K_sess(见 IngestAuth)。仅依赖 hashSelf 字符串。
+        // 驗籤:sig = HMAC(key, hashSelf + "\n" + seq)。key = PSK 或 OIDC 工作階段 K_sess(見 IngestAuth)。僅相依 hashSelf 字串。
         if (authKey is not null)
         {
             string want = EventCanonical.Sig(authKey, hashSelf ?? "", seq);
@@ -170,12 +170,12 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
                 return;
             }
 
-            // 完整性复验(M3·闭合 §10.1「服务器不重算 canonical」):sig 只证明「知道 PSK 且承诺了 hashSelf+seq」,
-            // 本身**不保证 hashSelf 绑定 payload**。此处从**原始 payload 文本 + 落库字段**逐字节复算 canonicalCore、
-            // 复算 hashSelf,要求与自报 hashSelf 一致 —— 使 hashSelf/sig 成为**真正锚定 payload/字段**的取证锚点。
-            // 任何 payload / 字段与 hashSelf 不符(自报错乱或传输中被非 PSK 方篡改) → 拒收,不落库。
-            // 注:持 PSK 学员机仍可自洽地伪造 payload+hashSelf(结构性残留,靠截图/视觉/人工兜底,见 §10.1),
-            //     此步保证的是「锚点确实承诺其 payload」+「链后审计可发现落库后改动/删增」。
+            // 完整性複驗(M3·閉合 §10.1「伺服器不重算 canonical」):sig 只證明「知道 PSK 且承諾了 hashSelf+seq」,
+            // 本身**不保證 hashSelf 綁定 payload**。此處從**原始 payload 文字 + 寫入資料庫欄位**逐位元組復算 canonicalCore、
+            // 復算 hashSelf,要求與自報 hashSelf 一致 —— 使 hashSelf/sig 成為**真正錨定 payload/欄位**的取證錨點。
+            // 任何 payload / 欄位與 hashSelf 不符(自回報錯誤亂或傳輸中被非 PSK 方篡改) → 拒收,不寫入資料庫。
+            // 注:持 PSK 學員機仍可自洽地偽造 payload+hashSelf(結構性殘留,靠截圖/視覺/人工備援,見 §10.1),
+            //     此步保證的是「錨點確實承諾其 payload」+「鏈後稽核可發現寫入資料庫後改動/刪增」。
             if (!EventCanonical.VerifyHashSelf(hashPrev ?? "GENESIS", examId, seatId, agentId, machineId,
                     ts, typeStr, payloadRaw, risk, evidenceImageId, seq, hashSelf))
             {
@@ -187,20 +187,20 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
 
         double recvTs = Now();
 
-        // 服务器侧风险复判(**不信任 Agent 自报 risk**):凭独立黑名单 + 该考试已下发白名单重算。
-        // 有效风险 = max(agentRisk, serverRisk);持 PSK 学员机把「访问 AI 站」签成 risk=0 也压不住入队。
-        // 策略取 AgentHub **已解析缓存**(下发时重建),免每事件热路径重复 JsonDocument.Parse + 建 HashSet。
+        // 伺服器側風險復判(**不信任 Agent 自報 risk**):憑獨立黑名單 + 該考試已下發白名單重算。
+        // 有效風險 = max(agentRisk, serverRisk);持 PSK 學員機把「訪問 AI 站」籤成 risk=0 也壓不住入隊。
+        // 策略取 AgentHub **已解析快取**(下發時重建),免每事件熱路徑重複 JsonDocument.Parse + 建 HashSet。
         SignalType sigType = ParseType(typeStr);
         JsonElement payloadEl = e.TryGetProperty("payload", out JsonElement pEl) ? pEl : default;
         RiskModel.Policy policy = hub.GetPolicy(examId);
         int serverRisk = RiskModel.Derive(sigType, payloadEl, policy.Hosts, policy.Procs, policy.PasteThreshold);
         int effRisk = Math.Max(risk, serverRisk);
 
-        // 落库 + 入可疑队列在**同一写锁事务**内完成:避免二者分处两个事务时,崩溃/归档窗口卡在中间导致
-        // 高危事件已落库却漏入队(复传因 ON CONFLICT DO NOTHING 不再补入队),或入队一条指向已归档删除事件的孤儿 pending。
+        // 寫入資料庫 + 入可疑佇列在**同一寫鎖交易**內完成:避免二者分處兩個交易時,崩潰/歸檔視窗卡在中間導致
+        // 高危事件已寫入資料庫卻漏入隊(復傳因 ON CONFLICT DO NOTHING 不再補入隊),或入隊一條指向已歸檔刪除事件的孤兒 pending。
         db.Locked(conn =>
         {
-            // 归档中/已归档考试:短路不落库(避免"读快照→DELETE"窗口内的 late-ingest 被无锚点删)。仍会 ack 使 Agent 停发。
+            // 歸檔中/已歸檔考試:短路不寫入資料庫(避免"讀快照→DELETE"視窗內的 late-ingest 被無錨點刪)。仍會 ack 使 Agent 停發。
             if (conn.IsExamSealed(examId)) return;
 
             using SqliteCommand ins = conn.Cmd(
@@ -218,7 +218,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
                 using SqliteCommand idc = conn.Cmd("SELECT last_insert_rowid()");
                 id = Convert.ToInt64(idc.ExecuteScalar());
 
-                // 触发型抓图 → 标记证据图
+                // 觸發型抓圖 → 標記證據圖
                 if (evidenceImageId is not null)
                 {
                     using SqliteCommand mk = conn.Cmd("UPDATE images SET is_evidence=1 WHERE image_id=@id", ("@id", evidenceImageId));
@@ -226,8 +226,8 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
                 }
             }
 
-            // 心跳写在线表:不论新旧都刷新;写后**裁剪**只保留该 (exam,seat,agent) 最新 ts 的一行 ——
-            // 在线判定只需最新一条,故无须留历史;同时防持 PSK 者用不断变化的 ts 无界追加撑爆表(replay 的旧 ts 会被裁掉)。
+            // 心跳寫線上表:不論新舊都刷新;寫後**裁剪**只保留該 (exam,seat,agent) 最新 ts 的一行 ——
+            // 線上判定只需最新一條,故無須留歷史;同時防持 PSK 者用不斷變化的 ts 無界追加撐爆表(replay 的舊 ts 會被裁掉)。
             if (typeStr == "heartbeat")
             {
                 string status = TryGetPayloadStr(payloadRaw, "status") ?? "alive";
@@ -242,9 +242,9 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
                     prune.ExecuteNonQuery();
             }
 
-            // 只对**新落库**事件入可疑队列(避免重传重复入队);用有效风险判阈值,url_unreadable 无视阈值。
-            // agentRisk 低于阈值但 serverRisk 顶上去 → 记 agent_risk_understated,是篡改逃逸的取证信号。
-            // M5 健康信号(source='health')无论风险分都入「采集健康」面板(纯提示,不污染作弊裁决率)。
+            // 只對**新寫入資料庫**事件入可疑佇列(避免重傳重複入隊);用有效風險判閾值,url_unreadable 無視閾值。
+            // agentRisk 低於閾值但 serverRisk 頂上去 → 記 agent_risk_understated,是篡改逃逸的取證信號。
+            // M5 健康信號(source='health')無論風險分都入「採集健康」面板(純提示,不汙染作弊裁決率)。
             string healthKind = Suspicion.KindFor(sigType, payloadEl);
             bool isHealth = Suspicion.SourceForKind(healthKind) == "health";
             if (id is not null && typeStr != "heartbeat" &&
@@ -256,22 +256,22 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
             }
         });
 
-        // ---- 三道门的采集面写入口(贝塔通 P88–P92)----
-        // ★ **复用既有上行通道**:Agent 本来就在持续上传事件流,不必另开一个心跳端点
-        //   (其 rp-contract 对桌面客户端明写可以复用)。
-        // ★★ `active` **由 Agent 自己定义**(采集机上有无用户活动),不是浏览器那套 —— 它更准。
-        //   ★ **缺 `active` 字段时按 false 算**:那说明采集端版本比服务器旧,是部署事故。
-        //   按 true 算能让它继续跑,但代价是 idle 那道门对那批机器**静默失效**,
-        //   而失效这件事没有任何症状。宁可让它以「学生 30 分钟后被踢」的形态暴露出来。
-        // ★ 放在写事务**之外**:Heartbeat 自己要取写锁,套在里面就是重入。
+        // ---- 三道門的採集面寫入口(貝塔通 P88–P92)----
+        // ★ **重複使用既有上行通道**:Agent 本來就在持續上傳事件流,不必另開一個心跳端點
+        //   (其 rp-contract 對桌面用戶端明寫可以重複使用)。
+        // ★★ `active` **由 Agent 自己定義**(採集機上有無使用者活動),不是瀏覽器那套 —— 它更準。
+        //   ★ **缺 `active` 欄位時按 false 算**:那說明採集端版本比伺服器舊,是部署事故。
+        //   按 true 算能讓它繼續跑,但代價是 idle 那道門對那批機器**靜默失效**,
+        //   而失效這件事沒有任何症狀。寧可讓它以「學生 30 分鐘後被踢」的形態暴露出來。
+        // ★ 放在寫交易**之外**:Heartbeat 自己要取寫鎖,套在裡面就是重入。
         if (typeStr == "heartbeat" && session is not null)
             sessions.Heartbeat(session.SessionId, TryGetPayloadBool(payloadRaw, "active") ?? false, Now());
 
-        // 逐条 ack 本条 seq(不用范围 upto):即使 seq 空间有空洞,也不会误删从未送达的低 seq 事件
+        // 逐條 ack 本條 seq(不用範圍 upto):即使 seq 空間有空洞,也不會誤刪從未送達的低 seq 事件
         await link.SendAsync(JsonSerializer.Serialize(new { v = 1, type = "ack", seq }), ct);
     }
 
-    /// 从 payload 原文里取一个布尔;不存在 / 类型不符返回 null(由调用方决定缺省语义)。
+    /// 從 payload 原文裡取一個布爾;不存在 / 類型不符回傳 null(由呼叫方決定預設語義)。
     private static bool? TryGetPayloadBool(string payloadRaw, string key)
     {
         try
@@ -285,15 +285,15 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
                     _ => null,
                 };
         }
-        catch (JsonException) { /* payload 非法 JSON:当作没这个字段 */ }
+        catch (JsonException) { /* payload 非法 JSON:當作沒這個欄位 */ }
         return null;
     }
 
-    /// 抓不到 URL 的降级信号 = 强制人工复核(无视风险阈值),否则该兜底链断在最后一步。
+    /// 抓不到 URL 的降級信號 = 強制人工複核(無視風險閾值),否則該備援鏈斷在最後一步。
     private static bool IsForcedReview(string typeStr, string payloadRaw)
         => typeStr == "browser_url" && TryGetPayloadStr(payloadRaw, "note") == "url_unreadable";
 
-    /// 入可疑队列。**在调用方的写锁事务内**执行(与事件落库同一事务),故传入 conn 而非另开 db.Locked。
+    /// 入可疑佇列。**在呼叫方的寫鎖交易內**執行(與事件寫入資料庫同一交易),故傳入 conn 而非另開 db.Locked。
     private static void EnqueueSuspicious(SqliteConnection conn, string examId, string seatId, double ts, string typeStr,
         int score, long eventId, string? evidenceImageId, string payloadRaw, string? note)
     {
@@ -303,7 +303,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         catch { payload = default; }
 
         string kind = Suspicion.KindFor(type, payload);
-        string source = Suspicion.SourceForKind(kind);   // M5 健康信号→health(只读面板)；其余→suspicion(可裁决)
+        string source = Suspicion.SourceForKind(kind);   // M5 健康信號→health(唯讀面板)；其餘→suspicion(可裁決)
         var refs = new List<string> { $"event:{eventId}" };
         if (evidenceImageId is not null) refs.Add($"image:{evidenceImageId}");
         string refsJson = JsonSerializer.Serialize(refs);
@@ -343,7 +343,7 @@ public sealed class EventIngest(Db db, ServerConfig cfg, AgentHub hub, SessionSt
         "usb" => SignalType.Usb,
         "screenshot" => SignalType.Screenshot,
         "heartbeat" => SignalType.Heartbeat,
-        // M5 采集端硬化健康信号
+        // M5 採集端硬化健康信號
         "watchdog_restart" => SignalType.WatchdogRestart,
         "suspected_suspend" => SignalType.SuspectedSuspend,
         "screenshot_obscured" => SignalType.ScreenshotObscured,

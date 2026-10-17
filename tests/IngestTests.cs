@@ -41,13 +41,13 @@ public class IngestTests
         await Ws.SendAsync(ws, evt);
         JsonElement evAck = await Ws.ReceiveAsync(ws);
         Assert.Equal("ack", evAck.GetProperty("type").GetString());
-        Assert.Equal(1, evAck.GetProperty("seq").GetInt64());   // 逐条 ack 本条 seq
+        Assert.Equal(1, evAck.GetProperty("seq").GetInt64());   // 逐條 ack 本條 seq
 
         JsonElement events = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/events?seatId=A07");
         Assert.Equal(1, events.GetArrayLength());
         Assert.Equal("browser_url", events[0].GetProperty("type").GetString());
         Assert.Equal(80, events[0].GetProperty("risk").GetInt32());
-        // payload 是嵌套对象(非字符串)
+        // payload 是嵌套物件(非字串)
         Assert.Equal("https://chat.openai.com/", events[0].GetProperty("payload").GetProperty("url").GetString());
 
         JsonElement susp = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
@@ -56,7 +56,7 @@ public class IngestTests
         Assert.Equal(80, susp[0].GetProperty("score").GetInt32());
         Assert.Equal("pending", susp[0].GetProperty("status").GetString());
 
-        // 重传同一 (agentId, seq, type) → 幂等,不重复落库/入队
+        // 重傳同一 (agentId, seq, type) → 冪等,不重複寫入資料庫/入隊
         await Ws.SendAsync(ws, evt);
         await Ws.ReceiveAsync(ws); // ack
         JsonElement events2 = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/events?seatId=A07");
@@ -80,8 +80,8 @@ public class IngestTests
             new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = false }, 80, seq: 9));
         JsonElement ack = await Ws.ReceiveAsync(ws);
         Assert.Equal("ack", ack.GetProperty("type").GetString());
-        Assert.Equal(9, ack.GetProperty("seq").GetInt64());       // 确认的是本条 seq
-        Assert.False(ack.TryGetProperty("upto", out _));          // 不再有范围 upto(否则空洞会误删)
+        Assert.Equal(9, ack.GetProperty("seq").GetInt64());       // 確認的是本條 seq
+        Assert.False(ack.TryGetProperty("upto", out _));          // 不再有範圍 upto(否則空洞會誤刪)
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class IngestTests
         using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);
-        // risk=40 < 阈值50,但 note=url_unreadable → 仍须入队(强制人工看截图的兜底)
+        // risk=40 < 閾值50,但 note=url_unreadable → 仍須入隊(強制人工看截圖的備援)
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.BrowserUrl,
             new() { ["process"] = "chrome", ["url"] = null, ["note"] = "url_unreadable" }, 40, 1));
         await Ws.ReceiveAsync(ws); // ack
@@ -115,13 +115,13 @@ public class IngestTests
         using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);
-        // 事件先到,引用一个此刻尚不存在的证据图
+        // 事件先到,引用一個此刻尚不存在的證據圖
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.BrowserUrl,
             new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = false },
             80, 1, evidenceImageId: imgId));
         await Ws.ReceiveAsync(ws); // ack
 
-        // 图片后到(带同一 client id)→ 应回填 is_evidence
+        // 圖片後到(帶同一 client id)→ 應回填 is_evidence
         byte[] webp = Encoding.ASCII.GetBytes("RIFF-late-arriving-evidence");
         await UploadImageAsync(http, webp, "E1", "A07", "ag-A07", 2, "event:browser",
             "aabbccddeeff0011", "1750000000.500", expectDuplicate: false, clientId: imgId);
@@ -141,7 +141,7 @@ public class IngestTests
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\",\"agentId\":\"ag-A07\"}");
         await Ws.ReceiveAsync(ws); // hello_ack
 
-        // 用错误 PSK 签名 → sig 不匹配
+        // 用錯誤 PSK 簽名 → sig 不匹配
         byte[] wrongPsk = Enumerable.Repeat((byte)0xFF, 32).ToArray();
         string bad = Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.BrowserUrl,
             new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = false }, 80, 1, psk: wrongPsk);
@@ -175,17 +175,17 @@ public class IngestTests
 
         string imageId = await UploadImageAsync(http, webp, exam, seat, agent, seq, trigger, phash, ts, expectDuplicate: false);
 
-        // 相同 phash 再传 → 去重(duplicate=true,复用 imageId)
+        // 相同 phash 再傳 → 去重(duplicate=true,重複使用 imageId)
         string dupId = await UploadImageAsync(http, webp, exam, seat, agent, 6, trigger, phash, ts, expectDuplicate: true);
         Assert.Equal(imageId, dupId);
 
-        // 取回字节
+        // 取回位元組
         HttpResponseMessage img = await http.GetAsync($"/api/images/{imageId}");
         Assert.Equal(HttpStatusCode.OK, img.StatusCode);
         Assert.Equal("image/webp", img.Content.Headers.ContentType!.MediaType);
         Assert.Equal(webp, await img.Content.ReadAsByteArrayAsync());
 
-        // 元数据
+        // 中繼資料
         JsonElement meta = await http.GetFromJsonAsync<JsonElement>($"/api/images/{imageId}/meta");
         Assert.Equal(phash, meta.GetProperty("phash").GetString());
         Assert.Equal(webp.Length, meta.GetProperty("bytes").GetInt64());
@@ -236,15 +236,15 @@ public class IngestTests
             return m;
         }
 
-        // 无签名 → 401
+        // 無簽名 → 401
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(Req(bodyBytes, null))).StatusCode);
-        // 错签名 → 401
+        // 錯簽名 → 401
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(Req(bodyBytes, "deadbeef"))).StatusCode);
-        // 栽赃:改 seatId 为 B99 但拿原 body 的签名 → 401(内容绑定被破坏)
+        // 栽贓:改 seatId 為 B99 但拿原 body 的簽名 → 401(內容綁定被破壞)
         byte[] tampered = Encoding.UTF8.GetBytes(bodyJson.Replace("A07", "B99"));
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(Req(tampered, goodSig))).StatusCode);
 
-        // 有效签名 → 200 + 落库(risk=70)
+        // 有效簽名 → 200 + 寫入資料庫(risk=70)
         HttpResponseMessage ok = await http.SendAsync(Req(bodyBytes, goodSig));
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
         JsonElement b = await ok.Content.ReadFromJsonAsync<JsonElement>();
@@ -288,7 +288,7 @@ public class IngestTests
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http);
 
-        // 初始:离线
+        // 初始:離線
         JsonElement seats0 = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/seats");
         Assert.Equal(1, seats0.GetArrayLength());
         Assert.False(seats0[0].GetProperty("online").GetBoolean());
@@ -296,7 +296,7 @@ public class IngestTests
         using WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07");
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);
-        // 心跳事件(ts 用当前时钟,才落在在线窗口内)
+        // 心跳事件(ts 用當前時鐘,才落在線上視窗內)
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         string hb = Ws.SignedEventTs("E1", "A07", "ag-A07", "PC-A07", SignalType.Heartbeat,
             new() { ["status"] = "alive" }, 0, 1, now);
@@ -313,24 +313,24 @@ public class IngestTests
         using var app = new TestApp(adminAuth: true);
         HttpClient http = app.CreateClient();
 
-        // 无令牌 → 401(挡住学员机调 config/decide/读数据)
+        // 無權杖 → 401(擋住學員機調 config/decide/讀資料)
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync("/api/exams")).StatusCode);
 
-        // 错令牌 → 401
+        // 錯權杖 → 401
         var bad = new HttpRequestMessage(HttpMethod.Get, "/api/exams");
         bad.Headers.Add("X-Horus-Admin", "wrong");
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(bad)).StatusCode);
 
-        // 对令牌 → 放行(200)
+        // 對權杖 → 放行(200)
         var ok = new HttpRequestMessage(HttpMethod.Get, "/api/exams");
         ok.Headers.Add("X-Horus-Admin", TestApp.AdminToken);
         Assert.Equal(HttpStatusCode.OK, (await http.SendAsync(ok)).StatusCode);
 
-        // 图片字节端点用 ?t= 查询令牌(<img> 无法设头):对令牌过鉴权(404 而非 401),无令牌 401
+        // 圖片位元組端點用 ?t= 查詢權杖(<img> 無法設頭):對權杖過鑑權(404 而非 401),無權杖 401
         Assert.Equal(HttpStatusCode.NotFound, (await http.GetAsync($"/api/images/nope?t={TestApp.AdminToken}")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync("/api/images/nope")).StatusCode);
 
-        // /ingest/* 不受管理令牌影响(采集面走 PSK,不走 admin token)
+        // /ingest/* 不受管理權杖影響(採集面走 PSK,不走 admin token)
         Assert.NotEqual(HttpStatusCode.Unauthorized, (await http.PostAsync("/ingest/keystroke",
             new StringContent("{}", System.Text.Encoding.UTF8, "application/json"))).StatusCode);
     }
@@ -339,26 +339,26 @@ public class IngestTests
     public async Task 管理端点_cookie登录放行_登出后401()
     {
         using var app = new TestApp(adminAuth: true);
-        HttpClient http = app.CreateClient();   // WebApplicationFactory 默认 HandleCookies=true,跨请求保持 cookie
+        HttpClient http = app.CreateClient();   // WebApplicationFactory 預設 HandleCookies=true,跨請求保持 cookie
 
-        // 未登录 → 401
+        // 未登入 → 401
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync("/api/exams")).StatusCode);
 
-        // 错令牌登录 → 401,不种 cookie
+        // 錯權杖登入 → 401,不種 cookie
         HttpResponseMessage badLogin = await http.PostAsJsonAsync("/api/login", new { token = "wrong" });
         Assert.Equal(HttpStatusCode.Unauthorized, badLogin.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync("/api/exams")).StatusCode);
 
-        // 正确令牌登录 → 200 + Set-Cookie(HttpOnly)
+        // 正確權杖登入 → 200 + Set-Cookie(HttpOnly)
         HttpResponseMessage login = await http.PostAsJsonAsync("/api/login", new { token = TestApp.AdminToken });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         Assert.Contains(login.Headers, h => h.Key == "Set-Cookie" &&
             h.Value.Any(v => v.Contains("horus_admin") && v.Contains("httponly", StringComparison.OrdinalIgnoreCase)));
 
-        // 带 cookie → 放行(不再需要 X-Horus-Admin 头)
+        // 帶 cookie → 放行(不再需要 X-Horus-Admin 頭)
         Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/api/exams")).StatusCode);
 
-        // 登出 → 清 cookie → 再访问 401
+        // 登出 → 清 cookie → 再訪問 401
         Assert.Equal(HttpStatusCode.OK, (await http.PostAsync("/api/logout", null)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync("/api/exams")).StatusCode);
     }
@@ -372,15 +372,15 @@ public class IngestTests
         Assert.True(r.Headers.Contains("Content-Security-Policy"), "缺 CSP 头");
         Assert.True(r.Headers.Contains("X-Content-Type-Options"), "缺 nosniff 头");
         Assert.True(r.Headers.Contains("X-Frame-Options"), "缺 X-Frame-Options 头");
-        // 断言 CSP **具体指令**(防有人误改成 unsafe-inline / 删关键收紧项而测试仍绿):
+        // 斷言 CSP **具體指令**(防有人誤改成 unsafe-inline / 刪關鍵收緊項而測試仍綠):
         string csp = string.Join(" ", r.Headers.GetValues("Content-Security-Policy"));
-        Assert.Contains("script-src 'self'", csp);       // 同源脚本 + 下方明确允许的 Cloudflare 分析来源
+        Assert.Contains("script-src 'self'", csp);       // 同源指令碼 + 下方明確允許的 Cloudflare 分析來源
         Assert.Contains("https://static.cloudflareinsights.com", csp);
         Assert.Contains("connect-src 'self' https://challenges.cloudflare.com https://cloudflareinsights.com", csp);
         Assert.Contains("object-src 'none'", csp);
         Assert.Contains("base-uri 'none'", csp);
         Assert.Contains("frame-ancestors 'none'", csp);
-        Assert.DoesNotContain("script-src 'unsafe-inline'", csp);   // 绝不放开内联脚本
+        Assert.DoesNotContain("script-src 'unsafe-inline'", csp);   // 絕不放開內聯指令碼
     }
 
     [Fact]
@@ -392,12 +392,12 @@ public class IngestTests
         byte[] webp = Encoding.ASCII.GetBytes("RIFF-webp-client-id-test");
         string cid = "img_" + Guid.NewGuid().ToString("N");
 
-        // 带客户端 id 上传 → 服务器沿用该 id
+        // 帶用戶端 id 上傳 → 伺服器沿用該 id
         string id1 = await UploadImageAsync(http, webp, "E1", "A07", "ag-A07", 5, "event:browser",
             "aabbccddeeff0011", "1750000000.100", expectDuplicate: false, clientId: cid);
         Assert.Equal(cid, id1);
 
-        // 同 id 重传(续传)→ 幂等,不另存
+        // 同 id 重傳(續傳)→ 冪等,不另存
         string id2 = await UploadImageAsync(http, webp, "E1", "A07", "ag-A07", 6, "event:browser",
             "aabbccddeeff0011", "1750000000.200", expectDuplicate: true, clientId: cid);
         Assert.Equal(cid, id2);
@@ -417,19 +417,19 @@ public class IngestTests
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);
 
-        // 学员机持 PSK,把"访问 AI 站"事件合法签成 risk=0 + whitelisted=true 试图逃逸可疑队列
+        // 學員機持 PSK,把"訪問 AI 站"事件合法籤成 risk=0 + whitelisted=true 試圖逃逸可疑佇列
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.BrowserUrl,
             new() { ["process"] = "chrome", ["url"] = "https://chat.openai.com/", ["whitelisted"] = true }, 0, seq: 1));
         JsonElement ack = await Ws.ReceiveAsync(ws);
-        Assert.Equal("ack", ack.GetProperty("type").GetString());     // 签名合法,照收(不误伤)
+        Assert.Equal("ack", ack.GetProperty("type").GetString());     // 簽名合法,照收(不誤傷)
 
-        // 事件落库:Agent 自报 risk=0 原样留证,但服务器独立复判 serverRisk=80
+        // 事件寫入資料庫:Agent 自報 risk=0 原樣留證,但伺服器獨立復判 serverRisk=80
         JsonElement events = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/events?seatId=A07");
         Assert.Equal(1, events.GetArrayLength());
         Assert.Equal(0, events[0].GetProperty("risk").GetInt32());
         Assert.Equal(80, events[0].GetProperty("serverRisk").GetInt32());
 
-        // 仍入可疑队列:score=有效风险 80,kind=web_ai,note 记 agent_risk_understated(篡改取证)
+        // 仍入可疑佇列:score=有效風險 80,kind=web_ai,note 記 agent_risk_understated(篡改取證)
         JsonElement susp = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
         Assert.Equal(1, susp.GetArrayLength());
         Assert.Equal("web_ai", susp[0].GetProperty("kind").GetString());
@@ -448,7 +448,7 @@ public class IngestTests
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);
 
-        // agent 谎报 TeamViewer 为白名单 risk=0,但命中服务器远控黑名单 → 独立判 70 入队
+        // agent 謊報 TeamViewer 為白名單 risk=0,但命中伺服器遠控黑名單 → 獨立判 70 入隊
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.ProcessStart,
             new() { ["name"] = "TeamViewer.exe", ["pid"] = 999, ["whitelisted"] = true }, 0, seq: 1));
         await Ws.ReceiveAsync(ws);
@@ -477,7 +477,7 @@ public class IngestTests
         JsonElement events = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/events?seatId=A07");
         Assert.Equal(0, events[0].GetProperty("serverRisk").GetInt32());
         JsonElement susp = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
-        Assert.Equal(0, susp.GetArrayLength());   // 良性事件不入队,不制造假阳性
+        Assert.Equal(0, susp.GetArrayLength());   // 良性事件不入隊,不製造假陽性
     }
 
     [Fact]
@@ -491,7 +491,7 @@ public class IngestTests
         await Ws.SendAsync(ws, "{\"v\":1,\"type\":\"hello\"}");
         await Ws.ReceiveAsync(ws);
 
-        // agent 把 5000 字符大段粘贴签成 large=false, risk=0;服务器从 len/lines 独立复判 → 60 入队 + 篡改标记
+        // agent 把 5000 字元大段粘貼籤成 large=false, risk=0;伺服器從 len/lines 獨立復判 → 60 入隊 + 篡改標記
         await Ws.SendAsync(ws, Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.Clipboard,
             new() { ["len"] = 5000, ["lines"] = 80, ["large"] = false }, 0, seq: 1));
         await Ws.ReceiveAsync(ws);
@@ -520,7 +520,7 @@ public class IngestTests
         r1.EnsureSuccessStatusCode();
         Assert.True((await r1.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("stored").GetBoolean());
 
-        // 原样重放 → 幂等:不另存、不重复入队
+        // 原樣重放 → 冪等:不另存、不重複入隊
         HttpResponseMessage r2 = await http.PostAsJsonAsync("/ingest/keystroke", body);
         r2.EnsureSuccessStatusCode();
         JsonElement b2 = await r2.Content.ReadFromJsonAsync<JsonElement>();
@@ -528,7 +528,7 @@ public class IngestTests
         Assert.True(b2.GetProperty("duplicate").GetBoolean());
 
         JsonElement susp = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
-        Assert.Equal(1, susp.GetArrayLength());   // 只入队一次
+        Assert.Equal(1, susp.GetArrayLength());   // 只入隊一次
     }
 
     [Fact]
@@ -538,13 +538,13 @@ public class IngestTests
         HttpClient http = app.CreateClient();
         await CreateExamAsync(http);
 
-        // 上传一张(触发型)含 AICHAT 标记的图 → 后台 Mock 视觉分析判 web_ai(置信 95)
+        // 上傳一張(觸發型)含 AICHAT 標記的圖 → 後台 Mock 視覺分析判 web_ai(置信 95)
         byte[] webp = Encoding.ASCII.GetBytes("RIFF....WEBP AICHAT on screen");
         string cid = "img_" + Guid.NewGuid().ToString("N");
         await UploadImageAsync(http, webp, "E1", "A07", "ag-A07", 5, "event:browser",
             "aabbccddeeff0011", "1750000000.100", expectDuplicate: false, clientId: cid);
 
-        // 后台异步:等可疑队列出现 web_ai(vision)
+        // 後台非同步:等可疑佇列出現 web_ai(vision)
         await WaitForAsync(async () =>
         {
             JsonElement s = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
@@ -556,7 +556,7 @@ public class IngestTests
         Assert.Equal(95, susp[0].GetProperty("score").GetInt32());
         Assert.Contains("vision:", susp[0].GetProperty("note").GetString());
 
-        // 图元数据:已分析(终结)+ 标为证据。mock 不出网 → uploadedToOcr 恒 false(隐私审计真出网信号,不再撒谎)。
+        // 圖中繼資料:已分析(終結)+ 標為證據。mock 不出網 → uploadedToOcr 恆 false(隱私稽核真出網信號,不再撒謊)。
         JsonElement meta = await http.GetFromJsonAsync<JsonElement>($"/api/images/{cid}/meta");
         Assert.True(meta.GetProperty("analyzed").GetBoolean());
         Assert.False(meta.GetProperty("uploadedToOcr").GetBoolean());
@@ -575,7 +575,7 @@ public class IngestTests
         await UploadImageAsync(http, webp, "E1", "A07", "ag-A07", 5, "event:browser",
             "aabbccddeeff0011", "1750000000.100", expectDuplicate: false, clientId: cid);
 
-        // 等分析跑完(analyzed=true),再确认无可疑(良性图不制造假阳性)
+        // 等分析跑完(analyzed=true),再確認無可疑(良性圖不製造假陽性)
         await WaitForAsync(async () =>
         {
             JsonElement m = await http.GetFromJsonAsync<JsonElement>($"/api/images/{cid}/meta");
@@ -585,7 +585,7 @@ public class IngestTests
         Assert.Equal(0, susp.GetArrayLength());
     }
 
-    [Fact]   // F5(第三轮):事件+证据图链路,视觉命中不再另插重复 pending,而是并入 ingest 期那条(避免同一事两条、裁决两次)。
+    [Fact]   // F5(第三輪):事件+證據圖連線路徑,視覺命中不再另插重複 pending,而是併入 ingest 期那條(避免同一事兩條、裁決兩次)。
     public async Task 视觉命中并入既有pending_不重复入队()
     {
         using var app = new TestApp(visionMock: true);
@@ -593,7 +593,7 @@ public class IngestTests
         await CreateExamAsync(http);
 
         string cid = "img_" + Guid.NewGuid().ToString("N");
-        // 1) 先发一条访问 AI 站的 browser_url 事件,携 evidenceImageId=cid → ingest 期入队一条(effRisk 80)。
+        // 1) 先發一條訪問 AI 站的 browser_url 事件,攜 evidenceImageId=cid → ingest 期入隊一條(effRisk 80)。
         using (WebSocket ws = await app.ConnectEventsAsync("E1", "A07", "ag-A07"))
         {
             string ev = Ws.SignedEvent("E1", "A07", "ag-A07", "PC-A07", SignalType.BrowserUrl,
@@ -608,12 +608,12 @@ public class IngestTests
             return s.GetArrayLength() == 1;
         });
 
-        // 2) 上传该证据图(含 AICHAT 标记 → mock 判 web_ai)→ 触发视觉分析。
+        // 2) 上傳該證據圖(含 AICHAT 標記 → mock 判 web_ai)→ 觸發視覺分析。
         byte[] webp = Encoding.ASCII.GetBytes("RIFF....WEBP AICHAT on screen");
         await UploadImageAsync(http, webp, "E1", "A07", "ag-A07", 5, "event:browser",
             "aabbccddeeff0011", "1750000000.100", expectDuplicate: false, clientId: cid);
 
-        // 3) 等视觉证据并入(note 出现 vision:),断言**仍只有一条** pending(去重生效)。
+        // 3) 等視覺證據併入(note 出現 vision:),斷言**仍只有一條** pending(去重生效)。
         await WaitForAsync(async () =>
         {
             JsonElement s = await http.GetFromJsonAsync<JsonElement>("/api/exams/E1/suspicious");
@@ -633,7 +633,7 @@ public class IngestTests
         throw new TimeoutException("条件未在超时内满足");
     }
 
-    // ---- 图片上传小工具 ----
+    // ---- 圖片上傳小工具 ----
     private static async Task<string> UploadImageAsync(HttpClient http, byte[] webp,
         string exam, string seat, string agent, long seq, string trigger, string phash, string ts,
         bool expectDuplicate, string? clientId = null)

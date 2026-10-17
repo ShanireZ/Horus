@@ -8,30 +8,30 @@ using Horus.Agent.Integrity;
 using Horus.Agent.Model;
 using Horus.Agent.Signals;
 using Horus.Agent.Transport;
-using Horus.Contracts;   // AgentEvent / SignalType / Envelope(线协议共享)
+using Horus.Contracts;   // AgentEvent / SignalType / Envelope(線協定共享)
 
 namespace Horus.Agent;
 
-/// 采集端入口。默认 MTA(利于 UIAutomation 客户端);剪贴板监听自带 STA 线程。
-/// 考试派发(owner 决策 2026-07-03):OIDC 模式 = **常态待命循环** —— 配置里没有 examId/seatId;
-/// 轮询服务器「有无活跃考试」→ 有则弹浏览器 OIDC 登录(examId 服务端派发·seatId 由身份派生)→ 采集;
-/// 收到 exam_ended / session_revoked(或会话探针发现失效)→ 停采、弃会话,回待命等下一场。
-/// psk(legacy)模式保持单场语义:examId/seatId 仍来自配置,运行至 Ctrl+C。
+/// 採集端入口。預設 MTA(利於 UIAutomation 用戶端);剪貼板監聽自帶 STA 執行緒。
+/// 考試派發(owner 決策 2026-07-03):OIDC 模式 = **常態待命循環** —— 設定裡沒有 examId/seatId;
+/// 輪詢伺服器「有無活躍考試」→ 有則彈瀏覽器 OIDC 登入(examId 伺服器端派發·seatId 由身分派生)→ 採集;
+/// 收到 exam_ended / session_revoked(或工作階段探針發現失效)→ 停採、棄工作階段,回待命等下一場。
+/// psk(legacy)模式保持單場語義:examId/seatId 仍來自設定,執行至 Ctrl+C。
 internal static class Program
 {
     private static int Main(string[] args)
     {
         string selfExe = Environment.ProcessPath ?? "";
 
-        // 质量#6:兜底未 observed 的 fire-and-forget 任务异常(事件回调 async void 的异常栈不直观)。
-        // 至少落到 stderr 便于诊断,并标记已处理避免进程崩溃(异常仍不阻断采集主循环)。
+        // 品質#6:備援未 observed 的 fire-and-forget 任務異常(事件回呼 async void 的異常棧不直觀)。
+        // 至少落到 stderr 便於診斷,並標記已處理避免處理程序崩潰(異常仍不阻斷採集主循環)。
         TaskScheduler.UnobservedTaskException += (_, ea) =>
         {
             Console.Error.WriteLine($"[horus-agent] 未observed 任务异常: {ea.Exception?.GetType().Name}: {ea.Exception?.Message}");
             ea.SetObserved();
         };
 
-        // ---- M5 保活模式分发(采集模式 = 无这些首参)----
+        // ---- M5 保活模式散布(採集模式 = 無這些首參)----
         if (args.Length > 0)
         {
             switch (args[0])
@@ -69,7 +69,7 @@ internal static class Program
 
         if (!cfg.OidcMode)
         {
-            // ---- psk(legacy)模式:examId/seatId 来自配置,单场运行至 Ctrl+C ----
+            // ---- psk(legacy)模式:examId/seatId 來自設定,單場執行至 Ctrl+C ----
             if (cfg.Psk is null) { Console.Error.WriteLine("[horus-agent] psk 模式需在配置提供 psk"); return 1; }
             if (cfg.ExamId.Length == 0 || cfg.SeatId.Length == 0)
             { Console.Error.WriteLine("[horus-agent] psk 模式需在配置提供 examId/seatId(oidc 模式二者由服务器派发)"); return 1; }
@@ -77,7 +77,7 @@ internal static class Program
             return 0;
         }
 
-        // ---- OIDC 模式:常态待命循环 ----
+        // ---- OIDC 模式:常態待命循環 ----
         Console.WriteLine("[horus-agent] OIDC 模式:待命中(不采集),等待服务器开考…");
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         while (!cts.IsCancellationRequested)
@@ -87,8 +87,8 @@ internal static class Program
             OidcSession session;
             try
             {
-                // ★ 如实告诉学员「要输密码」:取消 SSO 后(贝塔通 P84)每场考试都要完整认证一次,
-                //   不再有「刚在别处登过所以秒进」。不说清楚的表现是学生盯着浏览器等它自己跳过去。
+                // ★ 如實告訴學員「要輸密碼」:取消 SSO 後(貝塔通 P84)每場考試都要完整認證一次,
+                //   不再有「剛在別處登過所以秒進」。不說清楚的表現是學生盯著瀏覽器等它自己跳過去。
                 Console.WriteLine("[horus-agent] 检测到活跃考试:即将打开系统浏览器,请用**贝塔通账号**登录(需输入密码,开了二次验证的还要再过一次)。");
                 using var loginHttp = new HttpClient();
                 session = OidcLoginFlow.LoginAsync(cfg, loginHttp, ct: cts.Token).GetAwaiter().GetResult();
@@ -101,12 +101,12 @@ internal static class Program
                 continue;
             }
 
-            cfg.ExamId = session.ExamId;   // 服务端派发的当前考试
-            cfg.SeatId = session.SeatId;   // OIDC 身份派生(username)
+            cfg.ExamId = session.ExamId;   // 伺服器端派發的當前考試
+            cfg.SeatId = session.SeatId;   // OIDC 身分派生(username)
 
-            // ---- 开考预检:这次登录撑不撑得完一场考试(贝塔通 P91)----
-            // ★ 不自动重登:刚登录完再登一次是死循环,真正的修法在服务器的 oidcSessionMinutes 上。
-            //   所以这里是**开考前一声大的**,让监考员当场看见,而不是考到一半整场一起掉线。
+            // ---- 開考預檢:這次登入撐不撐得完一場考試(貝塔通 P91)----
+            // ★ 不自動重登:剛登入完再登一次是死循環,真正的修法在伺服器的 oidcSessionMinutes 上。
+            //   所以這裡是**開考前一聲大的**,讓監考員當場看見,而不是考到一半整場一起掉線。
             double nowUnix = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
             if (!session.CoversExam(nowUnix))
             {
@@ -116,15 +116,15 @@ internal static class Program
                     + "请监考员把服务器的 oidcSessionMinutes 调大后重启服务器,再让学员重新登录。");
             }
 
-            // ---- 「当前登录:XXX + 一键退出」(贝塔通 R9)----
+            // ---- 「當前登入:XXX + 一鍵退出」(貝塔通 R9)----
             //
-            // ★★ 机房电脑**无还原卡**、浏览器混装国产内核因而组策略不现实、共享 PC 模式也不现实。
-            //   上一个人不点退出就走时,下一个人可以直接用他的会话 —— **身份层关不掉这个窗口**,
-            //   唯一能真正生效的缓解就是让下一个人**立刻看见这不是自己的号**。
-            //   ★ 对考场尤其直接:学生轮流坐同一台机器正是常态。
-            // ★ 采集端是**控制台程序**,没有可以放一个按钮的界面 —— 所以这里是一整块醒目的
-            //   横幅而不是一行日志,并明写退出方式(Ctrl+C)。这是本形态下能做到的等价物,
-            //   如实记下来,免得下一个人以为「一键退出按钮」漏做了。
+            // ★★ 機房電腦**無還原卡**、瀏覽器混裝國產核心因而組策略不現實、共享 PC 模式也不現實。
+            //   上一個人不點退出就走時,下一個人可以直接用他的工作階段 —— **身分層關不掉這個視窗**,
+            //   唯一能真正生效的緩解就是讓下一個人**立刻看見這不是自己的號**。
+            //   ★ 對考場尤其直接:學生輪流坐同一臺機器正是常態。
+            // ★ 採集端是**控制檯程式**,沒有可以放一個按鈕的介面 —— 所以這裡是一整塊醒目的
+            //   橫幅而不是一行紀錄,並明寫退出方式(Ctrl+C)。這是本形態下能做到的等價物,
+            //   如實記下來,免得下一個人以為「一鍵退出按鈕」漏做了。
             string who = DisplayName(session.ProfileJson, cfg.SeatId);
             Console.WriteLine();
             Console.WriteLine("  ┌────────────────────────────────────────────────┐");
@@ -142,10 +142,10 @@ internal static class Program
         return 0;
     }
 
-    /// 从 `/oidc/exchange` 回的 profile 里取一个给人看的名字。
-    /// ★ 身份出口只有 `sub` / `name` / `username` 三项(贝塔通 P81)。
-    ///   `name`(真实姓名)最适合给「这是不是我」这个判断;取不到就退回用户名,
-    ///   再取不到才用座位号 —— **不能退成空白**,那就等于这块横幅没写。
+    /// 從 `/oidc/exchange` 回的 profile 裡取一個給人看的名字。
+    /// ★ 身分出口只有 `sub` / `name` / `username` 三項(貝塔通 P81)。
+    ///   `name`(真實姓名)最適合給「這是不是我」這個判斷;取不到就退回使用者名,
+    ///   再取不到才用座位號 —— **不能退成空白**,那就等於這塊橫幅沒寫。
     private static string DisplayName(string profileJson, string fallback)
     {
         try
@@ -158,11 +158,11 @@ internal static class Program
                 return string.IsNullOrWhiteSpace(user) ? name! : $"{name}（{user}）";
             if (!string.IsNullOrWhiteSpace(user)) return user!;
         }
-        catch (JsonException) { /* profile 不是合法 JSON:退回下面的兜底 */ }
+        catch (JsonException) { /* profile 不是合法 JSON:退回下面的備援 */ }
         return fallback;
     }
 
-    /// 待命轮询:每 5s 查一次 /oidc/active-exam,直到出现活跃考试(true)或取消(false)。不采集、不抓屏、不连 WS。
+    /// 待命輪詢:每 5s 查一次 /oidc/active-exam,直到出現活躍考試(true)或取消(false)。不採集、不抓屏、不連 WS。
     private static bool WaitForActiveExam(AgentConfig cfg, HttpClient http, CancellationToken ct)
     {
         bool noticePrinted = false;
@@ -185,8 +185,8 @@ internal static class Program
         return false;
     }
 
-    /// 跑一场采集会话:装配信号源/上行/哈希链,阻塞至「考试结束 / 被远程登出 / 探针发现会话失效 / 全局退出」。
-    /// probeHttp 非空(OIDC 模式)时启用:下行帧回调 + 每 60s 会话探针兜底(覆盖离线错过推送的情形)。
+    /// 跑一場採集工作階段:裝配信號源/上行/雜湊鏈,阻塞至「考試結束 / 被遠程登出 / 探針發現工作階段失效 / 全域退出」。
+    /// probeHttp 非空(OIDC 模式)時啟用:下行影格回呼 + 每 60s 工作階段探針備援(覆蓋離線錯過推送的情形)。
     private static void RunCollectionSession(AgentConfig cfg, string cfgPath, string selfExe,
         IngestCredential cred, HttpClient? probeHttp, CancellationToken outerCt)
     {
@@ -194,32 +194,32 @@ internal static class Program
         CancellationToken ct = sessionCts.Token;
 
         var buffer = new LocalBuffer(Path.Combine(AppContext.BaseDirectory, "buffer"));
-        // OIDC 换场/重登:旧会话 K_sess 已死,残留缓冲永不可验签(bad_sig)→ 清掉,防每次重连重放-被拒。
-        // seq 高水位保留(seq.state),且 hello_ack 会按服务器 MAX(seq) 对齐,不会撞旧 seq。
+        // OIDC 換場/重登:舊工作階段 K_sess 已死,殘留緩衝永不可驗籤(bad_sig)→ 清掉,防每次重連重放-被拒。
+        // seq 高水位保留(seq.state),且 hello_ack 會按伺服器 MAX(seq) 對齊,不會撞舊 seq。
         if (cred.SessionId is not null) buffer.PurgeSession();
 
         var uplink = new UplinkClient(cfg, buffer, cred);
         var chain = new HashChain(cred.Key);
         var sealLock = new object();
-        var live = new LiveConfig(cfg);   // 可热更新配置(白名单/阈值/截图参数),各源每轮读取
+        var live = new LiveConfig(cfg);   // 可熱更新設定(白名單/閾值/截圖參數),各源每輪讀取
 
-        // 上传委托:WebP → imageId(自带 seq)
+        // 上傳委託:WebP → imageId(自帶 seq)
         async Task<string?> Upload(byte[] webp, string trigger, ulong phash)
             => await uplink.UploadImageAsync(webp, trigger, phash, uplink.NextSeq(), ct);
 
         var capturer = new ScreenshotCapturer(live, Upload);
 
-        // 监考员 capture_now → 立即抓一张;config_update → 热更新 LiveConfig(下一轮采集即生效)
+        // 監考員 capture_now → 立即抓一張;config_update → 熱更新 LiveConfig(下一輪採集即生效)
         uplink.OnCaptureNow = reason => _ = capturer.CaptureAsync(reason, dedupAgainstLast: false);
         uplink.OnConfigUpdate = json =>
         {
             live.Apply(json);
             Console.WriteLine("[horus-agent] 已应用 config_update 热更新");
         };
-        // A3 防御性自检:capture_now handler 必须已注入,否则看板「点名抓图」会静默失效(服务端 pushed:true 但 Agent 不抓图)。
+        // A3 防禦性自檢:capture_now handler 必須已注入,否則看板「點名抓圖」會靜默失效(伺服器端 pushed:true 但 Agent 不抓圖)。
         if (uplink.OnCaptureNow is null)
             Console.Error.WriteLine("[horus-agent] 警告: capture_now 处理器未注入 → 看板点名抓图将静默失效");
-        // 考试结束(在线推送 / 重连 hello 补发):留 5s 排空缓冲续传窗口,再停采回待命。
+        // 考試結束(線上推送 / 重連 hello 補發):留 5s 排空緩衝續傳視窗,再停採回待命。
         uplink.OnExamEnded = () =>
         {
             Console.WriteLine("[horus-agent] 考试已结束:5s 内排空缓冲后停止采集。");
@@ -229,14 +229,14 @@ internal static class Program
                 sessionCts.Cancel();
             });
         };
-        // 被监考员远程登出:会话已吊销、连接随后被强断,续传无望 → 立即停。
+        // 被監考員遠程登出:工作階段已吊銷、連接隨後被強斷,續傳無望 → 立即停。
         uplink.OnSessionRevoked = () =>
         {
             Console.WriteLine("[horus-agent] 已被监考员远程登出:停止采集,回待命。");
             sessionCts.Cancel();
         };
 
-        // 事件管线:RawSignal →(必要时抓图)→ 盖章(ts/seq/hash)→ 发送
+        // 事件管線:RawSignal →(必要時抓圖)→ 蓋章(ts/seq/hash)→ 傳送
         async void Handle(RawSignal raw)
         {
             try
@@ -255,7 +255,7 @@ internal static class Program
 
                 string json;
                 long seq;
-                lock (sealLock)   // 串行化:保证哈希链顺序与 seq 一致
+                lock (sealLock)   // 串行化:保證雜湊鏈順序與 seq 一致
                 {
                     seq = uplink.NextSeq();
                     AgentEvent stamped = core with { Seq = seq };
@@ -267,7 +267,7 @@ internal static class Program
             catch (Exception ex) { Console.Error.WriteLine($"[horus-agent] 处理信号异常: {ex.Message}"); }
         }
 
-        // 装配信号源
+        // 裝配信號源
         var sources = new List<ISignalSource>
         {
             new ForegroundWindowSource(),
@@ -278,7 +278,7 @@ internal static class Program
         };
         foreach (ISignalSource s in sources) s.Signal += Handle;
 
-        // 连接管理(握手/hello/续传/断线重连)在后台常驻,直到会话取消
+        // 連接管理(握手/hello/續傳/斷線重連)在後台常駐,直到工作階段取消
         Task uplinkTask = Task.Run(() => uplink.RunAsync(ct));
         var failedSources = new List<string>();
         foreach (ISignalSource s in sources)
@@ -291,14 +291,14 @@ internal static class Program
             }
         }
 
-        // ---- M5 采集端硬化:健康信号自检上报(纯检测:让规避暴露,不阻断)----
-        // ① 遮蔽检测:每帧 luma 统计 → 分类 → 进入遮蔽态时上报一次(退出后可再报)。
+        // ---- M5 採集端硬化:健康信號自檢上報(純檢測:讓規避暴露,不阻斷)----
+        // ① 遮蔽檢測:每影格 luma 統計 → 分類 → 進入遮蔽態時上報一次(退出後可再報)。
         ObscureReason lastObscure = ObscureReason.None;
         capturer.OnStats = stats =>
         {
             ObscureReason r = ScreenQuality.Classify(stats);
             if (r == ObscureReason.None) { lastObscure = ObscureReason.None; return; }
-            if (r == lastObscure) return;   // 同一遮蔽态不重复刷
+            if (r == lastObscure) return;   // 同一遮蔽態不重複刷
             lastObscure = r;
             Handle(new RawSignal(SignalType.ScreenshotObscured, new()
             {
@@ -306,11 +306,11 @@ internal static class Program
                 ["variance"] = stats.LumaVariance, ["width"] = stats.Width, ["height"] = stats.Height,
             }, Risk: RiskScores.ScreenObscured));
         };
-        // ② 异常重启取证:启动读旧标记,若上次未正常退出 → 上报 watchdog_restart。
+        // ② 異常重新啟動取證:啟動讀舊標記,若上次未正常退出 → 上報 watchdog_restart。
         string markerPath = Path.Combine(AppContext.BaseDirectory, "horus-agent.marker");
         if (RestartClassifier.IsUnexpectedRestart(RestartMarker.ReadThenMarkRunning(markerPath)))
             Handle(new RawSignal(SignalType.WatchdogRestart, new() { ["reason"] = "unexpected_prev_exit" }, Risk: RiskScores.WatchdogRestart));
-        // ③ 能力降级:非管理员 / 信号源启动失败 → 上报 capability_degraded。
+        // ③ 能力降級:非管理員 / 信號源啟動失敗 → 上報 capability_degraded。
         if (!WinPrivilege.IsAdministrator())
             Handle(new RawSignal(SignalType.CapabilityDegraded,
                 new() { ["capability"] = "admin", ["status"] = "not_elevated", ["detail"] = "采集需管理员权限跑 ETW/UIA/WMI" }, Risk: RiskScores.CapabilityDegraded));
@@ -320,26 +320,26 @@ internal static class Program
 
         _ = Task.Run(() => BaselineLoop(live, capturer, ct));
         _ = Task.Run(() => HeartbeatLoop(Handle, ct));
-        _ = Task.Run(() => HealthLoop(Handle, ct));   // ④ 挂起检测
-        // ⑤ 层2 互拉:若由看门狗拉起(HORUS_WATCHDOG_PID),守护看门狗——它被杀则重拉一个 adopt 本进程的新看门狗。
-        // 键 = agentId_machineId(与考试无关:考试派发后配置里已无 exam/seat,且看门狗单例本就该按机器算)。
+        _ = Task.Run(() => HealthLoop(Handle, ct));   // ④ 掛起檢測
+        // ⑤ 層2 互拉:若由看門狗拉起(HORUS_WATCHDOG_PID),守護看門狗——它被殺則重拉一個 adopt 本處理程序的新看門狗。
+        // 鍵 = agentId_machineId(與考試無關:考試派發後設定裡已無 exam/seat,且看門狗單例本就該按機器算)。
         if (int.TryParse(Environment.GetEnvironmentVariable("HORUS_WATCHDOG_PID"), out int wdPid) && wdPid > 0)
             _ = Task.Run(() => Watchdog.GuardWatchdogAsync(wdPid, selfExe, new[] { cfgPath }, cfg.AgentId + "_" + cfg.MachineId, ct));
-        // ⑥ 会话探针(OIDC):每 60s 校验会话仍有效 + 考试仍 active —— 兜住「离线时被远程登出/考试结束」错过推送的情形。
+        // ⑥ 工作階段探針(OIDC):每 60s 檢核工作階段仍有效 + 考試仍 active —— 兜住「離線時被遠程登出/考試結束」錯過推送的情形。
         if (cred.SessionId is not null && probeHttp is not null)
             _ = Task.Run(() => SessionProbeLoop(cfg, probeHttp, cred.SessionId, sessionCts));
 
         Console.WriteLine($"[horus-agent] 采集中 seat={cfg.SeatId} exam={cfg.ExamId}。Ctrl+C 退出。");
         ct.WaitHandle.WaitOne();
 
-        RestartMarker.MarkClean(markerPath);   // M5:正常退出写 clean → 下次启动不误判异常重启
+        RestartMarker.MarkClean(markerPath);   // M5:正常退出寫 clean → 下次啟動不誤判異常重新啟動
         foreach (ISignalSource s in sources) { try { s.Stop(); s.Dispose(); } catch { /* ignore */ } }
-        try { uplinkTask.Wait(TimeSpan.FromSeconds(3)); } catch { /* 等连接循环退出再释放,避免 dispose 竞态 */ }
+        try { uplinkTask.Wait(TimeSpan.FromSeconds(3)); } catch { /* 等連接循環退出再釋放,避免 dispose 競態 */ }
         uplink.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
-    /// 会话探针:GET /oidc/session(带 X-Horus-Session)。valid=false → 已被登出/过期,立即停;
-    /// examStatus 非 active → 考试已结束(错过推送),留 5s 排空后停。网络错误忽略(断网由缓冲续传兜)。
+    /// 工作階段探針:GET /oidc/session(帶 X-Horus-Session)。valid=false → 已被登出/過期,立即停;
+    /// examStatus 非 active → 考試已結束(錯過推送),留 5s 排空後停。網路錯誤忽略(斷網由緩衝續傳兜)。
     private static async Task SessionProbeLoop(AgentConfig cfg, HttpClient http, string sessionId, CancellationTokenSource sessionCts)
     {
         CancellationToken ct = sessionCts.Token;
@@ -352,7 +352,7 @@ internal static class Program
                 using var req = new HttpRequestMessage(HttpMethod.Get, $"{cfg.ServerHttpBase}/oidc/session");
                 req.Headers.Add("X-Horus-Session", sessionId);
                 using HttpResponseMessage resp = await http.SendAsync(req, ct);
-                if (!resp.IsSuccessStatusCode) continue;   // 服务器异常 ≠ 会话失效
+                if (!resp.IsSuccessStatusCode) continue;   // 伺服器異常 ≠ 工作階段失效
                 using JsonDocument doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
                 JsonElement root = doc.RootElement;
                 if (!root.GetProperty("valid").GetBoolean())
@@ -371,25 +371,25 @@ internal static class Program
                 }
             }
             catch (OperationCanceledException) { break; }
-            catch { /* 网络抖动忽略,下轮再探 */ }
+            catch { /* 網路抖動忽略,下輪再探 */ }
         }
     }
 
-    /// 看门狗单例键 / adopt 用:agentId_machineId(每机稳定,与考试无关;配置里已无 exam/seat)。加载失败回退 default。
+    /// 看門狗單例鍵 / adopt 用:agentId_machineId(每機穩定,與考試無關;設定裡已無 exam/seat)。載入失敗退回 default。
     private static string InstanceKey(string[] args)
     {
         try { AgentConfig c = AgentConfig.Load(args.Length > 0 ? args[0] : "agent.config.json"); return c.AgentId + "_" + c.MachineId; }
         catch { return "default"; }
     }
 
-    /// 随机基线抓图(30–90s,不去重——每张都可能是抓 IDE 插件的孤证)。区间可热更新。
+    /// 隨機基線抓圖(30–90s,不去重——每張都可能是抓 IDE 外掛的孤證)。區間可熱更新。
     private static async Task BaselineLoop(LiveConfig live, ScreenshotCapturer cap, CancellationToken ct)
     {
         var rng = new Random();
         while (!ct.IsCancellationRequested)
         {
-            // min/max 是两个独立 volatile,热更新非原子写有瞬时倒挂窗口(读到新 min 配旧 max)。
-            // 本地读入并钳正 max≥min,杜绝 rng.Next(min>maxExclusive) 抛异常逃出循环、永久停掉基线抓图。
+            // min/max 是兩個獨立 volatile,熱更新非原子寫有瞬時倒掛視窗(讀到新 min 配舊 max)。
+            // 本機讀入並鉗正 max≥min,杜絕 rng.Next(min>maxExclusive) 拋異常逃出循環、永久停掉基線抓圖。
             int mn = live.BaselineMinSeconds, mx = live.BaselineMaxSeconds;
             if (mx < mn) mx = mn;
             int wait = rng.Next(mn, mx + 1);
@@ -400,14 +400,14 @@ internal static class Program
         }
     }
 
-    /// 心跳:既是看板的「座位在线」指示,**也是三道门里心跳与 idle 两道的续期**(贝塔通 P88–P92)。
+    /// 心跳:既是看板的「座位線上」指示,**也是三道門裡心跳與 idle 兩道的續期**(貝塔通 P88–P92)。
     ///
-    /// ★ **复用既有上行通道,不另开心跳端点** —— Agent 本来就在持续上传事件流,
-    ///   再加一条 HTTP 心跳只是把同一件事做两遍(其 rp-contract 对采集端明写可以复用)。
-    /// ★★ `active` **由 Agent 自己定义**(机器上有无用户活动),不是浏览器那套
-    ///   `visibilityState` + `mousemove` —— 见 <see cref="Horus.Agent.Signals.UserActivity"/>。
-    /// ★ 30 秒一发远密于契约给网页的 5 分钟,而服务端有 150 秒节流,所以既不会压垮写入,
-    ///   也让「心跳 15 分钟」那道门有 30 次容错而不是 3 次。
+    /// ★ **重複使用既有上行通道,不另開心跳端點** —— Agent 本來就在持續上傳事件流,
+    ///   再加一條 HTTP 心跳只是把同一件事做兩遍(其 rp-contract 對採集端明寫可以重複使用)。
+    /// ★★ `active` **由 Agent 自己定義**(機器上有無使用者活動),不是瀏覽器那套
+    ///   `visibilityState` + `mousemove` —— 見 <see cref="Horus.Agent.Signals.UserActivity"/>。
+    /// ★ 30 秒一發遠密於契約給網頁的 5 分鐘,而伺服器端有 150 秒節流,所以既不會壓垮寫入,
+    ///   也讓「心跳 15 分鐘」那道門有 30 次容錯而不是 3 次。
     private static async Task HeartbeatLoop(Action<RawSignal> emit, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -422,8 +422,8 @@ internal static class Program
         }
     }
 
-    /// M5 防挂起:每 30s 观测 wall-clock;相邻跳变超阈值(期望 30s × 3)→ 上报 suspected_suspend
-    /// (进程被 suspend / 系统睡眠 / 锁屏时 Task.Delay 与进程一同挂起,恢复后 gap = 间隔 + 挂起时长)。
+    /// M5 防掛起:每 30s 觀測 wall-clock;相鄰跳變超閾值(期望 30s × 3)→ 上報 suspected_suspend
+    /// (處理程序被 suspend / 系統睡眠 / 鎖屏時 Task.Delay 與處理程序一同掛起,恢復後 gap = 間隔 + 掛起時長)。
     private static async Task HealthLoop(Action<RawSignal> emit, CancellationToken ct)
     {
         var suspend = new SuspendMonitor(expectedIntervalSec: 30, toleranceFactor: 3.0);

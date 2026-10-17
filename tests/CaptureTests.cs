@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// B4:capture_now 端到端(服务端 push → Agent 收到 capture_now 帧)。
+/// B4:capture_now 端到端(伺服器端 push → Agent 收到 capture_now 影格)。
 public class CaptureTests
 {
     private static async Task CreateExam(HttpClient http, string examId)
@@ -47,7 +47,7 @@ public class CaptureTests
         using var app = new TestApp(adminAuth: true);
         HttpClient http = app.CreateClient();
         await CreateExam(http, "E1");
-        // 未连接任何 Agent
+        // 未連接任何 Agent
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/agents/ag-UNKNOWN/capture")
         { Content = JsonContent.Create(new { reason = "proctor_call" }) };
         req.Headers.Add("X-Horus-Admin", TestApp.AdminToken);

@@ -1,19 +1,19 @@
 namespace Horus.Server.Analysis.Vision;
 
-/// 视觉 LLM 对一张截图的判定 —— **L2:视觉 LLM 取代 OCR + L3 Logo,合并为单一视觉级**(owner 拍板)。
-/// 一次「看懂画面」同时做:文字提取 + AI 对话界面 / 搜索页 / IDE 幽灵补全 / 远控工具识别 + 分类。
-/// 只作一条**线索**(是否可疑 + 类别 + 置信度 + 人话证据 + 可选文字),由人裁决(架构铁律 §3)。
+/// 視覺 LLM 對一張截圖的判定 —— **L2:視覺 LLM 取代 OCR + L3 Logo,合併為單一視覺級**(owner 拍板)。
+/// 一次「看懂畫面」同時做:文字提取 + AI 對話介面 / 搜索頁 / IDE 幽靈補全 / 遠控工具識別 + 分類。
+/// 只作一條**線索**(是否可疑 + 類別 + 信賴度 + 人話證據 + 可選文字),由人裁決(架構鐵律 §3)。
 public sealed record VisionVerdict
 {
     public bool Suspicious { get; init; }
     /// web_ai | search | ide_plugin | remote_tool | other | none
     public string Category { get; init; } = "none";
     public int Confidence { get; init; }          // 0–100
-    public string[] Hits { get; init; } = [];     // 命中标签/关键词(落库 ocr_results.hits)
-    public string Evidence { get; init; } = "";   // 一句话中文证据(人话)
-    public string? Text { get; init; }            // 截图里的关键可见文字(可选,落库 ocr_results.text)
+    public string[] Hits { get; init; } = [];     // 命中標籤/關鍵詞(寫入資料庫 ocr_results.hits)
+    public string Evidence { get; init; } = "";   // 一句話中文證據(人話)
+    public string? Text { get; init; }            // 截圖裡的關鍵可見文字(可選,寫入資料庫 ocr_results.text)
 
-    /// 类别 → 可疑队列 kind(与 Suspicion 既有 kind 对齐)。
+    /// 類別 → 可疑佇列 kind(與 Suspicion 既有 kind 對齊)。
     public string Kind() => Category switch
     {
         "web_ai" => "web_ai",
@@ -24,19 +24,19 @@ public sealed record VisionVerdict
     };
 }
 
-/// 分析上下文(供 adapter 提示词 / 日志 / 落库定位)。
+/// 分析上下文(供 adapter 提示詞 / 紀錄 / 寫入資料庫定位)。
 public sealed record VisionContext(string ExamId, string SeatId, string ImageId, string Trigger);
 
-/// 视觉分析器抽象。**provider-agnostic**:Mock(测试/联调·不出网)、OpenAI 兼容(DeepSeek-V4 / 小米 MiMo-V2.5 /
-/// Qwen-VL / GLM-4V 靠 config 换 baseUrl+model+key)、或后续本地自托管(vLLM·零出网)都实现它。
-/// 返回 null = 分析失败/跳过(fail-open,**绝不阻断采集管线**)。
+/// 視覺分析器抽象。**provider-agnostic**:Mock(測試/整合測試·不出網)、OpenAI 相容(DeepSeek-V4 / 小米 MiMo-V2.5 /
+/// Qwen-VL / GLM-4V 靠 config 換 baseUrl+model+key)、或後續本機自託管(vLLM·零出網)都實作它。
+/// 回傳 null = 分析失敗/跳過(fail-open,**絕不阻斷採集管線**)。
 public interface IVisionAnalyzer
 {
-    /// 落库 ocr_results.engine 的标识,如 "mock" / "openai:deepseek-v4-pro"。
+    /// 寫入資料庫 ocr_results.engine 的標識,如 "mock" / "openai:deepseek-v4-pro"。
     string Engine { get; }
 
-    /// 该分析器是否会把图**送出局域网**(云端点)。true = 送云:送前**必须**剥离元数据(§5「原图永不出网」),
-    /// 且派生失败时宁可跳过也不泄原图;false = 本地/mock(不出网),派生可直通原字节零开销。
+    /// 該分析器是否會把圖**送出區域網路**(雲端點)。true = 送雲:送前**必須**剝離中繼資料(§5「原圖永不出網」),
+    /// 且派生失敗時寧可跳過也不洩原圖;false = 本機/mock(不出網),派生可直通原位元組零開銷。
     bool SendsOffNetwork { get; }
 
     Task<VisionVerdict?> AnalyzeAsync(byte[] imageBytes, VisionContext ctx, CancellationToken ct);

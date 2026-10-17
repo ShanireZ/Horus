@@ -1,7 +1,7 @@
 namespace Horus.Agent.Transport;
 
-/// 把信号源的 CaptureReason 映射为 api-contract §2.1 约定的 trigger 取值。
-/// 否则生产库 images.trigger 会是 browser_non_whitelist_url 之类的脏值,与契约/归档/统计错配。
+/// 把信號源的 CaptureReason 映射為 api-contract §2.1 約定的 trigger 取值。
+/// 否則生產庫 images.trigger 會是 browser_non_whitelist_url 之類的髒值,與契約/歸檔/統計錯配。
 public static class TriggerMap
 {
     public static string ToContract(string reason) => reason switch
@@ -11,6 +11,6 @@ public static class TriggerMap
         "non_whitelist_process" => "event:process",
         "large_paste" => "event:paste",
         "usb_insert" => "event:usb",
-        _ => "event:manual",   // capture_now 及未知原因 → 手动/其它
+        _ => "event:manual",   // capture_now 及未知原因 → 手動/其它
     };
 }

@@ -4,8 +4,8 @@ using Horus.Contracts;
 
 namespace Horus.Agent.Signals;
 
-/// 可移动设备/USB 卷到达。任何插入 → 中风险 + 触发抓图。
-/// Win32_VolumeChangeEvent.EventType = 2 表示设备到达(Arrival)。
+/// 可行動裝置/USB 捲到達。任何插入 → 中風險 + 觸發抓圖。
+/// Win32_VolumeChangeEvent.EventType = 2 表示設備到達(Arrival)。
 public sealed class UsbWatcher : ISignalSource
 {
     public string Name => "usb";

@@ -1,11 +1,11 @@
-# 文本默认统一为 LF(仓库与工作区一致),消除 Windows 上 LF↔CRLF 抖动(本机 autocrlf=true)
+# 文字預設統一為 LF(儲存庫與工作區一致),消除 Windows 上 LF↔CRLF 抖動(本機 autocrlf=true)
 * text=auto eol=lf
 
-# Windows 批处理脚本必须 CRLF(用 LF 可能不被执行)
+# Windows 批處理指令碼必須 CRLF(用 LF 可能不被執行)
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
-# 二进制:禁止任何 EOL / 编码转换
+# 二進制:禁止任何 EOL / 編碼轉換
 *.png    binary
 *.webp   binary
 *.ico    binary

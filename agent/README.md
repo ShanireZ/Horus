@@ -1,39 +1,39 @@
-# Horus.Agent — 采集端（C#/.NET）
+# Horus.Agent — 採集端（C#/.NET）
 
-考试机上的信号采集端。采 OS 元数据信号 + 事件触发/随机基线截图，盖哈希链后经 WebSocket（事件）/ HTTP（图片）上报服务器。
+考試機上的信號採集端。採 OS 中繼資料信號 + 事件觸發/隨機基線截圖，蓋雜湊鏈後經 WebSocket（事件）/ HTTP（圖片）上報伺服器。
 
-**已实现（M1–M5 + 身份层）**：核心信号采集 + 传输的握手鉴权 / `hello`+`ack` / 接收循环（`config_update`/`capture_now`/`exam_ended`/`session_revoked`）/ 断线指数退避重连 + `LocalBuffer` 续传去重、每事件签名（会话私钥·见下）、**OIDC 登录流**（loopback 授权码 + PKCE + ECDH 会话密钥）、**待命循环**（无活跃考试不采集·`/oidc/active-exam` 轮询 + 60s 会话探针）、**采集端硬化**（遮蔽/挂起/能力降级/异常重启四类健康自检 + 三层保活看门狗）。跨平台可测逻辑在 **`Horus.Agent.Core`（agentcore）**，Windows 专属（抓屏 / WMI / UIA / 服务 / watchdog）在本工程。
+**已實作（M1–M5 + 身分層）**：核心信號採集 + 傳輸的握手鑑權 / `hello`+`ack` / 接收循環（`config_update`/`capture_now`/`exam_ended`/`session_revoked`）/ 斷線指數退避重連 + `LocalBuffer` 續傳去重、每事件簽名（工作階段私鑰·見下）、**OIDC 登入流**（loopback 授權碼 + PKCE + ECDH 工作階段金鑰）、**待命循環**（無活躍考試不採集·`/oidc/active-exam` 輪詢 + 60s 工作階段探針）、**採集端硬化**（遮蔽/掛起/能力降級/異常重新啟動四類健康自檢 + 三層保活看門狗）。跨平台可測邏輯在 **`Horus.Agent.Core`（agentcore）**，Windows 專屬（抓屏 / WMI / UIA / 服務 / watchdog）在本工程。
 
-## 运行环境
-- .NET 8 SDK，目标 `net8.0-windows`（Windows-only：UIAutomation / WMI / System.Drawing 抓屏）。
-- **需管理员权限**运行：WMI 取 `CommandLine`、ETW、全局剪贴板监听都依赖提权。
+## 執行環境
+- .NET 8 SDK，目標 `net8.0-windows`（Windows-only：UIAutomation / WMI / System.Drawing 抓屏）。
+- **需管理員權限**執行：WMI 取 `CommandLine`、ETW、全域剪貼板監聽都相依提權。
 
-## 构建 / 运行
+## 建置 / 執行
 ```powershell
 cd D:\Workspace\horus\agent
 dotnet restore
 dotnet build -c Release
 
-# 单文件自包含发布(分发到考试机)
+# 單檔案自包含發佈(散布到考試機)
 dotnet publish -c Release -r win-x64 --self-contained true `
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 
-# 运行(传配置路径,缺省 agent.config.json)
+# 執行(傳設定路徑,預設 agent.config.json)
 cp agent.config.sample.json agent.config.json   # 改好里面的 server 地址/白名单;鉴权模式见下
 .\bin\Release\net8.0-windows\win-x64\publish\Horus.Agent.exe agent.config.json
 ```
 
-**鉴权模式（`authMode`，默认 `oidc`）**：
-- `oidc`（默认·推荐）：**per-user 身份**，登录时经系统浏览器走贝塔通授权码 + PKCE（issuer `https://pass.betaoi.cc`、PS256、`openid profile`），Agent 本地生成临时密钥对（**私钥永不出学员机 / 不过网**），会话密钥 ECDH 派生。无共享 PSK，闭合事件通道栽赃 + seq 抢占（见 [../docs/m4-identity-oidc.md](../docs/m4-identity-oidc.md)）。
-- `psk`（迁移期兼容）：全场共享 PSK（base64 的 32 字节）。生成：
+**鑑權模式（`authMode`，預設 `oidc`）**：
+- `oidc`（預設·推薦）：**per-user 身分**，登入時經系統瀏覽器走貝塔通授權碼 + PKCE（issuer `https://pass.betaoi.cc`、PS256、`openid profile`），Agent 本機生成臨時金鑰對（**私鑰永不出學員機 / 不過網**），工作階段金鑰 ECDH 派生。無共享 PSK，閉合事件通道栽贓 + seq 搶佔（見 [../docs/m4-identity-oidc.md](../docs/m4-identity-oidc.md)）。
+- `psk`（遷移期相容）：全場共享 PSK（base64 的 32 位元組）。生成：
   ```powershell
   [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
   ```
-  服务器须同为 `authMode=psk` 或 `both`。
+  伺服器須同為 `authMode=psk` 或 `both`。
 
-## 结构
+## 結構
 
-工程拆分为**平台无关可测核 `Horus.Agent.Core`（agentcore/）** 与 **Windows 专属采集端（agent/）**。
+工程拆分為**平台無關可測核 `Horus.Agent.Core`（agentcore/）** 與 **Windows 專屬採集端（agent/）**。
 
 ```
 ── agentcore/（平台无关·可单测）─────────────────────────
@@ -61,18 +61,18 @@ Hardening/SessionLauncher.cs       CreateProcessAsUser 把采集拉进交互会�
 Program.cs                         装配 + 管线 + 待命/基线/心跳循环
 ```
 
-## 设计要点（与 architecture / api-contract 对齐）
-- **URL 监控是第一防线**：判题站走白名单，浏览器出现任何非白名单 URL → risk 80 + 抓图。读不到 URL（隐身/冷门浏览器）→ 降级 risk 40 + 强制抓图。
-- **随机基线截图不去重**：专为抓 IDE AI 插件（补全不触发进程/网络事件，只能靠定期看屏）。触发型截图才做 pHash 去重（汉明 ≤3）。
-- **隐私**：剪贴板只记长度/行数，**不上传明文**。截图原图发服务器（局域网内），**视觉 LLM 识图**（已取代 OCR）由服务器侧按收口策略（降采样 + 剥元数据·原图永不出网）处理，Agent 不直连云。
-- **防篡改**：每条事件入哈希链 + 签名（`psk` 模式=HMAC-PSK / `oidc` 模式=会话密钥·私钥不过网）；`Handle` 用锁串行化盖章，保证链序与 seq 一致。
+## 設計要點（與 architecture / api-contract 對齊）
+- **URL 監控是第一防線**：判題站走白名單，瀏覽器出現任何非白名單 URL → risk 80 + 抓圖。讀不到 URL（隱身/冷門瀏覽器）→ 降級 risk 40 + 強制抓圖。
+- **隨機基線截圖不去重**：專為抓 IDE AI 外掛（補全不觸發處理程序/網路事件，只能靠定期看屏）。觸發型截圖才做 pHash 去重（漢明 ≤3）。
+- **隱私**：剪貼板只記長度/行數，**不上傳明文**。截圖原圖發伺服器（區域網路內），**視覺 LLM 識圖**（已取代 OCR）由伺服器側按收口策略（降取樣 + 剝中繼資料·原圖永不出網）處理，Agent 不直連雲。
+- **防篡改**：每條事件入雜湊鏈 + 簽名（`psk` 模式=HMAC-PSK / `oidc` 模式=工作階段金鑰·私鑰不過網）；`Handle` 用鎖串行化蓋章，保證鏈序與 seq 一致。
 
-## 已知残留 / 后续（诚实标注）
-- **多显示器抓图**（当前只抓主屏——见威胁矩阵"第二显示器"盲区）。
-- 切窗爆发源（`alt_tab_burst`）、ETW 替代 WMI 降延迟。
-- ClipboardWatcher 干净关停消息泵。
-- **Windows 专属保活/硬化**（服务看门狗 / SessionLauncher / 真实 suspend·遮蔽·降权）已实现并编译通过，**待 owner 真机验收**（见 [../docs/m5-agent-hardening.md](../docs/m5-agent-hardening.md)）。
+## 已知殘留 / 後續（誠實標註）
+- **多顯示器抓圖**（當前只抓主屏——見威脅矩陣"第二顯示器"盲區）。
+- 切窗爆發源（`alt_tab_burst`）、ETW 替代 WMI 降延遲。
+- ClipboardWatcher 乾淨關停訊息泵。
+- **Windows 專屬保活/硬化**（服務看門狗 / SessionLauncher / 真實 suspend·遮蔽·降權）已實作並編譯通過，**待 owner 真機驗收**（見 [../docs/m5-agent-hardening.md](../docs/m5-agent-hardening.md)）。
 
-## 构建排错
-- 若 `System.Windows.Automation` 找不到：确认 `<UseWPF>true</UseWPF>`，必要时保留 `UIAutomationClient`/`UIAutomationTypes` 的 `<Reference>`。
-- 若剪贴板无回调：确认以**桌面会话**（非服务 Session 0）运行；`ClipboardWatcher` 的 STA 线程消息泵需桌面。
+## 建置排錯
+- 若 `System.Windows.Automation` 找不到：確認 `<UseWPF>true</UseWPF>`，必要時保留 `UIAutomationClient`/`UIAutomationTypes` 的 `<Reference>`。
+- 若剪貼板無回呼：確認以**桌面工作階段**（非服務 Session 0）執行；`ClipboardWatcher` 的 STA 執行緒訊息泵需桌面。

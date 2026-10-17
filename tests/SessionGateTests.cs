@@ -9,13 +9,13 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// **三道门 + 存活心跳**的回归(贝塔通 P88–P92,契约见其 `docs/rp-contract.md`)。
+/// **三道門 + 存活心跳**的迴歸(貝塔通 P88–P92,契約見其 `docs/rp-contract.md`)。
 ///
-/// ★★ 这一整套的失效形态都是**静默的**:
-///   - 少一道门 → 会话该失效时没失效,**没有任何症状**,只在事后追查「他为什么还在里面」时才发现;
-///   - `active` 恒为 false → 每个人考到 30 分钟被踢,看起来像网络问题;
-///   - 节流判据没按字段分开 → 只有多标签的人偶发被踢。
-///   没有测试的规则就是没人执行的规则,所以每一道门、每一条反向约束都在这里各有一条。
+/// ★★ 這一整套的失效形態都是**靜默的**:
+///   - 少一道門 → 工作階段該失效時沒失效,**沒有任何症狀**,只在事後追查「他為什麼還在裡面」時才發現;
+///   - `active` 恆為 false → 每個人考到 30 分鐘被踢,看起來像網路問題;
+///   - 節流判據沒按欄位分開 → 只有多標籤的人偶發被踢。
+///   沒有測試的規則就是沒人執行的規則,所以每一道門、每一條反向約束都在這裡各有一條。
 public class SessionGateTests
 {
     private const double T0 = 1_700_000_000;
@@ -23,8 +23,8 @@ public class SessionGateTests
 
     private static OidcClaims Claims(string sub = "sub-1") => new(sub, "姓名", "u1");
 
-    /// 直接读两个时间戳列 —— 判据只有 SQL 一处(见 SessionGates 末尾的说明),
-    /// 所以回归也只能打真列,不能打某个 C# 副本。
+    /// 直接讀兩個時間戳列 —— 判據只有 SQL 一處(見 SessionGates 末尾的說明),
+    /// 所以迴歸也只能打真列,不能打某個 C# 副本。
     private static (double Hb, double Seen) Stamps(Db db, string table, string sessionId)
         => db.Read(conn =>
         {
@@ -47,8 +47,8 @@ public class SessionGateTests
         var store = app.Services.GetRequiredService<SessionStore>();
         HorusSession s = NewCollect(store, absoluteMinutes: 60);
 
-        // ★ 要单独验 absolute,就得先把另两道门喂饱 —— 否则 idle(30min)会先拦下,
-        //   用例看起来过了但测的根本不是 absolute。
+        // ★ 要單獨驗 absolute,就得先把另兩道門餵飽 —— 否則 idle(30min)會先攔下,
+        //   案例看起來過了但測的根本不是 absolute。
         for (double t = T0 + 180; t < T0 + 61 * Min; t += 180) store.Heartbeat(s.SessionId, active: true, t);
 
         Assert.Equal(SessionGate.Ok, store.GetWithGate(s.SessionId, T0 + 59 * Min).Gate);
@@ -58,26 +58,26 @@ public class SessionGateTests
     [Fact]
     public void absolute不被活动推迟()
     {
-        // ★★ 这是三道门里唯一「任何活动都推不动」的一道。把它做成滑动窗口,
-        //   等于把「最后一道防线」变成「只要有人在用就永不过期」——
-        //   公用机房那个威胁模型下,那正是要挡的场景。
+        // ★★ 這是三道門裡唯一「任何活動都推不動」的一道。把它做成滑動視窗,
+        //   等於把「最後一道防線」變成「只要有人在用就永不過期」——
+        //   公用機房那個威脅模型下,那正是要擋的場景。
         using var app = new TestApp();
         var store = app.Services.GetRequiredService<SessionStore>();
         HorusSession s = NewCollect(store, absoluteMinutes: 60);
 
-        // 一路 active:true 心跳打到 absolute 前一刻(节流 150 秒,所以每 3 分钟一发都能写进去)
+        // 一路 active:true 心跳打到 absolute 前一刻(節流 150 秒,所以每 3 分鐘一發都能寫進去)
         for (double t = T0 + 180; t < T0 + 60 * Min; t += 180) store.Heartbeat(s.SessionId, active: true, t);
         Assert.Equal(SessionGate.Ok, store.GetWithGate(s.SessionId, T0 + 59.9 * Min).Gate);
 
         Assert.Equal(SessionGate.Absolute, store.GetWithGate(s.SessionId, T0 + 60 * Min + 1).Gate);
     }
 
-    // ---- 心跳门 ----
+    // ---- 心跳門 ----
 
     [Fact]
     public void 无心跳15分钟_被心跳门拒()
     {
-        // 挡的是「关页面 / 关浏览器走人」。
+        // 擋的是「關頁面 / 關瀏覽器走人」。
         using var app = new TestApp();
         var store = app.Services.GetRequiredService<SessionStore>();
         HorusSession s = NewCollect(store);
@@ -86,23 +86,23 @@ public class SessionGateTests
         Assert.Equal(SessionGate.Heartbeat, store.GetWithGate(s.SessionId, T0 + 16 * Min).Gate);
     }
 
-    // ---- idle 门 ----
+    // ---- idle 門 ----
 
     [Fact]
     public void activefalse的心跳续心跳门但不续idle()
     {
-        // ★★ 整套设计的核心分工:**任何**心跳续心跳门;**只有 active:true** 才额外续 idle。
-        //   合并成一个判据的后果是「页面开着就永不过期」,idle 那道门直接失效。
+        // ★★ 整套設計的核心分工:**任何**心跳續心跳門;**只有 active:true** 才額外續 idle。
+        //   合併成一個判據的後果是「頁面開著就永不過期」,idle 那道門直接失效。
         using var app = new TestApp();
         var store = app.Services.GetRequiredService<SessionStore>();
         HorusSession s = NewCollect(store);
 
-        // 页面开着但人走了:心跳照发,active 恒 false
+        // 頁面開著但人走了:心跳照發,active 恆 false
         for (double t = T0 + 180; t <= T0 + 45 * Min; t += 180) store.Heartbeat(s.SessionId, active: false, t);
 
-        // 心跳门被续住了 —— 20 分钟时若只有心跳门,它是过的
+        // 心跳門被續住了 —— 20 分鐘時若只有心跳門,它是過的
         Assert.Equal(SessionGate.Ok, store.GetWithGate(s.SessionId, T0 + 20 * Min).Gate);
-        // 但 idle 那道门到点了(30 分钟)
+        // 但 idle 那道門到點了(30 分鐘)
         Assert.Equal(SessionGate.Idle, store.GetWithGate(s.SessionId, T0 + 31 * Min).Gate);
     }
 
@@ -118,21 +118,21 @@ public class SessionGateTests
         Assert.Equal(SessionGate.Ok, store.GetWithGate(s.SessionId, T0 + 46 * Min).Gate);
     }
 
-    // ---- 判定顺序 ----
+    // ---- 判定順序 ----
 
     [Fact]
     public void 判定顺序_更强的终止理由排前面()
     {
-        // revoked → absolute → idle → heartbeat。三道同时到点时报最靠前的那一道,
-        // 这样给用户的话才是对的(「本次登录已达最长时限」而不是「你太久没动了」)。
+        // revoked → absolute → idle → heartbeat。三道同時到點時報最靠前的那一道,
+        // 這樣給使用者的話才是對的(「本次登入已達最長時限」而不是「你太久沒動了」)。
         using var app = new TestApp();
         var store = app.Services.GetRequiredService<SessionStore>();
         HorusSession s = NewCollect(store, absoluteMinutes: 60);
 
-        // 三道全到点
+        // 三道全到點
         Assert.Equal(SessionGate.Absolute, store.GetWithGate(s.SessionId, T0 + 120 * Min).Gate);
 
-        // idle 与心跳同时到点(absolute 还没到)→ 报 idle
+        // idle 與心跳同時到點(absolute 還沒到)→ 報 idle
         HorusSession s2 = NewCollect(store);
         Assert.Equal(SessionGate.Idle, store.GetWithGate(s2.SessionId, T0 + 40 * Min).Gate);
     }
@@ -148,10 +148,10 @@ public class SessionGateTests
 
         (HorusSession? session, SessionGate gate) = store.GetWithGate(s.SessionId, T0);
         Assert.Null(session);
-        Assert.Equal(SessionGate.Ok, gate);   // 查无此会话:没有哪一道门拦下它,它压根不在了
+        Assert.Equal(SessionGate.Ok, gate);   // 查無此工作階段:沒有哪一道門攔下它,它壓根不在了
     }
 
-    // ---- 节流(150 秒)与「判据按字段分开」 ----
+    // ---- 節流(150 秒)與「判據按欄位分開」 ----
 
     [Fact]
     public void 节流窗口内的心跳不写()
@@ -161,33 +161,33 @@ public class SessionGateTests
         var db = app.Services.GetRequiredService<Db>();
         HorusSession s = NewCollect(store);
 
-        Assert.False(store.Heartbeat(s.SessionId, active: true, T0 + 10));    // 距建会话才 10 秒
+        Assert.False(store.Heartbeat(s.SessionId, active: true, T0 + 10));    // 距建工作階段才 10 秒
         Assert.Equal((T0, T0), Stamps(db, "oidc_sessions", s.SessionId));
 
-        Assert.True(store.Heartbeat(s.SessionId, active: true, T0 + 151));    // 过了 150 秒窗口
+        Assert.True(store.Heartbeat(s.SessionId, active: true, T0 + 151));    // 過了 150 秒視窗
         Assert.Equal((T0 + 151, T0 + 151), Stamps(db, "oidc_sessions", s.SessionId));
     }
 
     [Fact]
     public void 节流判据按字段分开_activefalse不吞掉随后的activetrue()
     {
-        // ★★ 本次改造里最容易做错的一处。只看「心跳够不够新」的话:
-        //   标签 A 的 active:false 刚写完,标签 B 随后的 active:true 就被整体节流掉,
-        //   **「人还在」这个信号随之丢失** —— 表现只是「多开标签的人偶发被 idle 踢掉」。
+        // ★★ 本次改造裡最容易做錯的一處。只看「心跳夠不夠新」的話:
+        //   標籤 A 的 active:false 剛寫完,標籤 B 隨後的 active:true 就被整體節流掉,
+        //   **「人還在」這個信號隨之丟失** —— 表現只是「多開標籤的人偶發被 idle 踢掉」。
         using var app = new TestApp();
         var store = app.Services.GetRequiredService<SessionStore>();
         var db = app.Services.GetRequiredService<Db>();
         HorusSession s = NewCollect(store);
 
-        // 标签 A:人不在
+        // 標籤 A:人不在
         Assert.True(store.Heartbeat(s.SessionId, active: false, T0 + 200));
-        Assert.Equal((T0 + 200, T0), Stamps(db, "oidc_sessions", s.SessionId));   // 只动心跳,不动 idle
+        Assert.Equal((T0 + 200, T0), Stamps(db, "oidc_sessions", s.SessionId));   // 只動心跳,不動 idle
 
-        // 标签 B:10 秒后报「人还在」—— 心跳那道门还在节流窗口内,但 idle 那个时间戳已经够旧了
+        // 標籤 B:10 秒後報「人還在」—— 心跳那道門還在節流視窗內,但 idle 那個時間戳已經夠舊了
         Assert.True(store.Heartbeat(s.SessionId, active: true, T0 + 210));
         (double hb, double seen) = Stamps(db, "oidc_sessions", s.SessionId);
-        Assert.Equal(T0 + 200, hb);      // ★ 心跳仍被节流住(没被这一发顺手推走)
-        Assert.Equal(T0 + 210, seen);    // ★★ 而「人还在」被记下了 —— 没被吞掉
+        Assert.Equal(T0 + 200, hb);      // ★ 心跳仍被節流住(沒被這一發順手推走)
+        Assert.Equal(T0 + 210, seen);    // ★★ 而「人還在」被記下了 —— 沒被吞掉
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public class SessionGateTests
         Assert.False(store.Heartbeat("", active: true, T0 + 1000));
     }
 
-    // ---- 管理会话走同一套 ----
+    // ---- 管理工作階段走同一套 ----
 
     [Fact]
     public void 管理会话三道门与采集面同口径()
@@ -218,7 +218,7 @@ public class SessionGateTests
         Assert.Equal((T0 + 200, T0 + 210), Stamps(db, "admin_sessions", s2.SessionId));
     }
 
-    // ---- 心跳端点 POST /api/heartbeat ----
+    // ---- 心跳端點 POST /api/heartbeat ----
 
     private static async Task<HttpResponseMessage> PostHeartbeat(HttpClient http, string? sid, bool active)
     {
@@ -254,8 +254,8 @@ public class SessionGateTests
     [Fact]
     public async Task 无会话的心跳_被gate拒()
     {
-        // ★ 心跳走 admin gate:要续谁的会话总得先知道是谁。
-        //   会话已被某道门判掉时这里回 401 —— 别让一个已死的会话被自己的心跳救活。
+        // ★ 心跳走 admin gate:要續誰的工作階段總得先知道是誰。
+        //   工作階段已被某道門判掉時這裡回 401 —— 別讓一個已死的工作階段被自己的心跳救活。
         using var app = new TestApp(adminOidc: true);
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized,
             (await PostHeartbeat(app.CreateClient(), null, active: true)).StatusCode);
@@ -264,29 +264,29 @@ public class SessionGateTests
     [Fact]
     public async Task 业务请求不得续idle()
     {
-        // ★★★ **本次改造里最容易踩的一条**(贝塔通 P92 翻案 P25)。
-        //   看板每 5 秒轮询一次,把轮询算作活动的话 idle 那道门**永远不会到点** ——
-        //   监考机上开着看板就等于永不登出,而那正是 R9 那个威胁模型要挡的场景。
-        //   这条锁住:业务请求打再多次,两个时间戳都不动。
+        // ★★★ **本次改造裡最容易踩的一條**(貝塔通 P92 翻案 P25)。
+        //   看板每 5 秒輪詢一次,把輪詢算作活動的話 idle 那道門**永遠不會到點** ——
+        //   監考機上開著看板就等於永不登出,而那正是 R9 那個威脅模型要擋的場景。
+        //   這條鎖住:業務請求打再多次,兩個時間戳都不動。
         using var app = new TestApp(adminOidc: true);
         HttpClient http = app.CreateClient();
         var store = app.Services.GetRequiredService<AdminSessionStore>();
         var db = app.Services.GetRequiredService<Db>();
-        // ★ 走真端点的用例必须用**真实时间**建会话:gate 在 Program.cs 里取的是 UtcNow,
-        //   拿 T0(2023 年)建的会话会先被 absolute 判掉,测出来的就不是本条要测的东西。
+        // ★ 走真端點的案例必須用**真即時間**建工作階段:gate 在 Program.cs 裡取的是 UtcNow,
+        //   拿 T0(2023 年)建的工作階段會先被 absolute 判掉,測出來的就不是本條要測的東西。
         double now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         AdminSession s = store.Create(Claims(), now, 360);
 
         for (int i = 0; i < 5; i++)
         {
             HttpResponseMessage r = await GetWithCookie(http, "/api/exams", s.SessionId);
-            Assert.Equal(System.Net.HttpStatusCode.OK, r.StatusCode);   // 确实是「有效的业务请求」
+            Assert.Equal(System.Net.HttpStatusCode.OK, r.StatusCode);   // 確實是「有效的業務請求」
         }
 
-        Assert.Equal((now, now), Stamps(db, "admin_sessions", s.SessionId));   // ★ 一个都没被推动
+        Assert.Equal((now, now), Stamps(db, "admin_sessions", s.SessionId));   // ★ 一個都沒被推動
     }
 
-    // ---- 采集端心跳:复用既有 WS 上行通道 ----
+    // ---- 採集端心跳:重複使用既有 WS 上行通道 ----
 
     private static async Task<System.Net.WebSockets.WebSocket> ConnectWithSessionAsync(
         TestApp app, string sid, byte[] kSess)
@@ -301,7 +301,7 @@ public class SessionGateTests
             new Uri("ws://localhost/ingest/events?examId=E1&seatId=A07&agentId=ag-A07"), CancellationToken.None);
     }
 
-    /// 起一场考试 + 一条采集会话,发一条带指定 payload 的心跳,回两个时间戳。
+    /// 起一場考試 + 一條採集工作階段,發一條帶指定 payload 的心跳,回兩個時間戳。
     private static async Task<(double Hb, double Seen, double Created)> AgentHeartbeatAsync(
         TestApp app, Dictionary<string, object?> payload)
     {
@@ -312,8 +312,8 @@ public class SessionGateTests
         var store = app.Services.GetRequiredService<SessionStore>();
         var db = app.Services.GetRequiredService<Db>();
         byte[] k = RandomNumberGenerator.GetBytes(32);
-        // ★ 建会话的时刻往前挪 10 分钟:否则「刚建好」就落在 150 秒节流窗口内,
-        //   心跳写不进去,用例测的就成了节流而不是这条链路。
+        // ★ 建工作階段的時刻往前挪 10 分鐘:否則「剛建好」就落在 150 秒節流視窗內,
+        //   心跳寫不進去,案例測的就成了節流而不是這條連線路徑。
         double created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 - 600;
         HorusSession s = store.Create("E1", "A07", "ag-A07", "PC", Claims(), k, created, 360);
 
@@ -321,7 +321,7 @@ public class SessionGateTests
         await Ws.SendAsync(ws, Ws.SignedEventTs("E1", "A07", "ag-A07", "PC",
             Horus.Contracts.SignalType.Heartbeat, payload, 0, 1,
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0, psk: k));
-        await Ws.ReceiveAsync(ws);   // 等 ack,确保服务端已处理完
+        await Ws.ReceiveAsync(ws);   // 等 ack,確保伺服器端已處理完
 
         (double hb, double seen) = Stamps(db, "oidc_sessions", s.SessionId);
         return (hb, seen, created);
@@ -330,7 +330,7 @@ public class SessionGateTests
     [Fact]
     public async Task 采集端心跳带active_true_两道门都续()
     {
-        // ★ Agent **复用既有上行通道**发心跳,不另开端点 —— 它本来就在持续上传事件流。
+        // ★ Agent **重複使用既有上行通道**發心跳,不另開端點 —— 它本來就在持續上傳事件流。
         using var app = new TestApp(authMode: "both");
         (double hb, double seen, double created) =
             await AgentHeartbeatAsync(app, new() { ["status"] = "alive", ["active"] = true });
@@ -347,15 +347,15 @@ public class SessionGateTests
             await AgentHeartbeatAsync(app, new() { ["status"] = "alive", ["active"] = false });
 
         Assert.True(hb > created);
-        Assert.Equal(created, seen);   // ★ 「人还在」没被这一发推动
+        Assert.Equal(created, seen);   // ★ 「人還在」沒被這一發推動
     }
 
     [Fact]
     public async Task 采集端心跳缺active字段_按false算()
     {
-        // ★ 缺字段说明采集端版本比服务器旧,是部署事故。按 true 算能让它继续跑,
-        //   但代价是 idle 那道门对那批机器**静默失效** —— 而失效这件事没有任何症状。
-        //   宁可让它以「学生 30 分钟后被踢」的形态暴露出来。
+        // ★ 缺欄位說明採集端版本比伺服器舊,是部署事故。按 true 算能讓它繼續跑,
+        //   但代價是 idle 那道門對那批機器**靜默失效** —— 而失效這件事沒有任何症狀。
+        //   寧可讓它以「學生 30 分鐘後被踢」的形態暴露出來。
         using var app = new TestApp(authMode: "both");
         (double hb, double seen, double created) =
             await AgentHeartbeatAsync(app, new() { ["status"] = "alive" });
@@ -364,18 +364,18 @@ public class SessionGateTests
         Assert.Equal(created, seen);
     }
 
-    // ---- 配置默认值(口径本身也要被钉住) ----
+    // ---- 設定預設值(口徑本身也要被釘住) ----
 
     [Fact]
     public void 三道门的默认值()
     {
-        // ★ 各值**可自行调、不登记、贝塔通不拦**(其 P90),但默认值要与契约给的一致,
-        //   否则「照默认部署」的那台机器就是另一套口径。
+        // ★ 各值**可自行調、不登記、貝塔通不攔**(其 P90),但預設值要與契約給的一致,
+        //   否則「照預設部署」的那臺機器就是另一套口徑。
         var cfg = new ServerConfig();
         Assert.Equal(15, cfg.SessionHeartbeatMinutes);   // 心跳:5min × 3
         Assert.Equal(30, cfg.SessionIdleMinutes);        // idle
-        Assert.Equal(360, cfg.OidcSessionMinutes);       // absolute:6h ≥ 一整场考试
+        Assert.Equal(360, cfg.OidcSessionMinutes);       // absolute:6h ≥ 一整場考試
         Assert.Equal(360, cfg.AdminSessionMinutes);
-        Assert.Equal(150, SessionGates.ThrottleSeconds); // 服务端节流:5min 间隔的一半有余
+        Assert.Equal(150, SessionGates.ThrottleSeconds); // 伺服器端節流:5min 間隔的一半有餘
     }
 }

@@ -11,7 +11,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// A2/M3:API 契约测试(鉴权门 + 关键读写 + 错误码 + 新端点形态)。
+/// A2/M3:API 契約測試(鑑權門 + 關鍵讀寫 + 錯誤碼 + 新端點形態)。
 public class EndpointsTests
 {
     private static async Task<JsonElement> AdminGet(HttpClient http, string path)
@@ -61,7 +61,7 @@ public class EndpointsTests
             await app.CreateClient().GetStringAsync("/api/authmode"));
         Assert.Equal("psk", am.GetProperty("collectAuthMode").GetString());
         Assert.True(am.TryGetProperty("imageSearchEnabled", out JsonElement ise));
-        Assert.False(ise.GetBoolean());   // 默认未配嵌入器
+        Assert.False(ise.GetBoolean());   // 預設未配嵌入器
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class EndpointsTests
         Assert.True(j.GetProperty("results").GetArrayLength() >= 1);
     }
 
-    // 简化投图(与 ImageSearchTests.PostImage 同逻辑)
+    // 簡化投圖(與 ImageSearchTests.PostImage 同邏輯)
     private static async Task PostImage(HttpClient http, string cid, byte[] webp, long seq)
     {
         const string phash = "aabbccddeeff0011", ts = "1750000000.1";

@@ -1,38 +1,38 @@
 /* ============================================================
-   Horus 监考台 · 深色取证控制台主题
-   纯原生 CSS，无外部字体/CDN。信息密集，等宽用于技术字段。
+   Horus 監考臺 · 深色取證控制檯主題
+   純原生 CSS，無外部字體/CDN。資訊密集，等寬用於技術欄位。
    ============================================================ */
 
-/* hidden 属性必须压过组件自身的 display（如 .lightbox{display:flex}），
-   否则灯箱/抽屉遮罩等会在初始 hidden 下仍然显示。作者样式默认胜过 UA 的
-   [hidden]{display:none}，故此处显式兜底。 */
+/* hidden 屬性必須壓過元件自身的 display（如 .lightbox{display:flex}），
+   否則燈箱/抽屜遮罩等會在初始 hidden 下仍然顯示。作者樣式預設勝過 UA 的
+   [hidden]{display:none}，故此處顯式備援。 */
 [hidden] { display: none !important; }
 
 :root {
-  /* 底色层 */
-  --bg-0: #0b0e14;          /* 页面最底 */
+  /* 底色層 */
+  --bg-0: #0b0e14;          /* 頁面最底 */
   --bg-1: #11151f;          /* 面板 */
   --bg-2: #171c28;          /* 卡片/行 */
-  --bg-3: #1f2636;          /* 悬停/输入 */
+  --bg-3: #1f2636;          /* 懸停/輸入 */
   --border: #2a3346;
   --border-soft: #212a3b;
 
-  /* 文本 */
-  --fg-0: #e6ebf5;          /* 主文本 */
-  --fg-1: #a9b4c9;          /* 次文本 */
-  --fg-2: #6b768c;          /* 弱文本 */
+  /* 文字 */
+  --fg-0: #e6ebf5;          /* 主文字 */
+  --fg-1: #a9b4c9;          /* 次文字 */
+  --fg-2: #6b768c;          /* 弱文字 */
 
-  /* 状态色 */
-  --normal: #2fbf71;        /* 绿：正常 */
+  /* 狀態色 */
+  --normal: #2fbf71;        /* 綠：正常 */
   --normal-bg: #10331f;
   --warn: #e0a423;          /* 琥珀：可疑 */
   --warn-bg: #3a2c07;
-  --danger: #e5484d;        /* 红：高危 */
+  --danger: #e5484d;        /* 紅：高危 */
   --danger-bg: #3a1315;
-  --offline: #4a5163;       /* 灰：离线 */
+  --offline: #4a5163;       /* 灰：離線 */
   --offline-bg: #1a1f2b;
 
-  /* 主题强调 */
+  /* 主題強調 */
   --accent: #5b9dff;
   --accent-dim: #2b4570;
 
@@ -63,10 +63,10 @@ body {
   overflow: hidden;
 }
 
-/* 技术字段等宽 */
+/* 技術欄位等寬 */
 .mono, code, .mono * { font-family: var(--mono); }
 
-/* ---------- 全局错误横幅 ---------- */
+/* ---------- 全域錯誤橫幅 ---------- */
 .toast {
   position: fixed;
   top: 14px;
@@ -84,12 +84,12 @@ body {
 }
 
 /* ============================================================
-   登录门（令牌鉴权全屏遮罩）
+   登入門（權杖鑑權全螢幕遮罩）
    ============================================================ */
 .login-gate {
   position: fixed;
   inset: 0;
-  z-index: 400;              /* 压过灯箱(300)/抽屉(100)/toast(200) */
+  z-index: 400;              /* 壓過燈箱(300)/抽屜(100)/toast(200) */
   background: rgba(6, 9, 15, 0.92);
   display: flex;
   align-items: center;
@@ -140,7 +140,7 @@ body {
 .login-submit { padding: 9px 14px; font-size: 14px; }
 
 /* ============================================================
-   顶部栏
+   頂部欄
    ============================================================ */
 .topbar {
   display: flex;
@@ -189,7 +189,7 @@ body {
 }
 .exam-select:focus { outline: 1px solid var(--accent); }
 
-/* 概览计数 */
+/* 概覽計數 */
 .topbar__overview {
   display: flex;
   gap: 6px;
@@ -224,7 +224,7 @@ body {
   gap: 14px;
 }
 
-/* 开关 */
+/* 開關 */
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -262,7 +262,7 @@ body {
   font-size: 12px;
 }
 
-/* 按钮 */
+/* 按鈕 */
 .btn {
   font-family: var(--sans);
   font-size: 13px;
@@ -294,7 +294,7 @@ body {
   color: #f9e2af;
 }
 .btn--warn:hover { background: #4a3b0d; }
-/* 抽屉顶部操作条(点名抓图等) */
+/* 抽屜頂部操作條(點名抓圖等) */
 .drawer-actions { display: flex; align-items: center; gap: .6rem; margin-bottom: .9rem; flex-wrap: wrap; }
 .drawer-actions__hint { color: var(--fg-2); font-size: 12px; }
 
@@ -306,9 +306,9 @@ body {
   text-align: right;
 }
 
-/* 「当前登录：XXX」——★ 不是装饰：机房电脑轮流坐人，上一个人不点退出就走时，
-   让下一个人立刻看见这不是自己的号，是身份层唯一能真正生效的缓解（贝塔通 R9）。
-   所以它要足够显眼（不是 fg-2 那种弱色），但不能抢走操作按钮的注意力。 */
+/* 「當前登入：XXX」——★ 不是裝飾：機房電腦輪流坐人，上一個人不點退出就走時，
+   讓下一個人立刻看見這不是自己的號，是身分層唯一能真正生效的緩解（貝塔通 R9）。
+   所以它要足夠顯眼（不是 fg-2 那種弱色），但不能搶走操作按鈕的注意力。 */
 .topbar__whoami {
   font-size: 12px;
   color: var(--fg-1);
@@ -321,7 +321,7 @@ body {
   text-overflow: ellipsis;
 }
 
-/* 考试管理按钮与刷新控件之间的竖分隔线 */
+/* 考試管理按鈕與刷新控件之間的豎分隔線 */
 .topbar__divider {
   width: 1px;
   align-self: stretch;
@@ -329,7 +329,7 @@ body {
   background: var(--border);
 }
 
-/* 禁用态按钮（结束/全场登出在无 active 考试时）：变灰、不可点 */
+/* 禁用態按鈕（結束/全場登出在無 active 考試時）：變灰、不可點 */
 .btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -340,7 +340,7 @@ body {
 }
 
 /* ============================================================
-   主区布局
+   主區佈局
    ============================================================ */
 .layout {
   flex: 1 1 auto;
@@ -348,7 +348,7 @@ body {
   grid-template-columns: 1fr 480px;
   gap: 14px;
   padding: 14px 18px;
-  min-height: 0;          /* 允许内部滚动 */
+  min-height: 0;          /* 允許內部捲動 */
   overflow: hidden;
 }
 
@@ -378,7 +378,7 @@ body {
   letter-spacing: 0.3px;
 }
 
-/* 图例 */
+/* 圖例 */
 .legend {
   display: flex;
   gap: 12px;
@@ -397,7 +397,7 @@ body {
 .dot--danger { background: var(--danger); }
 .dot--offline { background: var(--offline); }
 
-/* ---------- 左：座位热力网格 ---------- */
+/* ---------- 左：座位熱力網格 ---------- */
 .seat-grid {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -445,7 +445,7 @@ body {
   margin-top: auto;
 }
 
-/* 座位状态配色 */
+/* 座位狀態配色 */
 .seat--normal {
   border-color: color-mix(in srgb, var(--normal) 45%, var(--border));
   background: linear-gradient(180deg, var(--normal-bg), var(--bg-2));
@@ -472,7 +472,7 @@ body {
 }
 .seat--offline .seat__id { color: var(--fg-2); }
 
-/* 高危角标（可疑计数） */
+/* 高危角標（可疑計數） */
 .seat__badge {
   position: absolute;
   top: -7px;
@@ -501,7 +501,7 @@ body {
   padding: 0 4px;
 }
 
-/* ---------- 右：可疑复核队列 ---------- */
+/* ---------- 右：可疑複核佇列 ---------- */
 .queue-filter { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip {
   font-family: var(--sans);
@@ -520,7 +520,7 @@ body {
   color: #dbe8ff;
 }
 
-/* 队列视图分段切换(可疑复核 | 采集健康) */
+/* 佇列視圖分段切換(可疑複核 | 採集健康) */
 .queue-head-controls {
   display: flex;
   gap: 10px;
@@ -587,7 +587,7 @@ body {
 .queue-table td.num { font-family: var(--mono); }
 .queue-table td.num { font-weight: 700; }
 
-/* 类型标签 */
+/* 類型標籤 */
 .kind-tag {
   display: inline-block;
   padding: 2px 8px;
@@ -598,7 +598,7 @@ body {
   border: 1px solid transparent;
 }
 
-/* 状态标签 */
+/* 狀態標籤 */
 .status-tag {
   font-size: 11px;
   padding: 2px 7px;
@@ -611,7 +611,7 @@ body {
 .status-tag--confirmed { color: #ff9a9d; border-color: var(--danger); }
 .status-tag--dismissed { color: var(--fg-2); }
 
-/* ---------- 空态 ---------- */
+/* ---------- 空態 ---------- */
 .empty {
   padding: 40px 20px;
   text-align: center;
@@ -620,7 +620,7 @@ body {
 }
 
 /* ============================================================
-   抽屉
+   抽屜
    ============================================================ */
 .drawer-scrim {
   position: fixed;
@@ -675,7 +675,7 @@ body {
   padding: 16px 18px 30px;
 }
 
-/* 抽屉内通用 */
+/* 抽屜內通用 */
 .dl {
   display: grid;
   grid-template-columns: 92px 1fr;
@@ -711,7 +711,7 @@ body {
 }
 .ref-line b { color: var(--accent); }
 
-/* 证据图 */
+/* 證據圖 */
 .evidence {
   margin-top: 8px;
   border: 1px solid var(--border);
@@ -733,7 +733,7 @@ body {
   background: var(--bg-0);
 }
 
-/* 决策表单 */
+/* 決策表單 */
 .decide-actions {
   display: flex;
   gap: 10px;
@@ -774,7 +774,7 @@ body {
   margin: 0 0 12px;
 }
 
-/* ---------- 事件时间线 ---------- */
+/* ---------- 事件時間線 ---------- */
 .timeline { display: flex; flex-direction: column; gap: 0; }
 .tl-item {
   display: grid;
@@ -833,7 +833,7 @@ body {
 .flag--bad { color: #ff9a9d; border-color: var(--danger); }
 
 /* ============================================================
-   灯箱
+   燈箱
    ============================================================ */
 .lightbox {
   position: fixed;
@@ -879,7 +879,7 @@ body {
   overflow-x: auto;
 }
 
-/* 加载中占位 */
+/* 載入中佔位 */
 .loading {
   padding: 24px;
   text-align: center;
@@ -887,7 +887,7 @@ body {
   font-size: 13px;
 }
 
-/* 滚动条（细化，配深色） */
+/* 捲軸（細化，配深色） */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -897,7 +897,7 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover { background: #2c3648; }
 
-/* 窄屏兜底：右栏改为下方堆叠 */
+/* 窄螢幕備援：右欄改為下方堆疊 */
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 1fr;
@@ -906,7 +906,7 @@ body {
   }
 }
 
-/* 窄屏(手机/小窗):热力图更小单元格 + 灯箱更紧凑 + 面板头换行 */
+/* 窄螢幕(手機/小窗):熱力圖更小單元格 + 燈箱更緊湊 + 面板頭換行 */
 @media (max-width: 760px) {
   .seat-grid {
     grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
@@ -921,7 +921,7 @@ body {
 }
 
 /* ============================================================
-   白名单热更抽屉
+   白名單熱更抽屜
    ============================================================ */
 .wl__note {
   margin: 0 0 1rem;

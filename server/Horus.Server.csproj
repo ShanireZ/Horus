@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <!-- 监考服务器:接收(WS 事件 + HTTP 图片/击键) + 落库(SQLite + 文件) + 简易看板。
-       net8.0(非 -windows):笔记本上 Windows 可跑,也便于测试。对外联网仅 M2 视觉 LLM 识图。 -->
+  <!-- 監考伺服器:接收(WS 事件 + HTTP 圖片/擊鍵) + 寫入資料庫(SQLite + 檔案) + 簡易看板。
+       net8.0(非 -windows):筆記本上 Windows 可跑,也便於測試。對外聯網僅 M2 視覺 LLM 識圖。 -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -27,8 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 配置文件**不随发布拷贝**:真 server.config.json 含密钥(勿进成品包·防泄漏);模板/参考由部署时手放。
-         Web SDK 默认把 *.json 当 Content 拷进 publish 输出,此处显式关掉。 -->
+    <!-- 設定檔案**不隨發佈拷貝**:真 server.config.json 含金鑰(勿進成品包·防洩漏);範本/參考由部署時手放。
+         Web SDK 預設把 *.json 當 Content 拷進 publish 輸出,此處顯式關掉。 -->
     <Content Update="server.config.json;server.config.sample.json">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>

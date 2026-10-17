@@ -2,14 +2,14 @@ using System.Text;
 
 namespace Horus.Server.Analysis.Vision;
 
-/// 确定性 Mock 视觉分析器:按图字节里的 ASCII 标记产出可判定结果。
-/// 用于测试与本地联调 —— **不出网、不需 key**,让「图入库 → 分析 → 落库 → 风险聚合」全链可测,
-/// 供应商决策(DeepSeek 云 API vs 自托管 MiMo)不阻塞骨架落地。
+/// 確定性 Mock 視覺分析器:按圖位元組裡的 ASCII 標記產出可判定結果。
+/// 用於測試與本機整合測試 —— **不出網、不需 key**,讓「圖入庫 → 分析 → 寫入資料庫 → 風險聚合」全鏈可測,
+/// 供應商決策(DeepSeek 雲 API vs 自託管 MiMo)不阻塞骨架完成實作。
 public sealed class MockVisionAnalyzer : IVisionAnalyzer
 {
     public string Engine => "mock";
 
-    public bool SendsOffNetwork => false;   // 本地确定性判定,不出网 → 派生可直通(测试用假图字节保留 ASCII 标记)
+    public bool SendsOffNetwork => false;   // 本機確定性判定,不出網 → 派生可直通(測試用假圖位元組保留 ASCII 標記)
 
     public Task<VisionVerdict?> AnalyzeAsync(byte[] imageBytes, VisionContext ctx, CancellationToken ct)
     {

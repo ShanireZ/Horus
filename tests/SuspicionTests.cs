@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// B3/T4:M5 kind 映射 + 风险分 + 健康来源,锁成可断言契约(防改值/改映射后无声漂移)。
+/// B3/T4:M5 kind 映射 + 風險分 + 健康來源,鎖成可斷言契約(防改值/改映射後無聲漂移)。
 public class SuspicionTests
 {
     private static JsonElement DefaultPayload => JsonDocument.Parse("{}").RootElement;

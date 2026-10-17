@@ -1,17 +1,17 @@
 /* ============================================================
-   Horus 监考台 · 前端逻辑（vanilla JS，无框架/无构建/无外部依赖）
-   消费已冻结的后端 API；?mock=1 或 window.USE_MOCK=true 走内置 mock。
+   Horus 監考臺 · 前端邏輯（vanilla JS，無框架/無建置/無外部相依）
+   消費已凍結的後端 API；?mock=1 或 window.USE_MOCK=true 走內置 mock。
    ============================================================ */
 (function () {
   "use strict";
 
-  /* ---------- 运行模式：真实 fetch vs 内置 mock ---------- */
+  /* ---------- 執行模式：真實 fetch vs 內置 mock ---------- */
   var USE_MOCK =
     window.USE_MOCK === true ||
     /[?&]mock=1\b/.test(window.location.search);
 
-  /* ---------- 常量：kind 中文标签 + 颜色 ---------- */
-  // 每种可疑类型给一个中文标签与配色（前景/背景/边框）。
+  /* ---------- 常數：kind 中文標籤 + 顏色 ---------- */
+  // 每種可疑類型給一箇中文標籤與配色（前景/背景/邊框）。
   var KIND_META = {
     web_ai:             { label: "AI 网站",     fg: "#c9a2ff", bg: "#2b1f42", bd: "#6b4bb0" },
     search:             { label: "搜题",         fg: "#ffbe6b", bg: "#3a2a0e", bd: "#a9741f" },
@@ -23,7 +23,7 @@
     non_whitelist_web:  { label: "非白名单网站", fg: "#ffb3c1", bg: "#3a1520", bd: "#b0455f" },
     remote_tool:        { label: "远控工具",     fg: "#ff9a9d", bg: "#3a1315", bd: "#c14045" },
     suspect:            { label: "可疑",         fg: "#c2c9d8", bg: "#242a37", bd: "#4a5163" },
-    // M5 采集健康告警(只读,不计入作弊裁决):与 Suspicion.KindFor 三分支对应
+    // M5 採集健康告警(唯讀,不計入作弊裁決):與 Suspicion.KindFor 三分支對應
     screen_obscured:    { label: "屏幕遮挡",     fg: "#f9e2af", bg: "#3a2f0a", bd: "#a9741f" },
     capability_degraded:{ label: "能力降级",     fg: "#f9e2af", bg: "#3a2f0a", bd: "#a9741f" },
     watchdog_restart:   { label: "看门狗重启",   fg: "#f9e2af", bg: "#3a2f0a", bd: "#a9741f" },
@@ -33,7 +33,7 @@
     return KIND_META[kind] || { label: kind || "未知", fg: "#c2c9d8", bg: "#242a37", bd: "#4a5163" };
   }
 
-  /* ---------- 常量：事件 type 中文标签 ---------- */
+  /* ---------- 常數：事件 type 中文標籤 ---------- */
   var TYPE_LABEL = {
     window_focus:  "窗口焦点",
     browser_url:   "浏览器地址",
@@ -47,7 +47,7 @@
   };
   function typeLabel(t) { return TYPE_LABEL[t] || t || "事件"; }
 
-  /* ---------- 常量：可疑状态中文标签 ---------- */
+  /* ---------- 常數：可疑狀態中文標籤 ---------- */
   var STATUS_LABEL = {
     pending:   "待复核",
     reviewing: "复核中",
@@ -56,10 +56,10 @@
   };
 
   /* ============================================================
-     工具函数
+     工具函式
      ============================================================ */
 
-  // Unix 秒（含毫秒的浮点）→ 本地 HH:MM:SS
+  // Unix 秒（含毫秒的浮點）→ 本機 HH:MM:SS
   function fmtTime(ts) {
     if (ts === null || ts === undefined || isNaN(ts)) return "--:--:--";
     var d = new Date(ts * 1000);
@@ -67,7 +67,7 @@
     return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
   }
 
-  // 转义 HTML，防止 payload 里的字符串破坏 DOM
+  // 轉義 HTML，防止 payload 裡的字串破壞 DOM
   function esc(s) {
     if (s === null || s === undefined) return "";
     return String(s)
@@ -75,15 +75,15 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");   // 单引号一并转义,令 esc 对属性定界方式免疫(防御纵深)
+      .replace(/'/g, "&#39;");   // 單引號一併轉義,令 esc 對屬性定界方式免疫(防禦縱深)
   }
 
-  // 短横线容错取值
+  // 短橫線容錯取值
   function dash(v) { return (v === null || v === undefined || v === "") ? "—" : v; }
 
   var $ = function (sel) { return document.querySelector(sel); };
 
-  /* ---------- 顶部错误横幅（toast） ---------- */
+  /* ---------- 頂部錯誤橫幅（toast） ---------- */
   var toastTimer = null;
   function showToast(msg) {
     var el = $("#toast");
@@ -94,20 +94,20 @@
   }
 
   /* ============================================================
-     管理鉴权（M2：HttpOnly cookie）
+     管理鑑權（M2：HttpOnly cookie）
      ------------------------------------------------------------
-     冻结契约：
-       · 登录：POST /api/login {token} → 校验通过则种 HttpOnly cookie `horus_admin`。
-         cookie 由浏览器自动附带（fetch credentials:same-origin + <img> 同源），
-         **JS 读不到**（防 XSS 窃取），**不进 URL**（防 ?t= 令牌经 Referer/日志外泄）。
-       · 其余 /api/* 无需再手动带令牌头；cookie 自动携带。
-       · 令牌错误/缺失 → /api/* 返回 401 → 弹登录门。
-       · 服务器未配置令牌（本地联调）时 /api/* 正常放行、/api/login 返回 authRequired:false。
+     凍結契約：
+       · 登入：POST /api/login {token} → 檢核通過則種 HttpOnly cookie `horus_admin`。
+         cookie 由瀏覽器自動附帶（fetch credentials:same-origin + <img> 同源），
+         **JS 讀不到**（防 XSS 竊取），**不進 URL**（防 ?t= 權杖經 Referer/紀錄外洩）。
+       · 其餘 /api/* 無需再手動帶權杖頭；cookie 自動攜帶。
+       · 權杖錯誤/缺失 → /api/* 回傳 401 → 彈登入門。
+       · 伺服器未設定權杖（本機整合測試）時 /api/* 正常放行、/api/login 回傳 authRequired:false。
        · 登出：POST /api/logout → 清 cookie。
-     前端不再持令牌明文，localStorage 不再用于令牌。
+     前端不再持權杖明文，localStorage 不再用於權杖。
      ============================================================ */
 
-  // 登录：校验令牌并种 cookie。返回 { ok, body }。
+  // 登入：檢核權杖並種 cookie。回傳 { ok, body }。
   function login(tok) {
     return fetch("/api/login", {
       method: "POST",
@@ -118,33 +118,33 @@
       return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, body: j }; });
     });
   }
-  // 登出：清 cookie（失败静默——UI 层照常弹门即可）。
+  // 登出：清 cookie（失敗靜默——UI 層照常彈門即可）。
   function logout() {
     return fetch("/api/logout", { method: "POST", credentials: "same-origin" }).catch(function () {});
   }
 
-  // 图片字节 URL：cookie 同源自动携带，无需再把令牌拼进 ?t=（避免令牌进 URL / 日志 / Referer）。
-  // 供 /api/images/{id} 缩略图/灯箱大图使用；/meta 走 api()。
+  // 圖片位元組 URL：cookie 同源自動攜帶，無需再把權杖拼進 ?t=（避免權杖進 URL / 紀錄 / Referer）。
+  // 供 /api/images/{id} 縮略圖/燈箱大圖使用；/meta 走 api()。
   function imageUrl(imageId) {
     return "/api/images/" + encodeURIComponent(imageId);
   }
 
-  /* ---------- 统一 fetch 封装：自动加令牌头 + 401 → 登录门 ---------- */
-  // 401 处理：清空数据、停止轮询、弹登录门、给中文提示，绝不静默失败或白屏。
-  // 抛出的错误带 .isAuth 标记，调用方的 .catch 只需照常 showToast（已弹门）。
-  // msg：服务器给的真实原因（撤权留痕）。★ 取不到时才退回那句笼统的。
-  //   ★★ 「你的监考台权限已关闭」这一种尤其要说清楚：取消 SSO 后（贝塔通 P84/P98）
-  //   每点一次登录都要**完整输一遍密码**才被拒，不告诉他真实原因，他会一遍遍白输。
+  /* ---------- 統一 fetch 封裝：自動加權杖頭 + 401 → 登入門 ---------- */
+  // 401 處理：清空資料、停止輪詢、彈登入門、給中文提示，絕不靜默失敗或白屏。
+  // 拋出的錯誤帶 .isAuth 標記，呼叫方的 .catch 只需照常 showToast（已彈門）。
+  // msg：伺服器給的真實原因（撤權留痕）。★ 取不到時才退回那句籠統的。
+  //   ★★ 「你的監考臺權限已關閉」這一種尤其要說清楚：取消 SSO 後（貝塔通 P84/P98）
+  //   每點一次登入都要**完整輸一遍密碼**才被拒，不告訴他真實原因，他會一遍遍白輸。
   function handleUnauthorized(msg) {
     stopPolling();
-    stopHeartbeat();   // 会话已死：再发心跳既救不活它，401 还会再弹一次门
+    stopHeartbeat();   // 工作階段已死：再發心跳既救不活它，401 還會再彈一次門
     clearCurrentData();
     showLoginGate(msg || "登录已失效或过期，请重新登录");
   }
 
   function api(path, options) {
     if (USE_MOCK) {
-      // mock 分流：GET 无 body → mockGet；POST → mockPost
+      // mock 分流：GET 無 body → mockGet；POST → mockPost
       if (options && options.method === "POST") {
         return mockPost(path, options.body ? JSON.parse(options.body) : {});
       }
@@ -155,8 +155,8 @@
     if (opts.headers) {
       Object.keys(opts.headers).forEach(function (k) { headers[k] = opts.headers[k]; });
     }
-    // 管理鉴权走 HttpOnly cookie：credentials:same-origin 让浏览器自动携带，无需手动带令牌头。
-    // 联调模式（服务器未配令牌）下 /api/* 照常放行；配了令牌但未登录/cookie 失效则 401 → 弹门。
+    // 管理鑑權走 HttpOnly cookie：credentials:same-origin 讓瀏覽器自動攜帶，無需手動帶權杖頭。
+    // 整合測試模式（伺服器未配權杖）下 /api/* 照常放行；配了權杖但未登入/cookie 失效則 401 → 彈門。
     return fetch(path, {
       method: opts.method || "GET",
       credentials: "same-origin",
@@ -164,7 +164,7 @@
       body: opts.body
     }).then(function (r) {
       if (r.status === 401) {
-        // 401 的响应体带着「为什么」（撤权留痕）；读不出就退回笼统提示。
+        // 401 的回應體帶著「為什麼」（撤權留痕）；讀不出就退回籠統提示。
         return r.json().catch(function () { return {}; }).then(function (j) {
           handleUnauthorized(j && j.message);
           var authErr = new Error("未授权（401）");
@@ -177,7 +177,7 @@
     });
   }
 
-  // 兼容旧调用点：apiGet / apiPost 现在只是 api() 的薄封装。
+  // 相容舊呼叫點：apiGet / apiPost 現在只是 api() 的薄封裝。
   function apiGet(path) { return api(path); }
   function apiPost(path, body) {
     return api(path, {
@@ -188,24 +188,24 @@
   }
 
   /* ============================================================
-     应用状态
+     應用狀態
      ============================================================ */
   var state = {
     exams: [],
     currentExamId: null,
     seats: [],
     suspicious: [],
-    queueStatus: "pending",   // 队列过滤
-    queueMode: "suspicion",   // 队列视图:suspicion(可疑复核)|health(采集健康)
-    health: [],               // 采集健康列表(source='health')
+    queueStatus: "pending",   // 佇列過濾
+    queueMode: "suspicion",   // 佇列視圖:suspicion(可疑複核)|health(採集健康)
+    health: [],               // 採集健康列表(source='health')
     autoRefresh: true,
     pollTimer: null,
-    inflight: false,          // 防止轮询叠加
+    inflight: false,          // 防止輪詢疊加
     drawerMode: null,         // "seat" | "suspicious"
-    collectAuthMode: null,    // 采集面模式(psk/oidc/both):both 灰度期高亮 PSK 座位
-    adminAuthMode: null,      // 管理端模式(token/oidc):退出按钮据此决定走不走贝塔通登出
-    imageSearchEnabled: false,// 按图搜图是否可用(嵌入器已配)
-    lightboxImageId: null     // 当前灯箱图 id(按图搜图用)
+    collectAuthMode: null,    // 採集面模式(psk/oidc/both):both 灰度期高亮 PSK 座位
+    adminAuthMode: null,      // 管理端模式(token/oidc):退出按鈕據此決定走不走貝塔通登出
+    imageSearchEnabled: false,// 按圖搜圖是否可用(嵌入器已配)
+    lightboxImageId: null     // 當前燈箱圖 id(按圖搜圖用)
   };
 
   var POLL_MS = 5000;
@@ -221,22 +221,22 @@
     bindLightbox();
     bindLoginGate();
 
-    // ── 启动引导 ──────────────────────────────────────────────
-    // mock 模式：直接进（不经真实 /api，不受鉴权影响，用于目视布局）。
-    // 真实模式：首次加载先「不弹门」直接试拉数据——
-    //   · 200（有令牌或联调放行）→ 直接用，登录门保持隐藏；
-    //   · 401 → api() 里的 handleUnauthorized() 自动弹门要令牌。
-    // 即使本地已存令牌也照此流程：让服务器裁决，而不是前端预判。
+    // ── 啟動引導 ──────────────────────────────────────────────
+    // mock 模式：直接進（不經真實 /api，不受鑑權影響，用於目視佈局）。
+    // 真實模式：首次載入先「不彈門」直接試拉資料——
+    //   · 200（有權杖或整合測試放行）→ 直接用，登入門保持隱藏；
+    //   · 401 → api() 裡的 handleUnauthorized() 自動彈門要權杖。
+    // 即使本機已存權杖也照此流程：讓伺服器裁決，而不是前端預判。
     hideLoginGate();
-    // 取一次采集面模式(both 灰度期看板要高亮 PSK 座位);失败静默(默认不高亮)。
+    // 取一次採集面模式(both 灰度期看板要高亮 PSK 座位);失敗靜默(預設不高亮)。
     fetch("/api/authmode", { credentials: "same-origin" }).then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j) return;
         if (j.collectAuthMode) state.collectAuthMode = j.collectAuthMode;
         state.imageSearchEnabled = !!j.imageSearchEnabled;
-        state.adminAuthMode = j.mode || "token";   // 退出按钮据此决定纯本地登出还是走贝塔通
-        // 只有 oidc 模式才有管理会话可续(token 模式没有三道门这回事)。
-        // ★ 若此刻其实没登录,loadExams() 会先 401 并在 handleUnauthorized 里把心跳停掉。
+        state.adminAuthMode = j.mode || "token";   // 退出按鈕據此決定純本機登出還是走貝塔通
+        // 只有 oidc 模式才有管理工作階段可續(token 模式沒有三道門這回事)。
+        // ★ 若此刻其實沒登入,loadExams() 會先 401 並在 handleUnauthorized 裡把心跳停掉。
         if (j.mode === "oidc") { startHeartbeat(); loadWhoami(); }
       }).catch(function () {});
     loadExams();
@@ -250,7 +250,7 @@
       refreshCurrent();
     });
     $("#preflightBtn").addEventListener("click", openPreflightDrawer);
-    // 考试管理：开始 / 结束 / 全场登出
+    // 考試管理：開始 / 結束 / 全場登出
     $("#startExamBtn").addEventListener("click", createExam);
     $("#endExamBtn").addEventListener("click", endCurrentExam);
     $("#logoutAllBtn").addEventListener("click", logoutAllCurrent);
@@ -259,12 +259,12 @@
       state.autoRefresh = e.target.checked;
       restartPolling();
     });
-    // 退出监考员登录。
-    // ★ oidc 模式走 **RP-Initiated Logout**（贝塔通 P85）：整页跳 /admin/logout，
-    //   那边先清本地会话、再把人送到贝塔通的「只退出本站 / 退出所有站点」二选一页。
-    //   ★★ 机房电脑轮流坐人（贝塔通 R9），「退出所有站点」是上一个人离开时唯一稳妥的收尾，
-    //   只清本地的话他在别的站点还登着。
-    // ★ token 模式没有 IdP 会话这回事，保持原来的纯本地登出。
+    // 退出監考員登入。
+    // ★ oidc 模式走 **RP-Initiated Logout**（貝塔通 P85）：整頁跳 /admin/logout，
+    //   那邊先清本機工作階段、再把人送到貝塔通的「只退出本站 / 退出所有站台」二選一頁。
+    //   ★★ 機房電腦輪流坐人（貝塔通 R9），「退出所有站台」是上一個人離開時唯一穩妥的收尾，
+    //   只清本機的話他在別的站台還登著。
+    // ★ token 模式沒有 IdP 工作階段這回事，保持原來的純本機登出。
     $("#logoutBtn").addEventListener("click", function () {
       stopPolling();
       stopHeartbeat();
@@ -276,19 +276,19 @@
   }
 
   /* ============================================================
-     考试管理：开始 / 结束 / 全场登出（后端端点已存在，此处只连 UI）
+     考試管理：開始 / 結束 / 全場登出（後端端點已存在，此處只連 UI）
      ------------------------------------------------------------
-       · 开始考试：建一个 active 考试（POST /api/exams）。学员机 Agent 每 5s 轮询
-         /oidc/active-exam，检测到即弹贝塔通登录、开始采集。
-       · 结束考试：POST .../end → 通知在线 Agent 停采、排空缓冲后回待命。
-       · 全场登出：POST .../logout → 吊销该考试全部采集会话 + 强断连接（学员须重登）。
-     结束 / 全场登出仅当当前考试为「进行中」时可点。
+       · 開始考試：建一個 active 考試（POST /api/exams）。學員機 Agent 每 5s 輪詢
+         /oidc/active-exam，檢測到即彈貝塔通登入、開始採集。
+       · 結束考試：POST .../end → 通知線上 Agent 停採、排空緩衝後回待命。
+       · 全場登出：POST .../logout → 吊銷該考試全部採集工作階段 + 強斷連接（學員須重登）。
+     結束 / 全場登出僅噹噹前考試為「進行中」時可點。
      ============================================================ */
   function currentExam() {
     return state.exams.filter(function (e) { return e.examId === state.currentExamId; })[0] || null;
   }
 
-  // 结束 / 全场登出 / 白名单按钮：仅当前考试 active 时启用；开始考试始终可用。
+  // 結束 / 全場登出 / 白名單按鈕：僅當前考試 active 時啟用；開始考試始終可用。
   function updateExamControls() {
     var active = !!(currentExam() && currentExam().status === "active");
     var endBtn = $("#endExamBtn"), logoutAllBtn = $("#logoutAllBtn"), wlBtn = $("#whitelistBtn");
@@ -297,7 +297,7 @@
     if (wlBtn) wlBtn.disabled = !active;
   }
 
-  // 生成安全的 examId：E-YYYYMMDD-HHMM-<4位随机>。仅字母数字与连字符，满足服务器 IsSafeId。
+  // 生成安全的 examId：E-YYYYMMDD-HHMM-<4位随机>。僅字母數字與連字元，滿足伺服器 IsSafeId。
   function genExamId() {
     var d = new Date();
     var p = function (n) { return String(n).padStart(2, "0"); };
@@ -310,17 +310,17 @@
     var d = new Date();
     var defName = (d.getMonth() + 1) + "月" + d.getDate() + "日 测验";
     var name = window.prompt("新考试名称（学员看板显示用）：", defName);
-    if (name === null) return;             // 用户取消
+    if (name === null) return;             // 使用者取消
     name = name.trim();
     if (!name) { showToast("考试名称不能为空"); return; }
     var examId = genExamId();
     apiPost("/api/exams", { examId: examId, name: name })
       .then(function () {
-        showToast("已开始考试：" + name);   // loadExams 会自动选中最新的 active 考试
+        showToast("已开始考试：" + name);   // loadExams 會自動選中最新的 active 考試
         loadExams();
       })
       .catch(function (err) {
-        if (err && err.isAuth) return;      // 401 已弹登录门
+        if (err && err.isAuth) return;      // 401 已彈登入門
         showToast("开始考试失败：" + err.message);
       });
   }
@@ -358,13 +358,13 @@
   }
 
   /* ============================================================
-     「当前登录：XXX」
+     「當前登入：XXX」
      ------------------------------------------------------------
-     ★★ 这不是体验优化。机房电脑**无还原卡**、浏览器混装国产内核因而组策略不现实、
-     Windows 共享 PC 模式也不现实（贝塔通 R9）—— 上一个人不点退出就走时，最长
-     15 分钟（关了浏览器）或 30 分钟（页面还开着）内，下一个人可以直接用他的会话。
-     **身份层关不掉这个窗口**，唯一能真正生效的缓解就是让下一个人立刻看见这不是自己的号。
-     ★ 对考场尤其直接：学生轮流坐同一台机器正是常态。
+     ★★ 這不是體驗優化。機房電腦**無還原卡**、瀏覽器混裝國產核心因而組策略不現實、
+     Windows 共享 PC 模式也不現實（貝塔通 R9）—— 上一個人不點退出就走時，最長
+     15 分鐘（關了瀏覽器）或 30 分鐘（頁面還開著）內，下一個人可以直接用他的工作階段。
+     **身分層關不掉這個視窗**，唯一能真正生效的緩解就是讓下一個人立刻看見這不是自己的號。
+     ★ 對考場尤其直接：學生輪流坐同一臺機器正是常態。
      ============================================================ */
   function loadWhoami() {
     var el = $("#whoami");
@@ -376,49 +376,49 @@
         el.textContent = "当前登录：" + j.name;
         el.hidden = false;
       })
-      .catch(function () { /* 取不到就不显示——不为一个提示条把看板搞崩 */ });
+      .catch(function () { /* 取不到就不顯示——不為一個提示條把看板搞崩 */ });
   }
 
   /* ============================================================
-     存活心跳（三道门的第三道 · 贝塔通 P88–P92 · rp-contract「三道门与存活心跳」）
+     存活心跳（三道門的第三道 · 貝塔通 P88–P92 · rp-contract「三道門與存活心跳」）
      ------------------------------------------------------------
-     它挡的是「关页面 / 关浏览器走人」，与 idle 挡的「页面开着但人走了」是两件事。
-     机房电脑无还原卡、组策略不可行（贝塔通 R9），所以这一层是身份侧唯一的抓手。
+     它擋的是「關頁面 / 關瀏覽器走人」，與 idle 擋的「頁面開著但人走了」是兩件事。
+     機房電腦無還原卡、組策略不可行（貝塔通 R9），所以這一層是身分側唯一的抓手。
 
-     报文 { active }：**任何**心跳续「心跳」那道门；**只有 active:true** 才额外续 idle。
-       · active = 页面可见 && 最近 5 分钟内有过 mousemove / keydown / click / scroll。
+     訊息 { active }：**任何**心跳續「心跳」那道門；**只有 active:true** 才額外續 idle。
+       · active = 頁面可見 && 最近 5 分鐘內有過 mousemove / keydown / click / scroll。
 
-     ★★ 心跳是 idle 的**唯一**续期入口。**看板的自动轮询绝不能续 idle** ——
-        看板本来就每 5 秒轮询一次，轮询算作活动的话 idle 那道门永远不会到点，
-        监考机上开着看板就等于永不登出。服务端 admin gate 因此只读不写。
+     ★★ 心跳是 idle 的**唯一**續期入口。**看板的自動輪詢絕不能續 idle** ——
+        看板本來就每 5 秒輪詢一次，輪詢算作活動的話 idle 那道門永遠不會到點，
+        監考機上開著看板就等於永不登出。伺服器端 admin gate 因此唯讀不寫。
 
-     ★ 跨标签选主：只有 leader 发心跳。leader 判据 = 存活对等体里 id 最小的那个；
-       对等体每 5 秒广播一次，**15 秒**没广播即视为已走（必须远小于 5 分钟的心跳间隔，
-       否则 leader 一关就漏掉整个心跳周期）。
+     ★ 跨標籤選主：只有 leader 發心跳。leader 判據 = 存活對等體裡 id 最小的那個；
+       對等體每 5 秒廣播一次，**15 秒**沒廣播即視為已走（必須遠小於 5 分鐘的心跳間隔，
+       否則 leader 一關就漏掉整個心跳週期）。
 
-     ★ 「只剩一个标签且它被浏览器冻结 → 无心跳 → 15 分钟后登出」**是预期行为，不要去修**：
-       页面被冻结本来就说明没人在用。上线前要对监考员说清楚，否则会被当 bug 报。
+     ★ 「只剩一個標籤且它被瀏覽器凍結 → 無心跳 → 15 分鐘後登出」**是預期行為，不要去修**：
+       頁面被凍結本來就說明沒人在用。上線前要對監考員說清楚，否則會被當 bug 報。
      ============================================================ */
-  var HEARTBEAT_MS = 5 * 60 * 1000;    // 心跳间隔
-  var ACTIVITY_WINDOW_MS = 5 * 60 * 1000; // 「最近有过输入」的窗口
-  var PEER_TTL_MS = 15 * 1000;         // leader 广播超时
-  var PEER_PING_MS = 5 * 1000;         // 对等体广播间隔
+  var HEARTBEAT_MS = 5 * 60 * 1000;    // 心跳間隔
+  var ACTIVITY_WINDOW_MS = 5 * 60 * 1000; // 「最近有過輸入」的視窗
+  var PEER_TTL_MS = 15 * 1000;         // leader 廣播超時
+  var PEER_PING_MS = 5 * 1000;         // 對等體廣播間隔
 
   var hb = {
     on: false, id: null, chan: null, peers: {},
     lastInputAt: 0, timer: null, pingTimer: null, wasLeader: false, bound: false
   };
 
-  // 本标签自己「人还在」吗
+  // 本標籤自己「人還在」嗎
   function hbSelfActive() {
     return document.visibilityState === "visible"
         && (Date.now() - hb.lastInputAt) < ACTIVITY_WINDOW_MS;
   }
 
-  // 上报用的 active：**本标签或任一存活对等体活跃即为 true**。
-  // ★ 契约给的算法只看本标签，但 leader 未必是用户正在看的那个标签 ——
-  //   照字面实现的话，「在 B 标签里干活、A 标签当 leader」会被判成人不在，
-  //   30 分钟后无声登出。判据本来要回答的是「这个人还在不在」，不是「哪个标签在前台」。
+  // 上報用的 active：**本標籤或任一存活對等體活躍即為 true**。
+  // ★ 契約給的演算法只看本標籤，但 leader 未必是使用者正在看的那個標籤 ——
+  //   照字面實作的話，「在 B 標籤裡幹活、A 標籤當 leader」會被判成人不在，
+  //   30 分鐘後無聲登出。判據本來要回答的是「這個人還在不在」，不是「哪個標籤在前台」。
   function hbAnyActive() {
     if (hbSelfActive()) return true;
     var now = Date.now(), ids = Object.keys(hb.peers);
@@ -429,7 +429,7 @@
     return false;
   }
 
-  // leader = 存活对等体（含自己）里 id 最小的那个。纯函数、无需协商，任一标签消失都自愈。
+  // leader = 存活對等體（含自己）裡 id 最小的那個。純函式、無需協商，任一標籤消失都自愈。
   function hbIsLeader() {
     var now = Date.now(), min = hb.id, ids = Object.keys(hb.peers);
     for (var i = 0; i < ids.length; i++) {
@@ -446,17 +446,17 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active: hbAnyActive() })
     }).then(function (r) {
-      // 401 = 三道门里某一道已经到点（或被贝塔通撤权）。弹门，别让一个已死的会话被自己的心跳救活。
+      // 401 = 三道門裡某一道已經到點（或被貝塔通撤權）。彈門，別讓一個已死的工作階段被自己的心跳救活。
       if (r.status !== 401) return;
       return r.json().catch(function () { return {}; })
         .then(function (j) { handleUnauthorized(j && j.message); });
-    }).catch(function () { /* 网络抖动：下一发再说，15 分钟窗口容得下 3 次 */ });
+    }).catch(function () { /* 網路抖動：下一發再說，15 分鐘視窗容得下 3 次 */ });
   }
 
   function hbPing() {
     if (!hb.on) return;
     var now = Date.now();
-    // 清掉已走的对等体
+    // 清掉已走的對等體
     Object.keys(hb.peers).forEach(function (id) {
       if ((now - hb.peers[id].at) >= PEER_TTL_MS) delete hb.peers[id];
     });
@@ -464,9 +464,9 @@
       try { hb.chan.postMessage({ id: hb.id, active: hbSelfActive() }); } catch (e) {}
     }
     var leader = hbIsLeader();
-    // ★ 刚接手就补一发：新 leader 自己那个 5 分钟定时器的相位是随机的，
-    //   不补的话最坏要再等一整个周期，而上一任已经不发了。
-    //   服务端 150 秒节流正好吸收掉这类补发（这也是窗口取 150 秒而非贴近 5 分钟的原因之一）。
+    // ★ 剛接手就補一發：新 leader 自己那個 5 分鐘定時器的相位是隨機的，
+    //   不補的話最壞要再等一整個週期，而上一任已經不發了。
+    //   伺服器端 150 秒節流正好吸收掉這類補發（這也是視窗取 150 秒而非貼近 5 分鐘的原因之一）。
     if (leader && !hb.wasLeader) hbSend();
     hb.wasLeader = leader;
   }
@@ -475,7 +475,7 @@
     if (hb.on) return;
     hb.on = true;
     hb.id = String(Date.now() % 1e6) + "-" + Math.random().toString(36).slice(2, 10);
-    hb.lastInputAt = Date.now();   // 刚登录进来，人显然在
+    hb.lastInputAt = Date.now();   // 剛登入進來，人顯然在
     try {
       hb.chan = new BroadcastChannel("horus-admin-heartbeat");
       hb.chan.onmessage = function (ev) {
@@ -483,15 +483,15 @@
         if (m && m.id && m.id !== hb.id) hb.peers[m.id] = { at: Date.now(), active: !!m.active };
       };
     } catch (e) {
-      hb.chan = null;   // 浏览器不支持 BroadcastChannel → 本标签独自当 leader，功能不降级
+      hb.chan = null;   // 瀏覽器不支援 BroadcastChannel → 本標籤獨自當 leader，功能不降級
     }
     if (!hb.bound) {
       ["mousemove", "keydown", "click", "scroll"].forEach(function (t) {
         window.addEventListener(t, function () { hb.lastInputAt = Date.now(); }, { passive: true });
       });
-      hb.bound = true;   // 监听器只挂一次（stop/start 会反复调用）
+      hb.bound = true;   // 監聽器只掛一次（stop/start 會反覆呼叫）
     }
-    hb.wasLeader = hbIsLeader();   // 起步时不发：会话刚建，两个时间戳本就是 now
+    hb.wasLeader = hbIsLeader();   // 起步時不發：工作階段剛建，兩個時間戳本就是 now
     hb.pingTimer = setInterval(hbPing, PEER_PING_MS);
     hb.timer = setInterval(function () { if (hbIsLeader()) hbSend(); }, HEARTBEAT_MS);
   }
@@ -506,27 +506,27 @@
   }
 
   /* ============================================================
-     登录门：显示/隐藏 + 表单提交
+     登入門：顯示/隱藏 + 表單提交
      ============================================================ */
   function showLoginGate(msg) {
     var hint = $("#loginHint");
     if (msg) {
       hint.textContent = msg;
-      // 「无效/过期」类提示标红，普通提示保持弱色
+      // 「無效/過期」類提示標紅，普通提示保持弱色
       hint.classList.toggle("is-error", /无效|过期/.test(msg));
     }
     $("#loginGate").hidden = false;
     var whoami = $("#whoami");
-    if (whoami) whoami.hidden = true;   // 已经不是「当前登录」了，别把上一个人的名字留在屏幕上
+    if (whoami) whoami.hidden = true;   // 已經不是「當前登入」了，別把上一個人的名字留在螢幕上
     var input = $("#tokenInput");
     input.value = "";
-    // M4·RBAC：据后端鉴权方式切换令牌输入 / 贝塔通 OIDC 登录按钮；token 模式才聚焦输入框。
+    // M4·RBAC：據後端鑑權方式切換權杖輸入 / 貝塔通 OIDC 登入按鈕；token 模式才聚焦輸入框。
     applyAuthMode().then(function (oidc) {
       if (!oidc) setTimeout(function () { try { input.focus(); } catch (e) {} }, 0);
     });
   }
 
-  // M4·RBAC：探测管理鉴权方式（token / oidc），据此切换登录门 UI。返回 Promise<oidc:boolean>。
+  // M4·RBAC：探測管理鑑權方式（token / oidc），據此切換登入門 UI。回傳 Promise<oidc:boolean>。
   function applyAuthMode() {
     return fetch("/api/authmode", { credentials: "same-origin", headers: { "Accept": "application/json" } })
       .then(function (r) { return r.json(); })
@@ -547,7 +547,7 @@
         }
         return oidc;
       })
-      .catch(function () { return false; });   // 探测失败 → 保留默认令牌门
+      .catch(function () { return false; });   // 探測失敗 → 保留預設權杖門
   }
   function hideLoginGate() {
     $("#loginGate").hidden = true;
@@ -565,12 +565,12 @@
       }
       var btn = $("#tokenSubmit");
       if (btn) btn.disabled = true;
-      // POST /api/login 校验并种 HttpOnly cookie；成功后 cookie 自动携带，直接拉数据。
+      // POST /api/login 檢核並種 HttpOnly cookie；成功後 cookie 自動攜帶，直接拉資料。
       login(tok).then(function (res) {
         if (btn) btn.disabled = false;
         if (res.ok && (!res.body || res.body.ok !== false)) {
           hideLoginGate();
-          loadExams();        // cookie 已种；若仍 401 会再次弹门
+          loadExams();        // cookie 已種；若仍 401 會再次彈門
         } else {
           var hint = $("#loginHint");
           hint.textContent = "令牌无效，请重试";
@@ -587,12 +587,12 @@
     });
   }
 
-  // 停止轮询（401 / 退出令牌时用；restartPolling 会在有令牌数据后重启）
+  // 停止輪詢（401 / 退出權杖時用；restartPolling 會在有權杖資料後重新啟動）
   function stopPolling() {
     if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
   }
 
-  // 清空当前视图数据（401 / 切换令牌时用），避免残留旧数据误导
+  // 清空當前視圖資料（401 / 切換權杖時用），避免殘留舊資料誤導
   function clearCurrentData() {
     state.exams = [];
     state.seats = [];
@@ -611,11 +611,11 @@
         c.classList.toggle("is-active", c === btn);
       });
       state.queueStatus = btn.getAttribute("data-status");
-      loadSuspicious();  // 单独拉取（状态过滤走服务端参数）
+      loadSuspicious();  // 單獨拉取（狀態過濾走伺服器端參數）
     });
   }
 
-  // 视图切换:可疑复核 <-> 采集健康。health 模式隐藏状态过滤 chips(只读告警,无需裁决状态)。
+  // 視圖切換:可疑複核 <-> 採集健康。health 模式隱藏狀態過濾 chips(唯讀告警,無需裁決狀態)。
   function bindQueueTabs() {
     $("#queueTabs").addEventListener("click", function (e) {
       var btn = e.target.closest(".tab");
@@ -628,7 +628,7 @@
         t.classList.toggle("is-active", on);
         t.setAttribute("aria-selected", on ? "true" : "false");
       });
-      // health 模式不需要状态过滤(只读告警);suspicion 模式恢复
+      // health 模式不需要狀態過濾(唯讀告警);suspicion 模式恢復
       $("#queueFilter").hidden = (mode === "health");
       if (mode === "health") loadHealth();
       else loadSuspicious();
@@ -654,7 +654,7 @@
   }
 
   /* ============================================================
-     考试列表
+     考試列表
      ============================================================ */
   function loadExams() {
     apiGet("/api/exams")
@@ -663,10 +663,10 @@
         renderExamOptions();
         if (state.exams.length === 0) {
           showEmptyEverything("暂无考试，点「开始考试」建一场");
-          updateExamControls();   // 无考试：结束/全场登出置灰
+          updateExamControls();   // 無考試：結束/全場登出置灰
           return;
         }
-        // 默认选中第一个 active，否则第一个
+        // 預設選中第一個 active，否則第一個
         var pick = state.exams.filter(function (e) { return e.status === "active"; })[0]
           || state.exams[0];
         state.currentExamId = pick.examId;
@@ -676,7 +676,7 @@
         restartPolling();
       })
       .catch(function (err) {
-        if (err && err.isAuth) return;   // 401 已弹登录门，无需再报错
+        if (err && err.isAuth) return;   // 401 已彈登入門，無需再回報錯誤
         showToast("加载考试列表失败：" + err.message);
         showEmptyEverything("无法连接后端，等待重试");
       });
@@ -704,7 +704,7 @@
   function switchExam(examId) {
     if (!examId || examId === state.currentExamId) return;
     state.currentExamId = examId;
-    // 切换考试：清空旧数据 + 重置定时器，避免叠加
+    // 切換考試：清空舊資料 + 重置定時器，避免疊加
     state.seats = [];
     state.suspicious = [];
     closeDrawer();
@@ -722,21 +722,21 @@
   }
 
   /* ============================================================
-     轮询：切换考试/开关时清理旧定时器
+     輪詢：切換考試/開關時清理舊定時器
      ============================================================ */
   function restartPolling() {
     stopPolling();
-    // 登录门开着时不启动轮询（避免无令牌轮询风暴）；登录成功后再由此处启动。
+    // 登入門開著時不啟動輪詢（避免無權杖輪詢風暴）；登入成功後再由此處啟動。
     if ($("#loginGate") && !$("#loginGate").hidden) return;
     if (state.autoRefresh && state.currentExamId) {
       state.pollTimer = setInterval(refreshCurrent, POLL_MS);
     }
   }
 
-  // 拉取当前考试的 seats + suspicious（合并一次刷新）
+  // 拉取當前考試的 seats + suspicious（合併一次刷新）
   function refreshCurrent() {
     if (!state.currentExamId) return;
-    if (state.inflight) return;  // 上一轮未回，不叠加
+    if (state.inflight) return;  // 上一輪未回，不疊加
     state.inflight = true;
 
     var examId = state.currentExamId;
@@ -745,12 +745,12 @@
       apiGet("/api/exams/" + encodeURIComponent(examId) +
         "/suspicious?status=" + encodeURIComponent(state.queueStatus))
     ];
-    // 采集健康视图下,额外拉取 health 列表,保持面板实时
+    // 採集健康視圖下,額外拉取 health 列表,保持面板即時
     if (state.queueMode === "health") {
       calls.push(apiGet("/api/exams/" + encodeURIComponent(examId) + "/health"));
     }
     Promise.all(calls).then(function (res) {
-      if (examId !== state.currentExamId) return;  // 期间已切换
+      if (examId !== state.currentExamId) return;  // 期間已切換
       state.seats = Array.isArray(res[0]) ? res[0] : [];
       state.suspicious = Array.isArray(res[1]) ? res[1] : [];
       if (state.queueMode === "health" && res[2]) {
@@ -761,15 +761,15 @@
       updateOverview();
       $("#clock").textContent = fmtTime(Date.now() / 1000);
     }).catch(function (err) {
-      if (err && err.isAuth) return;   // 401 已停轮询 + 弹登录门
+      if (err && err.isAuth) return;   // 401 已停輪詢 + 彈登入門
       showToast("刷新失败：" + err.message);
-      // 失败时不清屏，保留上一份可见数据（克制重试：等下一轮 5s）
+      // 失敗時不清屏，保留上一份可見資料（剋制重試：等下一輪 5s）
     }).finally(function () {
       state.inflight = false;
     });
   }
 
-  // 仅刷新可疑队列（切换状态过滤时用）
+  // 僅刷新可疑佇列（切換狀態過濾時用）
   function loadSuspicious() {
     if (!state.currentExamId) return;
     var examId = state.currentExamId;
@@ -781,12 +781,12 @@
         renderQueue();
       })
       .catch(function (err) {
-        if (err && err.isAuth) return;   // 401 已弹登录门
+        if (err && err.isAuth) return;   // 401 已彈登入門
         showToast("加载可疑队列失败：" + err.message);
       });
   }
 
-  // 采集健康(只读):拉取 source='health' 的告警列表
+  // 採集健康(唯讀):拉取 source='health' 的告警列表
   function loadHealth() {
     if (!state.currentExamId) return;
     var examId = state.currentExamId;
@@ -797,12 +797,12 @@
         renderQueue();
       })
       .catch(function (err) {
-        if (err && err.isAuth) return;   // 401 已弹登录门
+        if (err && err.isAuth) return;   // 401 已彈登入門
         showToast("加载采集健康失败：" + err.message);
       });
   }
 
-  // 采集健康按时间倒序
+  // 採集健康按時間倒序
   function sortedHealth() {
     return state.health.slice().sort(function (a, b) {
       return (b.ts || 0) - (a.ts || 0);
@@ -810,19 +810,19 @@
   }
 
   /* ============================================================
-     概览计数
+     概覽計數
      ============================================================ */
   function updateOverview() {
     var ex = state.exams.filter(function (e) { return e.examId === state.currentExamId; })[0];
     var seatCount = state.seats.length ||
       (ex ? ex.seatCount : 0) || 0;
     var onlineCount = state.seats.filter(function (s) { return s.online; }).length;
-    // 待复核数：优先用 exam 汇总；无则从当前 seats 累加 suspiciousCount
+    // 待複核數：優先用 exam 彙總；無則從當前 seats 累加 suspiciousCount
     var pending = ex && typeof ex.pendingSuspicious === "number"
       ? ex.pendingSuspicious
       : state.seats.reduce(function (a, s) { return a + (s.suspiciousCount || 0); }, 0);
     setOverview({ seats: seatCount, online: onlineCount, pending: pending });
-    updateExamControls();   // 每次刷新同步按钮态（考试状态可能已变）
+    updateExamControls();   // 每次刷新同步按鈕態（考試狀態可能已變）
   }
   function setOverview(o) {
     $("#statSeats").textContent = o ? o.seats : "--";
@@ -831,11 +831,11 @@
   }
 
   /* ============================================================
-     左：座位热力网格
+     左：座位熱力網格
      ============================================================ */
-  // 配色规则：
-  //   离线 → 灰；在线且 risk<40 且 suspiciousCount=0 → 绿；
-  //   risk 40-69 → 琥珀；risk>=70 或 suspiciousCount>0 → 红（角标显示计数）
+  // 配色規則：
+  //   離線 → 灰；線上且 risk<40 且 suspiciousCount=0 → 綠；
+  //   risk 40-69 → 琥珀；risk>=70 或 suspiciousCount>0 → 紅（角標顯示計數）
   function seatClass(s) {
     if (!s.online) return "seat--offline";
     var risk = s.maxRecentRisk || 0;
@@ -864,7 +864,7 @@
       el.setAttribute("role", "button");
       el.setAttribute("tabindex", "0");
 
-      // tooltip：agentId / machineId / 最后心跳 / 事件数
+      // tooltip：agentId / machineId / 最後心跳 / 事件數
       el.title =
         "座位 " + (s.seatId || "—") +
         "\nAgent: " + dash(s.agentId) +
@@ -879,12 +879,12 @@
         badge = '<span class="seat__badge">' + s.suspiciousCount + "</span>";
       }
       var offlineTag = s.online ? "" : '<span class="seat__offline-tag">离线</span>';
-      // M5：采集健康告警标(异常重启/疑似挂起/遮屏/能力降级),提示监考员该座位采集可能被削弱。
+      // M5：採集健康告警標(異常重新啟動/疑似掛起/遮屏/能力降級),提示監考員該座位採集可能被削弱。
       var healthTag = (s.healthAlerts || 0) > 0
         ? '<span title="采集健康告警" style="position:absolute;top:.3rem;left:.3rem;background:#f9e2af;color:#1e1e2e;'
           + 'font-size:.7rem;font-weight:700;border-radius:.4rem;padding:.05rem .3rem">⚠' + s.healthAlerts + '</span>'
         : "";
-      // both 灰度期:仍走 PSK 的在线座位高亮(未迁移到 OIDC),切 oidc 前据此逐个确认。
+      // both 灰度期:仍走 PSK 的線上座位高亮(未遷移到 OIDC),切 oidc 前據此逐個確認。
       var pskTag = (state.collectAuthMode === "both" && s.authMode === "psk")
         ? '<span title="仍走 PSK（未迁移到 OIDC）" style="position:absolute;bottom:.3rem;left:.3rem;background:#89b4fa;color:#1e1e2e;'
           + 'font-size:.62rem;font-weight:700;border-radius:.35rem;padding:.03rem .25rem">PSK</span>'
@@ -906,7 +906,7 @@
   }
 
   /* ============================================================
-     右：可疑复核队列
+     右：可疑複核佇列
      ============================================================ */
   // 排序：score 降序，同分 ts 降序
   function sortedSuspicious() {
@@ -916,13 +916,13 @@
     });
   }
 
-  // 队列渲染:按当前视图(suspicion/health)分派
+  // 佇列繪製:按當前視圖(suspicion/health)分派
   function renderQueue() {
     if (state.queueMode === "health") renderHealth();
     else renderSuspicionQueue();
   }
 
-  // 可疑复核队列(可裁决)
+  // 可疑複核佇列(可裁決)
   function renderSuspicionQueue() {
     var body = $("#queueBody");
     var empty = $("#queueEmpty");
@@ -957,7 +957,7 @@
     });
   }
 
-  // 采集健康队列(只读告警;点击行跳转该座位详情,可点名抓图)
+  // 採集健康佇列(唯讀告警;點擊行跳轉該座位詳情,可點名抓圖)
   function renderHealth() {
     var body = $("#queueBody");
     var empty = $("#queueEmpty");
@@ -994,7 +994,7 @@
   }
 
   /* ============================================================
-     抽屉：打开/关闭
+     抽屜：打開/關閉
      ============================================================ */
   function openDrawer(mode, kicker) {
     state.drawerMode = mode;
@@ -1010,7 +1010,7 @@
     state.drawerMode = null;
   }
 
-  /* ---------- 考前预检（M4 部署项）---------- */
+  /* ---------- 考前預檢（M4 部署項）---------- */
   function openPreflightDrawer() {
     openDrawer("preflight", "考前预检");
     var body = $("#drawerBody");
@@ -1036,7 +1036,7 @@
     });
   }
 
-  /* ---------- 白名单热更下发 ---------- */
+  /* ---------- 白名單熱更下發 ---------- */
   var LUOGU_HOST_DEFAULT = "luogu.com.cn\nwww.luogu.com.cn";
 
   function linesToArr(txt) {
@@ -1053,7 +1053,7 @@
     apiGet("/api/exams/" + encodeURIComponent(ex.examId) + "/config").then(function (r) {
       if (state.drawerMode !== "whitelist") return;
       var cfg = (r && r.config) || {};
-      state.wlConfig = cfg;   // 保留其它字段(阈值/截图参数)，下发时合并
+      state.wlConfig = cfg;   // 保留其它欄位(閾值/截圖參數)，下發時合併
       var pushed = !!(cfg.whitelistHosts || cfg.whitelistProcs);
       var hosts = Array.isArray(cfg.whitelistHosts) ? cfg.whitelistHosts.join("\n") : "";
       var procs = Array.isArray(cfg.whitelistProcs) ? cfg.whitelistProcs.join("\n") : "";
@@ -1073,7 +1073,7 @@
             '<span id="wlHint" class="wl__hint" role="status" aria-live="polite"></span>' +
           '</div>' +
         '</div>';
-      // 值经 .value 注入(非 innerHTML)，不受 payload 影响，无 XSS 面。
+      // 值經 .value 注入(非 innerHTML)，不受 payload 影響，無 XSS 面。
       $("#wlHosts").value = hosts || (pushed ? "" : LUOGU_HOST_DEFAULT);
       $("#wlProcs").value = procs;
       $("#wlPushBtn").addEventListener("click", function () { pushWhitelist(ex); });
@@ -1090,7 +1090,7 @@
     var setHint = function (msg, bad) { if (hint) { hint.textContent = msg; hint.style.color = bad ? "#f38ba8" : "#9aa0aa"; } };
     if (!hosts.length) { setHint("判题站白名单不能为空（否则学员访问洛谷也会被误判为高危）", true); return; }
 
-    // 合并现有配置(保留阈值/截图参数等)，仅覆盖白名单两项；进程留空则不下发该项(不覆盖 Agent 默认)。
+    // 合併現有設定(保留閾值/截圖參數等)，僅覆蓋白名單兩項；處理程序留空則不下發該項(不覆蓋 Agent 預設)。
     var cfg = {}, cur = state.wlConfig || {};
     Object.keys(cur).forEach(function (k) { cfg[k] = cur[k]; });
     cfg.whitelistHosts = hosts;
@@ -1110,13 +1110,13 @@
     });
   }
 
-  /* ---------- 可疑详情 ---------- */
+  /* ---------- 可疑詳情 ---------- */
   function openSuspiciousDrawer(item) {
     openDrawer("suspicious", "可疑详情");
     var m = kindMeta(item.kind);
     var body = $("#drawerBody");
 
-    // refs 解析：event:* 直接展示文本；image:* 渲染证据图（可点击放大）
+    // refs 解析：event:* 直接展示文字；image:* 繪製證據圖（可點擊放大）
     var refsHtml = "";
     var refs = Array.isArray(item.refs) ? item.refs : [];
     if (refs.length) {
@@ -1132,7 +1132,7 @@
             '" alt="证据图 ' + esc(id) + '" loading="lazy" />' +
             "</div>";
         } else if (kind === "event") {
-          // 直接展示 ref 文本；若已加载对应事件则附摘要（按契约无需单独请求）
+          // 直接展示 ref 文字；若已載入對應事件則附摘要（按契約無需單獨請求）
           refsHtml += '<div class="ref-line"><b>event</b> ' + esc(id) + "</div>";
         } else {
           refsHtml += '<div class="ref-line">' + esc(ref) + "</div>";
@@ -1160,7 +1160,7 @@
         "<dt>备注</dt><dd>" + esc(dash(item.note)) + "</dd>" +
       "</dl>" +
       '<div class="section-title">关联引用 (refs)</div>' + refsHtml +
-      // 决策区
+      // 決策區
       '<div class="decide-actions">' +
         '<button class="btn btn--primary" id="btnConfirm">确认违规</button>' +
         '<button class="btn btn--ok" id="btnDismiss">驳回</button>' +
@@ -1177,7 +1177,7 @@
         "</div>" +
       "</div>";
 
-    // 证据图点击放大 + 加载失败占位(用 addEventListener 而非内联 onerror:CSP script-src 'self' 会屏蔽内联处理器)
+    // 證據圖點擊放大 + 載入失敗佔位(用 addEventListener 而非內聯 onerror:CSP script-src 'self' 會屏蔽內聯處理器)
     body.querySelectorAll(".evidence").forEach(function (ev) {
       ev.addEventListener("click", function () {
         var id = ev.getAttribute("data-img");
@@ -1189,7 +1189,7 @@
       });
     });
 
-    // 决策表单交互：确认/驳回 → 展开表单 → 提交 POST
+    // 決策表單交互：確認/駁回 → 展開表單 → 提交 POST
     var pendingDecision = null; // "confirmed" | "dismissed"
     var form = body.querySelector("#decideForm");
     function openForm(decision) {
@@ -1217,25 +1217,25 @@
       .then(function (res) {
         if (!res || !res.ok) throw new Error("裁决未确认");
         closeDrawer();
-        loadSuspicious();     // 刷新队列
-        refreshCurrent();     // 顺带刷新座位/概览
+        loadSuspicious();     // 刷新佇列
+        refreshCurrent();     // 順帶刷新座位/概覽
         showToast("已" + (status === "confirmed" ? "确认违规" : "驳回") + "：" + id);
       })
       .catch(function (err) {
-        if (err && err.isAuth) return;   // 401 已弹登录门（抽屉已被清屏关闭）
+        if (err && err.isAuth) return;   // 401 已彈登入門（抽屜已被清屏關閉）
         showToast("裁决提交失败：" + err.message);
       });
   }
 
-  /* ---------- 座位详情 ---------- */
+  /* ---------- 座位詳情 ---------- */
   function openSeatDrawer(s) {
     openDrawer("seat", "座位详情 · " + (s.seatId || ""));
     var body = $("#drawerBody");
 
-    // 座位的登录身份（未登录/PSK 模式 s.identity 为 null，不渲染这些行）。
-    // ★ 只剩三项（贝塔通 P81）：sub / 真实姓名 / 账号。道号、境界、战力是问天录的业务字段，
-    //   身份中心不分发；「监考员/参考学员」那一行更是随 P83 整个消失 ——
-    //   看板上出现的**每个座位都是考生**，监考员根本不从这条链路进来。
+    // 座位的登入身分（未登入/PSK 模式 s.identity 為 null，不繪製這些行）。
+    // ★ 只剩三項（貝塔通 P81）：sub / 真實姓名 / 帳號。道號、境界、戰力是問天錄的業務欄位，
+    //   身分中心不散布；「監考員/參考學員」那一行更是隨 P83 整個消失 ——
+    //   看板上出現的**每個座位都是考生**，監考員根本不從這條連線路徑進來。
     var id = s.identity;
     var idRows = id ? (
         "<dt>姓名</dt><dd>" + esc(dash(id.name)) + "</dd>" +
@@ -1276,26 +1276,26 @@
       '<div class="loading" id="tlLoading">加载事件中…</div>' +
       '<div class="timeline" id="timeline"></div>';
 
-    // 点名抓图:仅在线且有 agentId 的座位显示按钮(后端 D2:POST /api/agents/{agentId}/capture)
+    // 點名抓圖:僅線上且有 agentId 的座位顯示按鈕(後端 D2:POST /api/agents/{agentId}/capture)
     var capBtn = $("#captureBtn");
     if (capBtn) capBtn.addEventListener("click", function () { captureNow(s.agentId); });
 
-    // 拉取该座位事件（limit=200，按 id 倒序，最新在前）
+    // 拉取該座位事件（limit=200，按 id 倒序，最新在前）
     var examId = state.currentExamId;
     apiGet("/api/exams/" + encodeURIComponent(examId) +
       "/events?seatId=" + encodeURIComponent(s.seatId) + "&limit=200")
       .then(function (events) {
-        if (state.drawerMode !== "seat") return; // 抽屉已关或已切换
+        if (state.drawerMode !== "seat") return; // 抽屜已關或已切換
         renderTimeline(Array.isArray(events) ? events : []);
       })
       .catch(function (err) {
-        if (err && err.isAuth) return;   // 401 已弹登录门（抽屉已被清屏关闭）
+        if (err && err.isAuth) return;   // 401 已彈登入門（抽屜已被清屏關閉）
         var l = $("#tlLoading");
         if (l) l.textContent = "事件加载失败：" + err.message;
       });
   }
 
-  // 监考员点名抓图:向后端推 capture_now,toast 推送结果(后端 D2 已实现对在线 Agent 抓一张)
+  // 監考員點名抓圖:向後端推 capture_now,toast 推送結果(後端 D2 已實作對線上 Agent 抓一張)
   function captureNow(agentId) {
     apiPost("/api/agents/" + encodeURIComponent(agentId) + "/capture", { reason: "proctor_call" })
       .then(function (r) {
@@ -1306,12 +1306,12 @@
         }
       })
       .catch(function (err) {
-        if (err && err.isAuth) return;   // 401 已弹登录门
+        if (err && err.isAuth) return;   // 401 已彈登入門
         showToast("点名抓图失败：" + err.message);
       });
   }
 
-  // 事件 risk → 等级类
+  // 事件 risk → 等級類
   function riskClass(risk) {
     var r = risk || 0;
     if (r >= 70) return "risk--high";
@@ -1319,7 +1319,7 @@
     return "risk--low";
   }
 
-  // 按 type 生成关键 payload 摘要
+  // 按 type 生成關鍵 payload 摘要
   function payloadSummary(ev) {
     var p = ev.payload || {};
     switch (ev.type) {
@@ -1376,7 +1376,7 @@
       var item = document.createElement("div");
       item.className = "tl-item";
 
-      // 证据缩略图
+      // 證據縮略圖
       var thumb = "";
       if (ev.evidenceImageId) {
         thumb =
@@ -1384,11 +1384,11 @@
           '" alt="证据缩略图" loading="lazy" data-img="' + esc(ev.evidenceImageId) + '" />';
       }
 
-      // 有效风险 = max(Agent 自报, 服务器复判);着色用有效风险,避免"谎报 risk=0"在明细里显示成低危。
+      // 有效風險 = max(Agent 自報, 伺服器復判);著色用有效風險,避免"謊報 risk=0"在明細裡顯示成低危。
       var evAgent = (typeof ev.risk === "number") ? ev.risk : 0;
       var evServer = (typeof ev.serverRisk === "number") ? ev.serverRisk : 0;
       var evEff = Math.max(evAgent, evServer);
-      // 服务器复判高于 Agent 自报 → 显式标注 "自报→服务器"(篡改逃逸取证提示)
+      // 伺服器復判高於 Agent 自報 → 顯式標註 "自報→伺服器"(篡改逃逸取證提示)
       var riskText = evServer > evAgent ? ("risk " + evAgent + "→" + evServer) : ("risk " + dash(ev.risk));
 
       item.innerHTML =
@@ -1408,7 +1408,7 @@
           var tid = thumbEl.getAttribute("data-img");
           openLightbox(imageUrl(tid), tid);
         });
-        // 加载失败隐藏(addEventListener 而非内联 onerror:CSP 会屏蔽内联处理器)
+        // 載入失敗隱藏(addEventListener 而非內聯 onerror:CSP 會屏蔽內聯處理器)
         thumbEl.addEventListener("error", function () { thumbEl.style.display = "none"; });
       }
       tl.appendChild(item);
@@ -1416,19 +1416,19 @@
   }
 
   /* ============================================================
-     灯箱
+     燈箱
      ============================================================ */
   function openLightbox(src, imageId) {
     $("#lightboxImg").src = src;
     $("#lightbox").hidden = false;
-    // M3 按图搜图:有 imageId 且嵌入器已配才显示按钮;每次打开清空上次结果。
+    // M3 按圖搜圖:有 imageId 且嵌入器已配才顯示按鈕;每次打開清空上次結果。
     state.lightboxImageId = imageId || null;
     var btn = $("#searchSimilarBtn"), res = $("#similarResults");
     if (res) { res.hidden = true; res.innerHTML = ""; }
     if (btn) {
       var usable = !!(state.imageSearchEnabled && state.lightboxImageId);
-      btn.hidden = !state.lightboxImageId;             // 有图才显示
-      btn.disabled = !usable;                          // 未启用嵌入器 → 禁用态引导
+      btn.hidden = !state.lightboxImageId;             // 有圖才顯示
+      btn.disabled = !usable;                          // 未啟用嵌入器 → 禁用態引導
       btn.title = usable ? "以当前图为查询,捞本场相似帧"
                          : "按图搜图不可用:未部署 CLIP 模型(model.onnx)";
     }
@@ -1440,7 +1440,7 @@
     var res = $("#similarResults"); if (res) { res.hidden = true; res.innerHTML = ""; }
   }
 
-  // 按图搜图:以当前灯箱图为查询,捞本场相似帧,渲染缩略图条(点击切换查看)。
+  // 按圖搜圖:以當前燈箱圖為查詢,撈本場相似影格,繪製縮略圖條(點擊切換查看)。
   function searchSimilar() {
     if (!state.imageSearchEnabled) { showToast("按图搜图不可用：未部署 CLIP 模型（model.onnx）"); return; }
     var imageId = state.lightboxImageId, examId = state.currentExamId;
@@ -1459,7 +1459,7 @@
           'style="height:76px;border-radius:.3rem;cursor:pointer" alt="相似帧" loading="lazy" />' +
           '<div style="color:#a6e3a1;font-size:.7rem">' + (r.score != null ? r.score.toFixed(3) : "") + '</div></div>';
       }).join("");
-      // 点击相似缩略图 → 切到该图继续看/再搜
+      // 點擊相似縮略圖 → 切到該圖繼續看/再搜
       res.querySelectorAll("img[data-img]").forEach(function (im) {
         im.addEventListener("click", function () {
           var id = im.getAttribute("data-img");
@@ -1473,8 +1473,8 @@
   }
 
   /* ============================================================
-     ★ 内置 Mock 数据（结构与契约逐字段一致）
-     覆盖：2 场考试、多种状态座位、若干可疑、若干事件
+     ★ 內置 Mock 資料（結構與契約逐欄位一致）
+     覆蓋：2 場考試、多種狀態座位、若干可疑、若干事件
      ============================================================ */
   var NOW = Date.now() / 1000;
 
@@ -1534,7 +1534,7 @@
       ]
     },
 
-    // 按 examId 索引的可疑（含各状态，用于过滤演示）
+    // 按 examId 索引的可疑（含各狀態，用於過濾演示）
     suspicious: {
       exam_2026_algo_final: [
         { id: "susp_1001", seatId: "A-03", ts: NOW - 10, kind: "web_ai", score: 94,
@@ -1558,7 +1558,7 @@
       exam_2026_ds_makeup: []
     },
 
-    // 按 examId 索引的采集健康告警(source='health',只读;M5 三件套)
+    // 按 examId 索引的採集健康告警(source='health',唯讀;M5 三件套)
     health: {
       exam_2026_algo_final: [
         { id: "hlth_1", seatId: "A-03", ts: NOW - 35, kind: "watchdog_restart", score: 0,
@@ -1616,7 +1616,7 @@
     }
   };
 
-  // 内联 1x1 WebP 占位图（mock 下证据图不发真实请求，避免 404）
+  // 內聯 1x1 WebP 佔點陣圖（mock 下證據圖不發真實請求，避免 404）
   var MOCK_IMG_DATAURL =
     "data:image/svg+xml;utf8," +
     encodeURIComponent(
@@ -1627,11 +1627,11 @@
       'text-anchor="middle">MOCK 证据图</text></svg>'
     );
 
-  // Mock 路由：模拟 GET
+  // Mock 路由：模擬 GET
   function mockGet(path) {
     return new Promise(function (resolve) {
       setTimeout(function () {
-        // /api/images/{id}/meta —— 本前端不主动请求，兜底返回
+        // /api/images/{id}/meta —— 本前端不主動請求，備援回傳
         var mMeta = path.match(/^\/api\/images\/([^/]+)\/meta$/);
         if (mMeta) {
           resolve({ imageId: decodeURIComponent(mMeta[1]), seatId: "A-03", ts: NOW - 8,
@@ -1668,15 +1668,15 @@
           return;
         }
         resolve([]);
-      }, 120); // 模拟网络延迟
+      }, 120); // 模擬網路延遲
     });
   }
 
-  // Mock 路由：模拟 POST decide
+  // Mock 路由：模擬 POST decide
   function mockPost(path, body) {
     return new Promise(function (resolve) {
       setTimeout(function () {
-        // 点名抓图(D2):mock 下演示视为在线、可推送
+        // 點名抓圖(D2):mock 下演示視為線上、可推送
         var mCap = path.match(/^\/api\/agents\/([^/]+)\/capture$/);
         if (mCap) {
           var aid = decodeURIComponent(mCap[1]);
@@ -1686,7 +1686,7 @@
         var m = path.match(/^\/api\/suspicious\/([^/]+)\/decide$/);
         if (!m) { resolve({ ok: false }); return; }
         var id = decodeURIComponent(m[1]);
-        // 在所有考试里找到该条目并更新
+        // 在所有考試裡找到該條目並更新
         Object.keys(MOCK.suspicious).forEach(function (ex) {
           MOCK.suspicious[ex].forEach(function (it) {
             if (it.id === id) {
@@ -1697,7 +1697,7 @@
             }
           });
         });
-        // 同步 pendingSuspicious 计数
+        // 同步 pendingSuspicious 計數
         MOCK.exams.forEach(function (ex) {
           var list = MOCK.suspicious[ex.examId] || [];
           ex.pendingSuspicious = list.filter(function (x) { return x.status === "pending"; }).length;
@@ -1711,7 +1711,7 @@
     });
   }
 
-  // Mock 模式下把证据图 <img src="/api/images/*"> 重定向到占位图
+  // Mock 模式下把證據圖 <img src="/api/images/*"> 重定向到佔點陣圖
   if (USE_MOCK) {
     document.addEventListener("error", function (e) {
       var t = e.target;
@@ -1720,7 +1720,7 @@
         t.src = MOCK_IMG_DATAURL;
       }
     }, true);
-    // 更直接：拦截 img.src 赋值不可行，这里用 MutationObserver 兜底替换
+    // 更直接：攔截 img.src 賦值不可行，這裡用 MutationObserver 備援替換
     var mo = new MutationObserver(function (muts) {
       muts.forEach(function (mu) {
         mu.addedNodes && mu.addedNodes.forEach(function (n) {
@@ -1738,7 +1738,7 @@
     mo.observe(document.body, { childList: true, subtree: true });
   }
 
-  /* ---------- 启动 ---------- */
+  /* ---------- 啟動 ---------- */
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {

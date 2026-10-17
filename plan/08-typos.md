@@ -1,48 +1,48 @@
-# 维度八 · 错漏审查（Typos / Naming / Stale Comments）
+# 維度八 · 錯漏審查（Typos / Naming / Stale Comments）
 
-> 审查口径：拼写、命名规范、过时/误导性注释、缺注释导致的误读。本维度多为 P3 整洁度项，单独列出便于「顺手清」。
+> 審查口徑：拼寫、命名規範、過時/誤導性註解、缺註解導致的誤讀。本維度多為 P3 整潔度項，單獨列出便於「順手清」。
 
 ---
 
-## T1 〔P3〕`schema.sql:122` 过时注释（与实现不符）
+## T1 〔P3〕`schema.sql:122` 過時註解（與實作不符）
 
-**状态（2026-07-15）**：✅ 已实施（见 07-F3）。注释改为外部判题后端 KSK 旁路写入。
+**狀態（2026-07-15）**：✅ 已實施（見 07-F3）。註解改為外部判題後端 KSK 旁路寫入。
 - 原文：`-- 击键节奏(判题网页前端埋点上报)`。
-- 问题：前端埋点已撤，真实路径是外部判题后端 KSK 旁路（见 07-F3）。属字面错漏 + 误导。
-- 修复：改为 `-- 击键节奏(外部判题后端经 KSK 旁路 POST /ingest/keystroke 写入；前端埋点已撤)`。
+- 問題：前端埋點已撤，真實路徑是外部判題後端 KSK 旁路（見 07-F3）。屬字面錯漏 + 誤導。
+- 修復：改為 `-- 击键节奏(外部判题后端经 KSK 旁路 POST /ingest/keystroke 写入；前端埋点已撤)`。
 
-## T2 〔P3〕`architecture-v0.2.md` 残留旧术语 / 过时存储表述
+## T2 〔P3〕`architecture-v0.2.md` 殘留舊術語 / 過時儲存表述
 
-**状态（2026-07-15）**：✅ 已实施（见 07-F1）。D9 / §7 / §8 旧 sqlite-vec 表述统一修正。
-- D9（`:23`）与 §7 数据流（`:37`）仍写 sqlite-vec（见 07-F1）。属文档错漏，需同步修正。
+**狀態（2026-07-15）**：✅ 已實施（見 07-F1）。D9 / §7 / §8 舊 sqlite-vec 表述統一修正。
+- D9（`:23`）與 §7 資料流（`:37`）仍寫 sqlite-vec（見 07-F1）。屬文件錯漏，需同步修正。
 
-## T3 〔P3〕`ImageSearchStore.TopN` 过滤 `score > -1` 意图不清
+## T3 〔P3〕`ImageSearchStore.TopN` 過濾 `score > -1` 意圖不清
 
-**状态（2026-07-15）**：✅ 已实施（见 04-B1）。改为可配 `cosineFloor`（`>= cfg.EmbedCosineFloor`）过滤近正交图，语义清晰。
-- `ImageSearchStore.cs:51` 的 `.Where(x => x.score > -1)` 本意疑似「丢弃完全反向匹配」，但实际近正交图（≈0）仍通过，语义与注释/命名不符，易让维护者误以为「已过滤无关图」。
-- 修复：改名/加注释明确阈值语义，或改为可配 `cosineFloor`（见 04-B1）。
+**狀態（2026-07-15）**：✅ 已實施（見 04-B1）。改為可配 `cosineFloor`（`>= cfg.EmbedCosineFloor`）過濾近正交圖，語義清晰。
+- `ImageSearchStore.cs:51` 的 `.Where(x => x.score > -1)` 本意疑似「丟棄完全反向匹配」，但實際近正交圖（≈0）仍通過，語義與註解/命名不符，易讓維護者誤以為「已過濾無關圖」。
+- 修復：改名/加註解明確閾值語義，或改為可配 `cosineFloor`（見 04-B1）。
 
-## T4 〔P3〕`SignalType` 枚举 → kind 命名风格混用，缺映射总表
+## T4 〔P3〕`SignalType` 枚舉 → kind 命名風格混用，缺映射總表
 
-**状态（2026-07-15）**：✅ 已实施。`Suspicion.cs` 顶部新增「SignalType → kind → 标签」总表注释；`SuspicionTests.cs` 断言 `KindFor` 所有分支（含 `SuspectedSuspend→suspected_suspend`），把「新增 kind 必补前端标签」变成可断言契约，防回归。
-- `ScreenshotObscured`（PascalCase 枚举）→ `screen_obscured`（snake_case kind）；`WatchdogRestart` → `watchdog_restart`。契约统一 snake_case 是对的，但**缺乏一张「SignalType → kind → 前端标签」总表**，导致后人新增 kind 时（如第 4 个健康信号）极易漏补 `KIND_META` 标签（这正是 01-U2 的根因）。
-- 修复：在 `docs/` 或 `Suspicion.cs` 顶部维护一张总表注释；并加测试断言「`KIND_META` 覆盖 `Suspicion.KindFor` 所有可能返回值」（联动 04-B3）。
+**狀態（2026-07-15）**：✅ 已實施。`Suspicion.cs` 頂部新增「SignalType → kind → 標籤」總表註解；`SuspicionTests.cs` 斷言 `KindFor` 所有分支（含 `SuspectedSuspend→suspected_suspend`），把「新增 kind 必補前端標籤」變成可斷言契約，防迴歸。
+- `ScreenshotObscured`（PascalCase 枚舉）→ `screen_obscured`（snake_case kind）；`WatchdogRestart` → `watchdog_restart`。契約統一 snake_case 是對的，但**缺乏一張「SignalType → kind → 前端標籤」總表**，導致後人新增 kind 時（如第 4 個健康信號）極易漏補 `KIND_META` 標籤（這正是 01-U2 的根因）。
+- 修復：在 `docs/` 或 `Suspicion.cs` 頂部維護一張總表註解；並加測試斷言「`KIND_META` 覆蓋 `Suspicion.KindFor` 所有可能回傳值」（聯動 04-B3）。
 
-## T5 〔P3〕`vec_images` 虚表命名暗示「已启用」实则预留
+## T5 〔P3〕`vec_images` 虛表命名暗示「已啟用」實則預留
 
-**状态（2026-07-15）**：✅ 已实施（见 02-A1 / 07-F2）。`vec_images` 虚表已彻底删除，不存在「预留」误导。
-- `schema.sql:106` `vec_images` 命名与「未启用」状态不符（见 02-A1 / 07-F2）。若保留，建议注释明确「预留·永不启用」，避免读档人误判。
+**狀態（2026-07-15）**：✅ 已實施（見 02-A1 / 07-F2）。`vec_images` 虛表已徹底刪除，不存在「預留」誤導。
+- `schema.sql:106` `vec_images` 命名與「未啟用」狀態不符（見 02-A1 / 07-F2）。若保留，建議註解明確「預留·永不啟用」，避免讀檔人誤判。
 
-## T6 〔P3〕建议补充的缺注释点
+## T6 〔P3〕建議補充的缺註解點
 
-**状态（2026-07-15）**：✅ 已实施。`UplinkClient.OnCaptureNow` 注释点明「未注入 → 看板点名抓图返回 pushed:true 但 Agent 不抓图（静默失效），Program 注入后须保证非空」；`ImageEmbedService.Enabled` 上方注释说明「嵌入器未注册（off/mock 未配）时为 false → 整服务 no-op；看板据 `/api/authmode` 的 imageSearchEnabled 决定按钮显隐」。
-- `UplinkClient.OnCaptureNow`（`agentcore/Transport/UplinkClient.cs:33`）可空，建议在字段上方注释「未注入则 capture_now 静默失效（见 02-A3）」。
-- `ImageEmbedService.Enabled`（`ImageEmbedService.cs:18`）建议注释明确「嵌入器未注册（off/mock 未配）时为 false → 整服务 no-op」，便于读档人理解 `imageSearchEnabled` 来源链。
+**狀態（2026-07-15）**：✅ 已實施。`UplinkClient.OnCaptureNow` 註解點明「未注入 → 看板點名抓圖回傳 pushed:true 但 Agent 不抓圖（靜默失效），Program 注入後須保證非空」；`ImageEmbedService.Enabled` 上方註解說明「嵌入器未註冊（off/mock 未配）時為 false → 整服務 no-op；看板據 `/api/authmode` 的 imageSearchEnabled 決定按鈕顯隱」。
+- `UplinkClient.OnCaptureNow`（`agentcore/Transport/UplinkClient.cs:33`）可空，建議在欄位上方註解「未注入則 capture_now 靜默失效（見 02-A3）」。
+- `ImageEmbedService.Enabled`（`ImageEmbedService.cs:18`）建議註解明確「嵌入器未註冊（off/mock 未配）時為 false → 整服務 no-op」，便於讀檔人理解 `imageSearchEnabled` 來源鏈。
 
 ---
 
-## 优先级建议
-- T1 / T2 随 07-F3 / 07-F1 一并改（同源）。
-- T3 随 04-B1 改。
-- T4 是根因性整洁项，建议与 04-B3 测试一起做，长期防回归。
-- T5 / T6 顺手补。
+## 優先級建議
+- T1 / T2 隨 07-F3 / 07-F1 一併改（同源）。
+- T3 隨 04-B1 改。
+- T4 是根因性整潔項，建議與 04-B3 測試一起做，長期防迴歸。
+- T5 / T6 順手補。

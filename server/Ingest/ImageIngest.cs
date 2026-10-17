@@ -7,9 +7,9 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Ingest;
 
-/// 图片通道(HTTP POST /ingest/images)。见 api-contract §2.1。
-/// 校验 X-Horus-Sig;pHash 去重;原图存盘;DB 存指针;新图入队异步视觉分析(L2)。
-/// M4:验签密钥可为 PSK 或 OIDC 会话 K_sess(X-Horus-Session);OIDC 路径强制头部身份==会话身份。
+/// 圖片通道(HTTP POST /ingest/images)。見 api-contract §2.1。
+/// 檢核 X-Horus-Sig;pHash 去重;原圖存盤;DB 存指針;新圖入隊非同步視覺分析(L2)。
+/// M4:驗籤金鑰可為 PSK 或 OIDC 工作階段 K_sess(X-Horus-Session);OIDC 路徑強制頭部身分==工作階段身分。
 public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, VisionAnalysisService vision, SessionStore sessions, ILogger<ImageIngest> log)
 {
     public async Task HandleAsync(HttpContext ctx)
@@ -23,7 +23,7 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
         string phash = req.Headers["X-Horus-Phash"].ToString();
         string tsStr = req.Headers["X-Horus-Ts"].ToString();
         string sig = req.Headers["X-Horus-Sig"].ToString();
-        string clientId = req.Headers["X-Horus-Image-Id"].ToString();   // 客户端预生成 id(纳入签名)
+        string clientId = req.Headers["X-Horus-Image-Id"].ToString();   // 用戶端預生成 id(納入簽名)
 
         if (string.IsNullOrEmpty(examId) || string.IsNullOrEmpty(seatId) || string.IsNullOrEmpty(agentId))
         {
@@ -31,15 +31,15 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
             await ctx.Response.WriteAsJsonAsync(new { error = "missing_headers" });
             return;
         }
-        if (clientId.Length > 0 && !IsValidImageId(clientId))   // 畸形 client id 先拒(验签前),收敛 canonical 输入
+        if (clientId.Length > 0 && !IsValidImageId(clientId))   // 畸形 client id 先拒(驗籤前),收斂 canonical 輸入
         {
             ctx.Response.StatusCode = 400;
             await ctx.Response.WriteAsJsonAsync(new { error = "bad_image_id" });
             return;
         }
 
-        // 显式上限(独立于 Kestrel 全局 2MB):未鉴权者触发的缓冲放大也受约束;超限在分配 MemoryStream 前按
-        // Content-Length 拒(=BUG#1 修复 + 与 KeystrokeIngest 一致 · 质量#5 共用 helper)。
+        // 顯式上限(獨立於 Kestrel 全域 2MB):未鑑權者觸發的緩衝放大也受約束;超限在分配 MemoryStream 前按
+        // Content-Length 拒(=BUG#1 修復 + 與 KeystrokeIngest 一致 · 品質#5 共用 helper)。
         const int MaxImageBodyBytes = 2 * 1024 * 1024;
         var (body, statusCode, err) = await IngestBody.ReadWithLimitAsync(req, MaxImageBodyBytes, allowEmpty: false);
         if (body is null)
@@ -52,7 +52,7 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
         long.TryParse(seqStr, out long seq);
         double.TryParse(tsStr, System.Globalization.CultureInfo.InvariantCulture, out double ts);
 
-        // M4:解析鉴权(PSK ↔ OIDC 会话)。OIDC 路径下头部身份须 == 会话身份(否则拒·闭合 A1)。
+        // M4:解析鑑權(PSK ↔ OIDC 工作階段)。OIDC 路徑下頭部身分須 == 工作階段身分(否則拒·閉合 A1)。
         double authNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         IngestAuth.Resolved auth = IngestAuth.Resolve(cfg, sessions, req.Headers["X-Horus-Session"].ToString(), examId, seatId, agentId, authNow);
         if (!auth.Ok)
@@ -62,7 +62,7 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
             return;
         }
 
-        // 验签(见 §2.1):HMAC(key, canonicalHeaders + "\n" + sha256(body));key = PSK 或会话 K_sess;canonical 含 imageId 防篡改
+        // 驗籤(見 §2.1):HMAC(key, canonicalHeaders + "\n" + sha256(body));key = PSK 或工作階段 K_sess;canonical 含 imageId 防篡改
         if (auth.Key is not null)
         {
             string canon = Auth.ImageCanonicalHeaders(examId, seatId, agentId, seq, trigger, phash, tsStr, clientId);
@@ -76,14 +76,14 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
             }
         }
 
-        // 归档中/已归档考试:短路不落库(避免归档窗口 late-ingest 被无锚点删 + 归档后重建孤儿图行)。
+        // 歸檔中/已歸檔考試:短路不寫入資料庫(避免歸檔視窗 late-ingest 被無錨點刪 + 歸檔後重建孤兒圖行)。
         if (db.Read(conn => conn.IsExamSealed(examId)))
         {
             await ctx.Response.WriteAsJsonAsync(new { stored = false, error = "exam_sealed" });
             return;
         }
 
-        // 客户端预生成 imageId(触发型抓图):幂等沿用,以保证"事件 ↔ 证据图"关联跨断线不断。
+        // 用戶端預生成 imageId(觸發型抓圖):冪等沿用,以保證"事件 ↔ 證據圖"關聯跨斷線不斷。
         bool hasClientId = IsValidImageId(clientId);
 
         string imageId;
@@ -94,16 +94,16 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
                 using SqliteCommand c = conn.Cmd("SELECT 1 FROM images WHERE image_id=@id LIMIT 1", ("@id", clientId));
                 return c.ExecuteScalar() is not null;
             });
-            if (exists)   // 重传(续传)→ 幂等,不另存
+            if (exists)   // 重傳(續傳)→ 冪等,不另存
             {
                 await ctx.Response.WriteAsJsonAsync(new { stored = false, imageId = clientId, duplicate = true, ocrQueued = false });
                 return;
             }
-            imageId = clientId;   // 沿用客户端 id;**跳过 pHash 去重**以尊重事件关联
+            imageId = clientId;   // 沿用用戶端 id;**跳過 pHash 去重**以尊重事件關聯
         }
         else
         {
-            // 无客户端 id(如 baseline):pHash 去重 + 服务器分配
+            // 無用戶端 id(如 baseline):pHash 去重 + 伺服器分配
             if (cfg.DedupImagesByPhash && !string.IsNullOrEmpty(phash))
             {
                 string? dupId = db.Locked(conn =>
@@ -125,17 +125,17 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
         string relPath = await storage.SaveWebpAsync(examId, seatId, imageId, body);
         double recvTs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
 
-        // §5 视觉分析判据:触发型必送;随机基线仅当开了基线分析**且命中抽样**(1/N·确定性按 imageId)才送。
+        // §5 視覺分析判據:觸發型必送;隨機基線僅當開了基線分析**且命中抽樣**(1/N·確定性按 imageId)才送。
         bool isEvent = trigger.StartsWith("event:", StringComparison.Ordinal);
         bool analyze = vision.Enabled && (isEvent || (cfg.VisionAnalyzeBaseline && BaselineSampleHit(imageId, cfg.VisionBaselineSampleRate)));
-        // 开了基线分析但本张未抽中 → 落库即标 analysis_state=1 终结,补偿重扫不再拾回(否则每轮重扫都会翻检未抽中基线)。
+        // 開了基線分析但本張未抽中 → 寫入資料庫即標 analysis_state=1 終結,補償重掃不再拾回(否則每輪重掃都會翻檢未抽中基線)。
         bool baselineSampledOut = vision.Enabled && !isEvent && cfg.VisionAnalyzeBaseline && !analyze;
 
         bool sealedInLock = db.Locked(conn =>
         {
-            // late-ingest 隔离:上方 :70 的 sealed 预检在**只读连接**(快速拒绝),此处在**写锁事务内**权威复检——
-            // 预检通过后、拿写锁前归档作业可能已翻转 archiving 并清理该考试,若此处不查会把孤儿图行插进已归档考试
-            // (既不再归档也不清理)。与 EventIngest/KeystrokeIngest 的锁内检查对齐。
+            // late-ingest 隔離:上方 :70 的 sealed 預檢在**唯讀連接**(快速拒絕),此處在**寫鎖交易內**權威複檢——
+            // 預檢通過後、拿寫鎖前歸檔作業可能已翻轉 archiving 並清理該考試,若此處不查會把孤兒圖行插進已歸檔考試
+            // (既不再歸檔也不清理)。與 EventIngest/KeystrokeIngest 的鎖內檢查對齊。
             if (conn.IsExamSealed(examId)) return true;
 
             using (SqliteCommand c = conn.Cmd(
@@ -147,7 +147,7 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
                 ("@fp", relPath), ("@bytes", (long)body.Length), ("@astate", baselineSampledOut ? 1 : 0)))
                 c.ExecuteNonQuery();
 
-            // 反向补标:仅触发型抓图(有客户端 id)才可能被事件引用;baseline 图跳过,免每张全表查 events。
+            // 反向補標:僅觸發型抓圖(有用戶端 id)才可能被事件引用;baseline 圖跳過,免每張全表查 events。
             if (hasClientId)
             {
                 using SqliteCommand mk = conn.Cmd(
@@ -158,21 +158,21 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
             return false;
         });
 
-        if (sealedInLock)   // 写锁内发现考试已封存:回滚已落盘的孤儿 webp(DB 行未插),按 exam_sealed 拒绝
+        if (sealedInLock)   // 寫鎖內發現考試已封存:回復已寫入磁碟的孤兒 webp(DB 行未插),按 exam_sealed 拒絕
         {
             storage.DeleteLive(relPath);
             await ctx.Response.WriteAsJsonAsync(new { stored = false, error = "exam_sealed" });
             return;
         }
 
-        // 送异步视觉分析(§5 最小化:触发型必送;随机基线按抽样)。视觉关时 no-op、不占本请求延迟。
+        // 送非同步視覺分析(§5 最小化:觸發型必送;隨機基線按抽樣)。視覺關時 no-op、不佔本請求延遲。
         if (analyze) vision.Enqueue(imageId);
 
         await ctx.Response.WriteAsJsonAsync(new { stored = true, imageId, duplicate = false, ocrQueued = analyze });
     }
 
-    /// 基线抽样命中判据:1/N 确定性抽样(N≤1 恒真=全分析)。用**稳定 FNV-1a 哈希**(非 string.GetHashCode·
-    /// 后者进程内随机化,重启后同一图抽样结果会翻转 → 补偿重扫与入队判据不一致)保证跨重启一致。
+    /// 基線抽樣命中判據:1/N 確定性抽樣(N≤1 恆真=全分析)。用**穩定 FNV-1a 雜湊**(非 string.GetHashCode·
+    /// 後者處理程序內隨機化,重新啟動後同一圖抽樣結果會翻轉 → 補償重掃與入隊判據不一致)保證跨重新啟動一致。
     internal static bool BaselineSampleHit(string imageId, int sampleRate)
     {
         if (sampleRate <= 1) return true;
@@ -181,7 +181,7 @@ public sealed class ImageIngest(Db db, Storage storage, ServerConfig cfg, Vision
         return h % (uint)sampleRate == 0;
     }
 
-    /// 客户端 id 格式校验(防路径注入):img_ + 至多 64 位字母数字。
+    /// 用戶端 id 格式檢核(防路徑注入):img_ + 至多 64 位字母數字。
     private static bool IsValidImageId(string? id)
     {
         if (id is null || id.Length is < 5 or > 68 || !id.StartsWith("img_", StringComparison.Ordinal)) return false;

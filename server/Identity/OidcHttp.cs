@@ -2,14 +2,14 @@ using Microsoft.Extensions.Logging;
 
 namespace Horus.Server.Identity;
 
-/// OIDC 与贝塔通通信的 HTTP 小工具:对 token 端点 POST、userinfo 端点 GET 加**瞬时失败重试**。
-/// 真机曾遇:浏览器能到 betaoi.cn,但服务端 .NET HttpClient 去 POST /oauth/token 偶发
-/// 「SSL handshake 收到 0 字节 / unexpected EOF」(杀毒 TLS 拦截 / Cloudflare bot 防护 / 网络抖动)。
-/// 对 TLS/网络类异常与 502/503/504 重试若干次(每次新建 FormUrlEncodedContent → 新连接),扛过偶发抖动;
-/// 若是稳定拦截(杀毒/WAF)则重试也救不了,须从环境层解决(见 docs/部署与真机验收.md 故障排查)。
+/// OIDC 與貝塔通通訊的 HTTP 小工具:對 token 端點 POST、userinfo 端點 GET 加**瞬時失敗重試**。
+/// 真機曾遇:瀏覽器能到 betaoi.cn,但伺服器端 .NET HttpClient 去 POST /oauth/token 偶發
+/// 「SSL handshake 收到 0 位元組 / unexpected EOF」(殺毒 TLS 攔截 / Cloudflare bot 防護 / 網路抖動)。
+/// 對 TLS/網路類異常與 502/503/504 重試若干次(每次新建 FormUrlEncodedContent → 新連接),扛過偶發抖動;
+/// 若是穩定攔截(殺毒/WAF)則重試也救不了,須從環境層解決(見 docs/部署与真机验收.md 故障排查)。
 public static class OidcHttp
 {
-    /// 结果:ok=2xx;status=HTTP 状态码;body=响应体。仅在**重试耗尽后**才抛出最后一次的瞬时异常(调用方 catch)。
+    /// 結果:ok=2xx;status=HTTP 狀態碼;body=回應體。僅在**重試耗盡後**才拋出最後一次的瞬時異常(呼叫方 catch)。
     public static async Task<(bool ok, int status, string body)> PostFormWithRetryAsync(
         HttpClient http, string url, IReadOnlyDictionary<string, string> fields,
         ILogger log, CancellationToken ct, int maxAttempts = 3)
@@ -19,13 +19,13 @@ public static class OidcHttp
         {
             try
             {
-                // 每次新建 content:FormUrlEncodedContent 只能发一次;失败换新连接重发。
+                // 每次新建 content:FormUrlEncodedContent 只能發一次;失敗換新連接重發。
                 using var form = new FormUrlEncodedContent(fields);
                 using HttpResponseMessage resp = await http.PostAsync(url, form, ct).ConfigureAwait(false);
                 string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 int status = (int)resp.StatusCode;
 
-                // 网关瞬时错误:重试(非末次)。
+                // 閘道瞬時錯誤:重試(非末次)。
                 if (status is 502 or 503 or 504 && attempt < maxAttempts)
                 {
                     log.LogWarning("OIDC token 端点 {Status}(网关瞬时),第 {Attempt}/{Max} 次将重试", status, attempt, maxAttempts);
@@ -41,13 +41,13 @@ public static class OidcHttp
                 await BackoffAsync(attempt, ct).ConfigureAwait(false);
             }
         }
-        // 末次仍失败:把最后一次异常抛给调用方(其 catch 落 token_exchange_failed)。
+        // 末次仍失敗:把最後一次異常拋給呼叫方(其 catch 落 token_exchange_failed)。
         throw last ?? new HttpRequestException("OIDC token 交换失败(重试耗尽)");
     }
 
-    /// userinfo 端点 GET(Bearer 访问令牌),重试口径与上面的 token POST 完全相同。
-    /// ★ 共用同一套判据是有意的:同一条链路上的同一类抖动(杀毒 TLS 拦截 / WAF / 网络),
-    ///   两处各写一套迟早会分家,而分家时表现是「换 token 扛得过、取 userinfo 扛不过」这种极难认的偏科。
+    /// userinfo 端點 GET(Bearer 訪問權杖),重試口徑與上面的 token POST 完全相同。
+    /// ★ 共用同一套判據是有意的:同一條連線路徑上的同一類抖動(殺毒 TLS 攔截 / WAF / 網路),
+    ///   兩處各寫一套遲早會分家,而分家時表現是「換 token 扛得過、取 userinfo 扛不過」這種極難認的偏科。
     public static async Task<(bool ok, int status, string body)> GetWithBearerAndRetryAsync(
         HttpClient http, string url, string accessToken,
         ILogger log, CancellationToken ct, int maxAttempts = 3)
@@ -57,7 +57,7 @@ public static class OidcHttp
         {
             try
             {
-                // 每次新建 request:HttpRequestMessage 只能发一次;失败换新连接重发。
+                // 每次新建 request:HttpRequestMessage 只能發一次;失敗換新連接重發。
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
                 using HttpResponseMessage resp = await http.SendAsync(req, ct).ConfigureAwait(false);
@@ -82,12 +82,12 @@ public static class OidcHttp
         throw last ?? new HttpRequestException("OIDC userinfo 请求失败(重试耗尽)");
     }
 
-    /// TLS/网络类瞬时异常(可重试);用户主动取消不算。
+    /// TLS/網路類瞬時異常(可重試);使用者主動取消不算。
     private static bool IsTransient(Exception ex, CancellationToken ct)
         => !ct.IsCancellationRequested
            && (ex is HttpRequestException or IOException
-               || (ex is TaskCanceledException && !ct.IsCancellationRequested));   // HttpClient 超时抛 TaskCanceledException
+               || (ex is TaskCanceledException && !ct.IsCancellationRequested));   // HttpClient 超時拋 TaskCanceledException
 
     private static Task BackoffAsync(int attempt, CancellationToken ct)
-        => Task.Delay(TimeSpan.FromMilliseconds(300 * attempt), ct);   // 300ms / 600ms 递增,给瞬时故障一点恢复时间
+        => Task.Delay(TimeSpan.FromMilliseconds(300 * attempt), ct);   // 300ms / 600ms 遞增,給瞬時故障一點恢復時間
 }

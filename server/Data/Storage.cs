@@ -2,8 +2,8 @@ using System.Text;
 
 namespace Horus.Server.Data;
 
-/// 截图原图存文件系统:images/&lt;exam&gt;/&lt;seat&gt;/&lt;imageId&gt;.webp。DB 只存相对路径指针。
-/// **原图永不出网**(architecture §5)。
+/// 截圖原圖存檔案系統:images/&lt;exam&gt;/&lt;seat&gt;/&lt;imageId&gt;.webp。DB 只存相對路徑指針。
+/// **原圖永不出網**(architecture §5)。
 public sealed class Storage
 {
     private readonly string _root;
@@ -14,10 +14,10 @@ public sealed class Storage
         Directory.CreateDirectory(Path.Combine(_root, "images"));
     }
 
-    /// 数据根(绝对路径)。归档作业据此定位 archive 库文件与冷存目录。
+    /// 資料根(絕對路徑)。歸檔作業據此定位 archive 庫檔案與冷存目錄。
     public string Root => _root;
 
-    /// 相对路径(存 DB)。exam/seat 做路径安全净化,防目录穿越。
+    /// 相對路徑(存 DB)。exam/seat 做路徑安全淨化,防目錄穿越。
     public static string RelPath(string examId, string seatId, string imageId)
         => $"images/{Safe(examId)}/{Safe(seatId)}/{imageId}.webp";
 
@@ -30,23 +30,23 @@ public sealed class Storage
         return rel;
     }
 
-    /// 由相对路径还原绝对路径以读取原图。返回 null 表示越界(拒绝服务)。
+    /// 由相對路徑還原絕對路徑以讀取原圖。回傳 null 表示越界(拒絕服務)。
     public string? Resolve(string relPath)
     {
         string full = Path.GetFullPath(Path.Combine(_root, relPath));
-        // 边界须带路径分隔符,否则 "C:\data" 会误匹配 "C:\data-evil\..."
+        // 邊界須帶路徑分隔符,否則 "C:\data" 會誤匹配 "C:\data-evil\..."
         string rootWithSep = _root.EndsWith(Path.DirectorySeparatorChar) ? _root : _root + Path.DirectorySeparatorChar;
         return full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) ? full : null;
     }
 
-    // ---- M3 归档:证据图迁冷存 / 清理非关键图 ----
+    // ---- M3 歸檔:證據圖遷冷存 / 清理非關鍵圖 ----
 
-    /// 归档冷存相对路径:archive/&lt;exam&gt;/&lt;seat&gt;/&lt;imageId&gt;.webp。
+    /// 歸檔冷存相對路徑:archive/&lt;exam&gt;/&lt;seat&gt;/&lt;imageId&gt;.webp。
     public static string ArchiveRelPath(string examId, string seatId, string imageId)
         => $"archive/{Safe(examId)}/{Safe(seatId)}/{imageId}.webp";
 
-    /// 证据图迁入冷存,返回新相对路径。**幂等**:源在则移动;源已不在但目标已存在(重跑)→ 直接返回;
-    /// 源与目标都在(重跑残留)→ 删源保目标。目录自动创建。
+    /// 證據圖遷入冷存,回傳新相對路徑。**冪等**:源在則移動;源已不在但目標已存在(重跑)→ 直接回傳;
+    /// 源與目標都在(重跑殘留)→ 刪源保目標。目錄自動建立。
     public string MoveToArchive(string liveRel, string examId, string seatId, string imageId)
     {
         string archiveRel = ArchiveRelPath(examId, seatId, imageId);
@@ -56,11 +56,11 @@ public sealed class Storage
         bool srcOk = srcFull is not null && File.Exists(srcFull);
         bool dstOk = File.Exists(dstFull);
         if (srcOk && !dstOk) File.Move(srcFull!, dstFull);
-        else if (srcOk && dstOk) File.Delete(srcFull!);   // 目标已在(重跑),删残留源
+        else if (srcOk && dstOk) File.Delete(srcFull!);   // 目標已在(重跑),刪殘留源
         return archiveRel;
     }
 
-    /// 删除 live 原图(清理非关键)。越界 / 不存在均静默忽略。
+    /// 刪除 live 原圖(清理非關鍵)。越界 / 不存在均靜默忽略。
     public void DeleteLive(string liveRel)
     {
         string? f = Resolve(liveRel);

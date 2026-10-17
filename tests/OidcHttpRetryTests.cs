@@ -5,11 +5,11 @@ using Xunit;
 
 namespace Horus.Server.Tests;
 
-/// token 交换瞬时失败重试(OidcHttp)。真机曾遇服务端 POST /oauth/token 偶发 TLS「unexpected EOF」——
-/// 对 TLS/网络异常与 502/503/504 重试;稳定的 4xx/成功不重试。
+/// token 交換瞬時失敗重試(OidcHttp)。真機曾遇伺服器端 POST /oauth/token 偶發 TLS「unexpected EOF」——
+/// 對 TLS/網路異常與 502/503/504 重試;穩定的 4xx/成功不重試。
 public class OidcHttpRetryTests
 {
-    // 按脚本产生响应/异常的桩 handler:每次调用记数,依 _steps 决定抛异常还是返回某状态码。
+    // 按指令碼產生回應/異常的樁 handler:每次呼叫記數,依 _steps 決定拋異常還是回傳某狀態碼。
     private sealed class StubHandler : HttpMessageHandler
     {
         private readonly Queue<object> _steps;   // Exception 或 HttpStatusCode
@@ -63,10 +63,10 @@ public class OidcHttpRetryTests
     [Fact]
     public async Task 稳定4xx_不重试_返回非ok()
     {
-        var r = await Run(HttpStatusCode.BadRequest);   // 400 = 真错误,非瞬时
+        var r = await Run(HttpStatusCode.BadRequest);   // 400 = 真錯誤,非瞬時
         Assert.False(r.ok);
         Assert.Equal(400, r.status);
-        Assert.Equal(1, r.calls);   // 只调用一次,不浪费重试
+        Assert.Equal(1, r.calls);   // 只呼叫一次,不浪費重試
     }
 
     [Fact]
@@ -87,6 +87,6 @@ public class OidcHttpRetryTests
         using var http = new HttpClient(handler);
         await Assert.ThrowsAsync<HttpRequestException>(() => OidcHttp.PostFormWithRetryAsync(
             http, "https://token.test/oauth/token", Fields, NullLogger.Instance, CancellationToken.None));
-        Assert.Equal(3, handler.Calls);   // 用满 maxAttempts=3
+        Assert.Equal(3, handler.Calls);   // 用滿 maxAttempts=3
     }
 }

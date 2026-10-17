@@ -4,12 +4,12 @@ using System.Text.Json;
 
 namespace Horus.Agent.Buffer;
 
-/// 断网缓冲(至少一次投递的本地真相)。
-/// 事件:每条 `seq\t信封JSON` 追加到 events.pending.jsonl;服务器**逐条 ack(seq)** 后精确删除该 seq
-///   (不用范围 upto——共享 seq 空间有空洞,范围压实会误删从未送达的低 seq 证据)。
-/// 图片:每张存 images/&lt;seq&gt;.webp + &lt;seq&gt;.meta(imageId\ttrigger\tphash);重连补传,成功即删。
-/// 序号高水位持久化到 seq.state,进程重启后从其上继续,杜绝 seq 复用(否则新事件撞旧 seq 被服务器幂等吞掉)。
-/// 重写用原子 File.Replace,崩溃只会留 .tmp,构造时恢复。
+/// 斷網緩衝(至少一次投遞的本機真相)。
+/// 事件:每條 `seq\t信封JSON` 追加到 events.pending.jsonl;伺服器**逐條 ack(seq)** 後精確刪除該 seq
+///   (不用範圍 upto——共享 seq 空間有空洞,範圍壓實會誤刪從未送達的低 seq 證據)。
+/// 圖片:每張存 images/&lt;seq&gt;.webp + &lt;seq&gt;.meta(imageId\ttrigger\tphash);重連補傳,成功即刪。
+/// 序號高水位持久化到 seq.state,處理程序重新啟動後從其上繼續,杜絕 seq 重複使用(否則新事件撞舊 seq 被伺服器冪等吞掉)。
+/// 重寫用原子 File.Replace,崩潰只會留 .tmp,建構時恢復。
 public sealed class LocalBuffer
 {
     private readonly string _eventsFile;
@@ -17,7 +17,7 @@ public sealed class LocalBuffer
     private readonly string _imagesDir;
     private readonly string _seqStateFile;
     private readonly object _gate = new();
-    private readonly HashSet<long> _acked = new();     // 已确认待压实的 seq(攒批,避免每 ack 全文件重写)
+    private readonly HashSet<long> _acked = new();     // 已確認待壓實的 seq(攢批,避免每 ack 全檔案重寫)
     private const int CompactThreshold = 64;
 
     public LocalBuffer(string dir)
@@ -32,7 +32,7 @@ public sealed class LocalBuffer
         CleanupOrphans();
     }
 
-    /// 崩溃恢复:若主文件缺失而 .tmp 存在(原子替换未完成),提升 .tmp 为主文件,避免整批未确认事件成孤儿。
+    /// 崩潰恢復:若主檔案缺失而 .tmp 存在(原子替換未完成),提升 .tmp 為主檔案,避免整批未確認事件成孤兒。
     private void RecoverCrashedRewrite()
     {
         lock (_gate)
@@ -40,30 +40,30 @@ public sealed class LocalBuffer
                 File.Move(_eventsTmp, _eventsFile);
     }
 
-    /// 清理孤儿图片文件:①.webp 无对应 .meta(写 webp 后、写 meta 前崩溃)——SnapshotPendingImages 以 meta 驱动,
-    /// 无 meta 的 webp 永不被拾取也永不被 RemoveImage 删,长期断网 + 反复崩溃会单调累积占盘;
-    /// ②.meta.tmp 残留(原子 meta 写未完成);③.meta 无对应 .webp(残留)。仅构造时(无并发写)运行。
+    /// 清理孤兒圖片檔案:①.webp 無對應 .meta(寫 webp 後、寫 meta 前崩潰)——SnapshotPendingImages 以 meta 驅動,
+    /// 無 meta 的 webp 永不被拾取也永不被 RemoveImage 刪,長期斷網 + 反覆崩潰會單調累積佔盤;
+    /// ②.meta.tmp 殘留(原子 meta 寫未完成);③.meta 無對應 .webp(殘留)。僅建構時(無並行寫)執行。
     private void CleanupOrphans()
     {
         lock (_gate)
-            foreach (string f in Directory.GetFiles(_imagesDir))   // GetFiles 已物化:可在迭代中安全删除
+            foreach (string f in Directory.GetFiles(_imagesDir))   // GetFiles 已物化:可在迭代中安全刪除
             {
                 if (f.EndsWith(".meta.tmp", StringComparison.OrdinalIgnoreCase))
-                    Try(() => File.Delete(f));                                   // 未完成的原子 meta 写残留
+                    Try(() => File.Delete(f));                                   // 未完成的原子 meta 寫殘留
                 else if (f.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!File.Exists(f[..^5] + ".meta")) Try(() => File.Delete(f));   // .webp 无 .meta → 孤儿
+                    if (!File.Exists(f[..^5] + ".meta")) Try(() => File.Delete(f));   // .webp 無 .meta → 孤兒
                 }
                 else if (f.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!File.Exists(f[..^5] + ".webp")) Try(() => File.Delete(f));   // .meta 无 .webp → 残留
+                    if (!File.Exists(f[..^5] + ".webp")) Try(() => File.Delete(f));   // .meta 無 .webp → 殘留
                 }
             }
     }
 
-    /// 解析一行 "seq\t信封JSON":校验 seq 可解析 + json 是合法 JSON。崩溃/掉电撕裂的坏行返回 false,
-    /// 读侧据此**整行丢弃** —— 既不把损坏 JSON 当事件续传(服务器 Parse 失败永不 ack → 卡死续传队列),
-    /// 也不让半截行污染统计。坏行至多损失其自身那条证据,不拖累其它。
+    /// 解析一行 "seq\t信封JSON":檢核 seq 可解析 + json 是合法 JSON。崩潰/掉電撕裂的壞行回傳 false,
+    /// 讀側據此**整行丟棄** —— 既不把損壞 JSON 當事件續傳(伺服器 Parse 失敗永不 ack → 卡死續傳佇列),
+    /// 也不讓半截行汙染統計。壞行至多損失其自身那條證據,不拖累其它。
     private static bool TryParseLine(string line, out long seq, out string json)
     {
         seq = 0; json = "";
@@ -85,18 +85,18 @@ public sealed class LocalBuffer
             using var fs = new FileStream(_eventsFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
             if (fs.Length > 0)
             {
-                // 若上次追加被崩溃/掉电撕裂(末尾无换行),先补一个换行使本条独占一行 —— 杜绝坏的半截行与本条
-                // 并成一行导致本条也一并损坏丢失(读侧 TryParseLine 会把那条坏半截行整行丢弃)。
+                // 若上次追加被崩潰/掉電撕裂(末尾無換行),先補一個換行使本條獨佔一行 —— 杜絕壞的半截行與本條
+                // 併成一行導致本條也一併損壞丟失(讀側 TryParseLine 會把那條壞半截行整行丟棄)。
                 fs.Seek(-1, SeekOrigin.End);
-                if (fs.ReadByte() != '\n') fs.WriteByte((byte)'\n');   // ReadByte 已把位置移到末尾 = 追加点
+                if (fs.ReadByte() != '\n') fs.WriteByte((byte)'\n');   // ReadByte 已把位置移到末尾 = 追加點
             }
             fs.Write(bytes, 0, bytes.Length);
-            fs.Flush(true);   // 落盘(fsync):减少掉电丢失已写入的证据事件
+            fs.Flush(true);   // 寫入磁碟(fsync):減少掉電丟失已寫入的證據事件
         }
         return Task.CompletedTask;
     }
 
-    /// 未确认事件快照(按 seq 升序),用于重连后续传。
+    /// 未確認事件快照(按 seq 升序),用於重連後續傳。
     public IReadOnlyList<(long seq, string json)> SnapshotPendingEvents()
     {
         lock (_gate)
@@ -104,16 +104,16 @@ public sealed class LocalBuffer
             if (!File.Exists(_eventsFile)) return Array.Empty<(long, string)>();
             var list = new List<(long, string)>();
             foreach (string line in File.ReadLines(_eventsFile))
-                if (TryParseLine(line, out long seq, out string json)    // 坏行(撕裂)整行跳过,不续传垃圾
-                    && !_acked.Contains(seq))                            // 已确认待压实的不再续传
+                if (TryParseLine(line, out long seq, out string json)    // 壞行(撕裂)整行跳過,不續傳垃圾
+                    && !_acked.Contains(seq))                            // 已確認待壓實的不再續傳
                     list.Add((seq, json));
             list.Sort((a, b) => a.Item1.CompareTo(b.Item1));
             return list;
         }
     }
 
-    /// 服务器已持久化该 seq → 标记待删;攒够阈值再一次性压实(均摊,避免每 ack O(N) 全文件重写)。
-    /// 对不存在/重复的 seq 是 O(1) 记账,不触发重写。崩溃时未压实的已确认事件会重传,服务器幂等去重。
+    /// 伺服器已持久化該 seq → 標記待刪;攢夠閾值再一次性壓實(均攤,避免每 ack O(N) 全檔案重寫)。
+    /// 對不存在/重複的 seq 是 O(1) 記賬,不觸發重寫。崩潰時未壓實的已確認事件會重傳,伺服器冪等去重。
     public void RemoveEvent(long seq)
     {
         lock (_gate)
@@ -123,15 +123,15 @@ public sealed class LocalBuffer
         }
     }
 
-    /// 立即压实(如关停时),把已确认 seq 从 pending 文件删除。
+    /// 立即壓實(如關停時),把已確認 seq 從 pending 檔案刪除。
     public void Compact()
     {
         lock (_gate) CompactLocked();
     }
 
-    /// 清空**待续传**的事件与图片,但保留 seq 高水位(seq.state 不动 —— seq 复用防护跨会话仍然成立)。
-    /// 用于 OIDC 换场/重登:旧会话 K_sess 已失效,残留缓冲在新会话下必 bad_sig / identity_mismatch、
-    /// 永不被 ack → 每次重连重放-被拒-占盘。这些帧本就无法再送达(会话已死),诚实丢弃。
+    /// 清空**待續傳**的事件與圖片,但保留 seq 高水位(seq.state 不動 —— seq 重複使用防護跨工作階段仍然成立)。
+    /// 用於 OIDC 換場/重登:舊工作階段 K_sess 已失效,殘留緩衝在新工作階段下必 bad_sig / identity_mismatch、
+    /// 永不被 ack → 每次重連重放-被拒-佔盤。這些影格本就無法再送達(工作階段已死),誠實丟棄。
     public void PurgeSession()
     {
         lock (_gate)
@@ -150,19 +150,19 @@ public sealed class LocalBuffer
         _acked.Clear();
     }
 
-    /// 原子重写:写 tmp → File.Replace(原子替换)。崩溃只会留 .tmp,构造时 RecoverCrashedRewrite 恢复。
+    /// 原子重寫:寫 tmp → File.Replace(原子替換)。崩潰只會留 .tmp,建構時 RecoverCrashedRewrite 恢復。
     private void RewriteEvents(Func<long, bool> keep)
     {
         if (!File.Exists(_eventsFile)) return;
         var kept = new List<string>();
         foreach (string line in File.ReadLines(_eventsFile))
-            if (TryParseLine(line, out long seq, out _) && keep(seq))   // 顺带把坏行(撕裂)从缓冲物理剔除
+            if (TryParseLine(line, out long seq, out _) && keep(seq))   // 順帶把壞行(撕裂)從緩衝物理剔除
                 kept.Add(line);
         File.WriteAllLines(_eventsTmp, kept);
         File.Replace(_eventsTmp, _eventsFile, null);
     }
 
-    // ======== 序号高水位(防重启复用) ========
+    // ======== 序號高水位(防重新啟動重複使用) ========
 
     public long LoadSeqCeiling()
     {
@@ -182,16 +182,16 @@ public sealed class LocalBuffer
             {
                 byte[] b = Encoding.UTF8.GetBytes(ceiling.ToString(CultureInfo.InvariantCulture));
                 fs.Write(b, 0, b.Length);
-                fs.Flush(true);   // 落盘(fsync):否则掉电丢 ceiling 写 → 重启复用块内 seq(与事件缓冲同根因)
+                fs.Flush(true);   // 寫入磁碟(fsync):否則掉電丟 ceiling 寫 → 重新啟動重複使用塊內 seq(與事件緩衝同根因)
             }
             if (File.Exists(_seqStateFile)) File.Replace(tmp, _seqStateFile, null);
             else File.Move(tmp, _seqStateFile);
         }
     }
 
-    /// 缓冲中最大 seq(事件 ∪ 图片),重启时把序号计数器抬到其上作双保险。
-    /// 图片侧**只解析文件名里的 seq、不读文件体**(旧实现经 SnapshotPendingImages 把每张 webp 全量读入内存,
-    /// 长断网积压成百上千张时启动内存峰值/延迟随之线性膨胀 —— 闭合第三轮 F6)。
+    /// 緩衝中最大 seq(事件 ∪ 圖片),重新啟動時把序號計數器抬到其上作雙保險。
+    /// 圖片側**只解析檔案名裡的 seq、不讀檔案體**(舊實作經 SnapshotPendingImages 把每張 webp 全量讀入記憶體,
+    /// 長斷網積壓成百上千張時啟動記憶體峰值/延遲隨之線性膨脹 —— 閉合第三輪 F6)。
     public long MaxBufferedSeq()
     {
         long max = 0;
@@ -202,16 +202,16 @@ public sealed class LocalBuffer
         return max;
     }
 
-    // ======== 图片 ========
+    // ======== 圖片 ========
 
-    /// imageId = 客户端预生成 id(触发型抓图有值,重连补传用同一 id 保证事件关联;baseline 无值传 null)。
+    /// imageId = 用戶端預生成 id(觸發型抓圖有值,重連補傳用同一 id 保證事件關聯;baseline 無值傳 null)。
     public Task EnqueueImageAsync(long seq, string? imageId, string trigger, ulong phash, byte[] webp)
     {
         lock (_gate)
         {
             File.WriteAllBytes(Path.Combine(_imagesDir, seq + ".webp"), webp);
-            // meta **原子后写**(tmp → rename):其存在即代表 webp 已完整落盘 + meta 自身完整;
-            // 杜绝 File.WriteAllText 被崩溃/掉电撕裂成半截 meta 致 trigger/phash 失真(SnapshotPendingImages 以 meta 驱动)。
+            // meta **原子後寫**(tmp → rename):其存在即代表 webp 已完整寫入磁碟 + meta 自身完整;
+            // 杜絕 File.WriteAllText 被崩潰/掉電撕裂成半截 meta 致 trigger/phash 失真(SnapshotPendingImages 以 meta 驅動)。
             string meta = Path.Combine(_imagesDir, seq + ".meta");
             string tmp = meta + ".tmp";
             File.WriteAllText(tmp, (imageId ?? "") + "\t" + trigger + "\t" + phash.ToString("x16"));
@@ -232,7 +232,7 @@ public sealed class LocalBuffer
                 string webpPath = Path.Combine(_imagesDir, seq + ".webp");
                 if (!File.Exists(webpPath)) continue;
                 string[] parts = File.ReadAllText(metaPath).Split('\t');
-                if (parts.Length < 3) continue;   // 残缺 meta(理论上原子写后不会出现)→ 跳过,不误当 baseline / phash 归零
+                if (parts.Length < 3) continue;   // 殘缺 meta(理論上原子寫後不會出現)→ 跳過,不誤當 baseline / phash 歸零
                 string? imageId = parts[0].Length > 0 ? parts[0] : null;
                 string trigger = parts[1];
                 ulong phash = ulong.TryParse(parts[2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong p) ? p : 0;

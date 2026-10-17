@@ -5,17 +5,17 @@ using Microsoft.Data.Sqlite;
 
 namespace Horus.Server.Jobs;
 
-/// M3 归档 / 清理作业(architecture §13/§15)。每日(默认每 6h)扫描**结束超留存期(默认 30 天)**的考试:
-///   1. 有 pending 未裁决 → **跳过**(不 purge 未决案的证据,留待人工。诚实:宁占空间也不丢证据)。
-///   2. 关键数据迁入 **archive 库**:关键事件(有效风险≥阈值 或 被 suspicious_queue 引用)、其证据图(移入冷存·改写路径)
-///      + OCR/Logo 结果、裁决记录(confirmed/dismissed)、考试元数据 + 汇总、每条关键事件的 hash_self/sig 锚点。
-///   3. **就地清理** live:该考试全部事件 / 图片(非关键图删文件)/ OCR/Logo / 击键 / 心跳 / 可疑队列,
-///      exams.status='archived'(留作墓碑);全部完成后 VACUUM 回收空间。
+/// M3 歸檔 / 清理作業(architecture §13/§15)。每日(預設每 6h)掃描**結束超留存期(預設 30 天)**的考試:
+///   1. 有 pending 未裁決 → **跳過**(不 purge 未決案的證據,留待人工。誠實:寧佔空間也不丟證據)。
+///   2. 關鍵資料遷入 **archive 庫**:關鍵事件(有效風險≥閾值 或 被 suspicious_queue 引用)、其證據圖(移入冷存·改寫路徑)
+///      + OCR/Logo 結果、裁決記錄(confirmed/dismissed)、考試中繼資料 + 彙總、每條關鍵事件的 hash_self/sig 錨點。
+///   3. **就地清理** live:該考試全部事件 / 圖片(非關鍵圖刪檔案)/ OCR/Logo / 擊鍵 / 心跳 / 可疑佇列,
+///      exams.status='archived'(留作墓碑);全部完成後 VACUUM 回收空間。
 ///
-/// **幂等**:copy 用 INSERT OR IGNORE、文件移动容忍已迁;若 copy 后崩溃、delete 前重跑,考试仍 'ended'、pending=0,
-/// 会重新 copy(无副作用)+ 重新 delete → 收敛。证据在 delete 前已安全落 archive,故任何中断都不丢关键数据。
-/// 完整性说明(§13.2):清理非关键事件使原始整链断裂 —— archive 保留每条关键事件的 hash_self/sig 作**独立锚点**,
-/// 复验以"单条事件 ↔ 其 hash_self"为准,不再依赖整链连续。
+/// **冪等**:copy 用 INSERT OR IGNORE、檔案移動容忍已遷;若 copy 後崩潰、delete 前重跑,考試仍 'ended'、pending=0,
+/// 會重新 copy(無副作用)+ 重新 delete → 收斂。證據在 delete 前已安全落 archive,故任何中斷都不丟關鍵資料。
+/// 完整性說明(§13.2):清理非關鍵事件使原始整鏈斷裂 —— archive 保留每條關鍵事件的 hash_self/sig 作**獨立錨點**,
+/// 複驗以"單條事件 ↔ 其 hash_self"為準,不再相依整鏈連續。
 public sealed class ArchiveService : BackgroundService
 {
     public sealed record ExamResult(
@@ -29,7 +29,7 @@ public sealed class ArchiveService : BackgroundService
     private readonly ServerConfig _cfg;
     private readonly ILogger<ArchiveService> _log;
     private readonly string _archivePath;
-    private readonly object _runGate = new();   // 后台 timer 与手动触发不并跑
+    private readonly object _runGate = new();   // 後台 timer 與手動觸發不併跑
 
     public ArchiveService(Db db, Storage storage, ServerConfig cfg, ILogger<ArchiveService> log)
     {
@@ -44,7 +44,7 @@ public sealed class ArchiveService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         if (!_cfg.ArchiveEnabled || _cfg.ArchiveScanIntervalHours <= 0) return;
-        try { await Task.Delay(TimeSpan.FromSeconds(30), ct); }   // 让服务器起稳再首扫
+        try { await Task.Delay(TimeSpan.FromSeconds(30), ct); }   // 讓伺服器起穩再首掃
         catch (OperationCanceledException) { return; }
 
         using var timer = new PeriodicTimer(TimeSpan.FromHours(_cfg.ArchiveScanIntervalHours));
@@ -57,7 +57,7 @@ public sealed class ArchiveService : BackgroundService
         while (await timer.WaitForNextTickAsync(ct));
     }
 
-    /// 扫描并归档所有到龄考试。返回本次报告。可由后台 timer 或运维端点(手动)调用;内部串行化。
+    /// 掃描並歸檔所有到齡考試。回傳本次報告。可由後台 timer 或維運端點(手動)呼叫;內部串行化。
     public Report RunOnce(double now, CancellationToken ct = default)
     {
         lock (_runGate)
@@ -66,7 +66,7 @@ public sealed class ArchiveService : BackgroundService
             var candidates = _db.Read(conn =>
             {
                 var list = new List<string>();
-                // 含 'archiving':上次崩在归档中途的考试(墓碑态)本次续跑收敛。
+                // 含 'archiving':上次崩在歸檔中途的考試(墓碑態)本次續跑收斂。
                 using SqliteCommand c = conn.Cmd(
                     "SELECT exam_id FROM exams WHERE status IN ('ended','archiving') AND ended_at IS NOT NULL AND ended_at<@cut ORDER BY ended_at",
                     ("@cut", cutoff));
@@ -105,16 +105,16 @@ public sealed class ArchiveService : BackgroundService
 
     private ExamResult ArchiveOneExam(string examId, double now)
     {
-        // ---- 门禁 + 墓碑(原子):pending 检查与 status→'archiving' 翻转在**同一写锁 body** 内完成。
-        // _db.Write 全程持 _writeGate,其它写者(含 vision)不能交错 → pending 检查后到翻转前无新 pending 混入。
-        // 翻转后所有 ingest 对本考试短路(IsExamSealed),消除"读快照→DELETE WHERE exam_id"之间的 late-ingest 窗口。
+        // ---- 門禁 + 墓碑(原子):pending 檢查與 status→'archiving' 翻轉在**同一寫鎖 body** 內完成。
+        // _db.Write 全程持 _writeGate,其它寫者(含 vision)不能交錯 → pending 檢查後到翻轉前無新 pending 混入。
+        // 翻轉後所有 ingest 對本考試短路(IsExamSealed),消除"讀快照→DELETE WHERE exam_id"之間的 late-ingest 視窗。
         string gate = _db.Write(conn =>
         {
             long pending = Count(conn, "SELECT COUNT(*) FROM suspicious_queue WHERE exam_id=@e AND status='pending'", ("@e", examId));
-            if (pending > 0) return "pending:" + pending;   // 不翻转,留 'ended' 待人工裁决
+            if (pending > 0) return "pending:" + pending;   // 不翻轉,留 'ended' 待人工裁決
             using SqliteCommand up = conn.Cmd(
                 "UPDATE exams SET status='archiving' WHERE exam_id=@e AND status IN ('ended','archiving')", ("@e", examId));
-            return up.ExecuteNonQuery() > 0 ? "ok" : "gone";   // gone = 已被并发处理 / 非 ended
+            return up.ExecuteNonQuery() > 0 ? "ok" : "gone";   // gone = 已被並行處理 / 非 ended
         });
         if (gate.StartsWith("pending:", StringComparison.Ordinal))
         {
@@ -125,10 +125,10 @@ public sealed class ArchiveService : BackgroundService
         if (gate != "ok")
             return new ExamResult(examId, "skipped", 0, 0, 0, 0, 0, "not_ended");
 
-        // ---- 读取阶段:确定关键集合 + 载入待复制数据(此刻 status='archiving',ingest 已短路,快照稳定)----
+        // ---- 讀取階段:確定關鍵集合 + 載入待複製資料(此刻 status='archiving',ingest 已短路,快照穩定)----
         ExamSnapshot snap = _db.Read(conn => LoadSnapshot(conn, examId));
 
-        // ---- 复制阶段:写入 archive 库(独立文件 + 事务)----
+        // ---- 複製階段:寫入 archive 庫(獨立檔案 + 交易)----
         using (var arc = OpenArchive())
         using (SqliteTransaction tx = arc.BeginTransaction())
         {
@@ -136,7 +136,7 @@ public sealed class ArchiveService : BackgroundService
             tx.Commit();
         }
 
-        // ---- 清理阶段(文件先删非关键,再 live DB 事务性删除 + 置 archived)----
+        // ---- 清理階段(檔案先刪非關鍵,再 live DB 交易性刪除 + 置 archived)----
         foreach (ImageRow img in snap.AllImages)
             if (!snap.KeptImageIds.Contains(img.ImageId))
                 _storage.DeleteLive(img.FilePath);
@@ -145,10 +145,10 @@ public sealed class ArchiveService : BackgroundService
         _db.Write(conn =>
         {
             using SqliteTransaction tx = conn.BeginTransaction();
-            // 子表先删(images 被 ocr_results/logo_hits 以 FK 引用)
+            // 子表先刪(images 被 ocr_results/logo_hits 以 FK 引用)
             Exec(conn, tx, "DELETE FROM logo_hits   WHERE image_id IN (SELECT image_id FROM images WHERE exam_id=@e)", ("@e", examId));
             Exec(conn, tx, "DELETE FROM ocr_results WHERE image_id IN (SELECT image_id FROM images WHERE exam_id=@e)", ("@e", examId));
-            // image_embeddings 无 FK 到 images(裸 PK 表·派生检索索引非取证数据不归档),须显式清理,否则向量行悬挂指向已删图、永久滞留 live 库。
+            // image_embeddings 無 FK 到 images(裸 PK 表·派生檢索索引非取證資料不歸檔),須顯式清理,否則向量行懸掛指向已刪圖、永久滯留 live 庫。
             Exec(conn, tx, "DELETE FROM image_embeddings WHERE image_id IN (SELECT image_id FROM images WHERE exam_id=@e)", ("@e", examId));
             delImages = Exec(conn, tx, "DELETE FROM images            WHERE exam_id=@e", ("@e", examId));
             delEvents = Exec(conn, tx, "DELETE FROM events            WHERE exam_id=@e", ("@e", examId));
@@ -165,7 +165,7 @@ public sealed class ArchiveService : BackgroundService
             snap.CriticalEvents.Count, snap.KeptImageIds.Count, snap.Adjudications.Count, delEvents, delImages, null);
     }
 
-    // ================= 读取快照 =================
+    // ================= 讀取快照 =================
 
     private sealed record EventRow(long Id, string SeatId, string? AgentId, string? MachineId, long Seq, double Ts, string Type,
         string Payload, int Risk, int ServerRisk, string? EvidenceImageId, string? HashPrev, string? HashSelf, string? Sig);
@@ -183,7 +183,7 @@ public sealed class ArchiveService : BackgroundService
 
     private ExamSnapshot LoadSnapshot(SqliteConnection conn, string examId)
     {
-        // 考试元数据 + 汇总计数
+        // 考試中繼資料 + 彙總計數
         string? name = null; double? started = null, ended = null;
         using (SqliteCommand c = conn.Cmd("SELECT name,started_at,ended_at FROM exams WHERE exam_id=@e", ("@e", examId)))
         using (SqliteDataReader r = c.ExecuteReader())
@@ -195,7 +195,7 @@ public sealed class ArchiveService : BackgroundService
         int confirmed = (int)Count(conn, "SELECT COUNT(*) FROM suspicious_queue WHERE exam_id=@e AND status='confirmed'", ("@e", examId));
         int dismissed = (int)Count(conn, "SELECT COUNT(*) FROM suspicious_queue WHERE exam_id=@e AND status='dismissed'", ("@e", examId));
 
-        // suspicious_queue 全量:解析 refs → 被引用的 event/image/keystroke id;并收集已裁决记录
+        // suspicious_queue 全量:解析 refs → 被引用的 event/image/keystroke id;並收集已裁決記錄
         var refEventIds = new HashSet<long>();
         var refImageIds = new HashSet<string>();
         var refKeystrokeIds = new HashSet<long>();
@@ -215,7 +215,7 @@ public sealed class ArchiveService : BackgroundService
                         r.IsDBNull(9) ? null : r.GetString(9)));
             }
 
-        // 关键事件 = 有效风险≥阈值 ∪ 被 refs 引用。一次拉全量事件在内存里筛(事件是小元数据)。
+        // 關鍵事件 = 有效風險≥閾值 ∪ 被 refs 引用。一次拉全量事件在記憶體裡篩(事件是小中繼資料)。
         var criticalEvents = new List<EventRow>();
         var criticalEvidenceImgIds = new HashSet<string>();
         using (SqliteCommand c = conn.Cmd(
@@ -238,7 +238,7 @@ public sealed class ArchiveService : BackgroundService
                 }
             }
 
-        // 全部图片(用于清理决策)+ 关键图片 = is_evidence ∪ 被 refs 引用 ∪ 关键事件的 evidence_image_id
+        // 全部圖片(用於清理決策)+ 關鍵圖片 = is_evidence ∪ 被 refs 引用 ∪ 關鍵事件的 evidence_image_id
         var allImages = new List<ImageRow>();
         var evidenceFlag = new HashSet<string>();
         using (SqliteCommand c = conn.Cmd(
@@ -261,11 +261,11 @@ public sealed class ArchiveService : BackgroundService
         keptImageIds.UnionWith(criticalEvidenceImgIds);
         var keptImages = allImages.Where(i => keptImageIds.Contains(i.ImageId))
                                   .ToDictionary(i => i.ImageId, i => i);
-        // refs 可能引用已被删/不存在的 image → 只保留真实存在的
+        // refs 可能引用已被刪/不存在的 image → 只保留真實存在的
         keptImageIds.IntersectWith(keptImages.Keys);
 
-        // 关键击键样本 = 被裁决 refs 引用(keystroke:N) ∪ risk>=阈值。confirmed 裁决的唯一证据常是击键时间线,
-        // 必须随裁决归档,否则清理阶段删掉后定罪证据永久丢失(闭合审计 C1)。
+        // 關鍵擊鍵樣本 = 被裁決 refs 引用(keystroke:N) ∪ risk>=閾值。confirmed 裁決的唯一證據常是擊鍵時間線,
+        // 必須隨裁決歸檔,否則清理階段刪掉後定罪證據永久丟失(閉合稽核 C1)。
         var keptKeystrokes = new List<KeystrokeRow>();
         using (SqliteCommand c = conn.Cmd(
             "SELECT id,seat_id,submission_id,ts,timeline,features,risk FROM keystroke_samples WHERE exam_id=@e", ("@e", examId)))
@@ -284,11 +284,11 @@ public sealed class ArchiveService : BackgroundService
             criticalEvents, allImages, keptImageIds, keptImages, adjudications, keptKeystrokes);
     }
 
-    // ================= 写 archive =================
+    // ================= 寫 archive =================
 
     private void WriteArchive(SqliteConnection arc, SqliteTransaction tx, string examId, double now, ExamSnapshot s)
     {
-        // 考试 + 汇总
+        // 考試 + 彙總
         string summary = JsonSerializer.Serialize(new
         {
             seatCount = s.SeatCount, totalEvents = s.TotalEvents,
@@ -302,20 +302,20 @@ public sealed class ArchiveService : BackgroundService
               ON CONFLICT(exam_id) DO UPDATE SET archived_at=@at, summary=@sum",
             ("@e", examId), ("@n", s.Name), ("@st", s.StartedAt), ("@en", s.EndedAt), ("@at", now), ("@sum", summary));
 
-        // 关键事件(保留 hash_self/sig 锚点)
+        // 關鍵事件(保留 hash_self/sig 錨點)
         foreach (EventRow ev in s.CriticalEvents)
             Exec(arc, tx,
                 @"INSERT INTO archive_events (id,exam_id,seat_id,agent_id,machine_id,seq,ts,type,payload,risk,server_risk,evidence_image_id,hash_prev,hash_self,sig)
                   VALUES (@id,@e,@seat,@agent,@machine,@seq,@ts,@type,@payload,@risk,@srisk,@ev,@hp,@hs,@sig)
                   ON CONFLICT(id) DO NOTHING",
-                // risk 存**原始 agent 自报值**(canonicalCore 签的正是它)——归档后凭 machine_id + 原始 risk + payload 可独立逐字节复算 hash_self。
-                // server_risk 另存旁注:有效风险 max(risk,server_risk) 用于 LoadSnapshot 关键性判定但**不入锚点**(否则 server_risk>risk 时锚点不可复验);
-                // 留 server_risk 列使归档库仍能查证"服务器为何判高危/多少分"(闭合 risk=0/server_risk=80 事件归档后无从溯源)。
+                // risk 存**原始 agent 自報值**(canonicalCore 籤的正是它)——歸檔後憑 machine_id + 原始 risk + payload 可獨立逐位元組復算 hash_self。
+                // server_risk 另存旁註:有效風險 max(risk,server_risk) 用於 LoadSnapshot 關鍵性判定但**不入錨點**(否則 server_risk>risk 時錨點不可複驗);
+                // 留 server_risk 列使歸檔庫仍能查證"伺服器為何判高危/多少分"(閉合 risk=0/server_risk=80 事件歸檔後無從溯源)。
                 ("@id", ev.Id), ("@e", examId), ("@seat", ev.SeatId), ("@agent", ev.AgentId), ("@machine", ev.MachineId), ("@seq", ev.Seq),
                 ("@ts", ev.Ts), ("@type", ev.Type), ("@payload", ev.Payload), ("@risk", ev.Risk), ("@srisk", ev.ServerRisk),
                 ("@ev", ev.EvidenceImageId), ("@hp", ev.HashPrev), ("@hs", ev.HashSelf), ("@sig", ev.Sig));
 
-        // 关键图片:移入冷存(改写 file_path)+ 其 OCR/Logo
+        // 關鍵圖片:移入冷存(改寫 file_path)+ 其 OCR/Logo
         foreach (ImageRow im in s.KeptImages.Values)
         {
             string coldRel = _storage.MoveToArchive(im.FilePath, examId, im.SeatId, im.ImageId);
@@ -330,7 +330,7 @@ public sealed class ArchiveService : BackgroundService
             CopyLogo(arc, tx, im.ImageId);
         }
 
-        // 裁决记录
+        // 裁決記錄
         foreach (AdjRow a in s.Adjudications)
             Exec(arc, tx,
                 @"INSERT INTO archive_adjudications (id,exam_id,seat_id,ts,kind,score,status,refs,reviewer,decided_at,note)
@@ -339,7 +339,7 @@ public sealed class ArchiveService : BackgroundService
                 ("@id", a.Id), ("@e", examId), ("@seat", a.SeatId), ("@ts", a.Ts), ("@k", a.Kind), ("@sc", a.Score),
                 ("@st", a.Status), ("@refs", a.Refs), ("@rv", a.Reviewer), ("@da", a.DecidedAt), ("@note", a.Note));
 
-        // 关键击键样本(随裁决归档 —— 定罪证据)
+        // 關鍵擊鍵樣本(隨裁決歸檔 —— 定罪證據)
         foreach (KeystrokeRow k in s.KeptKeystrokes)
             Exec(arc, tx,
                 @"INSERT INTO archive_keystroke_samples (id,exam_id,seat_id,submission_id,ts,timeline,features,risk)
@@ -349,7 +349,7 @@ public sealed class ArchiveService : BackgroundService
                 ("@tl", k.Timeline), ("@ft", k.Features), ("@risk", k.Risk));
     }
 
-    /// 从 live 读取该图 OCR 结果并写入 archive(在 live 只读连接读、archive 写连接写)。
+    /// 從 live 讀取該圖 OCR 結果並寫入 archive(在 live 唯讀連接讀、archive 寫連接寫)。
     private void CopyOcr(SqliteConnection arc, SqliteTransaction tx, string imageId)
     {
         (string eng, string? txt, string? hits, double? conf, double created)? row = _db.Read<(string, string?, string?, double?, double)?>(conn =>
@@ -410,7 +410,7 @@ public sealed class ArchiveService : BackgroundService
         return conn;
     }
 
-    /// refs JSON 数组(如 ["event:12","image:img_ab","keystroke:7"])→ 拆出 event/image/keystroke id。
+    /// refs JSON 陣列(如 ["event:12","image:img_ab","keystroke:7"])→ 拆出 event/image/keystroke id。
     private static void ParseRefs(string? refsJson, HashSet<long> eventIds, HashSet<string> imageIds, HashSet<long> keystrokeIds)
     {
         if (string.IsNullOrEmpty(refsJson)) return;
@@ -430,7 +430,7 @@ public sealed class ArchiveService : BackgroundService
                 else if (kind == "keystroke" && long.TryParse(id, out long kid)) keystrokeIds.Add(kid);
             }
         }
-        catch { /* 坏 refs 忽略 */ }
+        catch { /* 壞 refs 忽略 */ }
     }
 
     private static int Exec(SqliteConnection conn, SqliteTransaction tx, string sql, params (string, object?)[] ps)

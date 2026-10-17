@@ -4,28 +4,28 @@ using System.Text.Json;
 
 namespace Horus.Server.Identity;
 
-/// 贝塔通 OIDC **id_token 离线验签**(**PS256** JWT)。**纯 BCL,无第三方 JWT 依赖**——
-/// 局域网服务器预置贝塔通 JWKS(RSA 公钥)后即可离线验,不必每次回调 IdP(见 docs/m4-identity-oidc.md §5 S1)。
+/// 貝塔通 OIDC **id_token 離線驗籤**(**PS256** JWT)。**純 BCL,無第三方 JWT 相依**——
+/// 區域網路伺服器預置貝塔通 JWKS(RSA 公鑰)後即可離線驗,不必每次回呼 IdP(見 docs/m4-identity-oidc.md §5 S1)。
 ///
-/// ★★ **算法固定为 PS256(RSA-PSS · SHA-256 · 盐长 = 摘要长 32B)**,这是**允许清单只有一项**,
-///   不是「优先 PS256」。判据有两条:
-///   ① 贝塔通的密钥集**只有 PS256**(其 P58),别的算法它一枚都签不出来;
-///   ② 允许清单越窄越好 —— 让令牌自己挑填充方案等于把选择权交给攻击者。
-///   ★ 此前这里写死 RS256(RSA-PKCS1),那是对着旧 wentian 的。指向贝塔通后**每一枚 id_token
-///   都会在 alg 那一行被拒**,而报错只说「alg 非 …」,很容易被当成令牌坏了去查 IdP。
+/// ★★ **演算法固定為 PS256(RSA-PSS · SHA-256 · 鹽長 = 摘要長 32B)**,這是**允許清單隻有一項**,
+///   不是「優先 PS256」。判據有兩條:
+///   ① 貝塔通的金鑰集**只有 PS256**(其 P58),別的演算法它一枚都籤不出來;
+///   ② 允許清單越窄越好 —— 讓權杖自己挑填充方案等於把選擇權交給攻擊者。
+///   ★ 此前這裡寫死 RS256(RSA-PKCS1),那是對著舊 wentian 的。指向貝塔通後**每一枚 id_token
+///   都會在 alg 那一行被拒**,而回報錯誤只說「alg 非 …」,很容易被當成權杖壞了去查 IdP。
 ///
-/// 验:①header.alg=PS256 且 kid 命中 JWKS ②RSA-PSS-SHA256 签名 over "header.payload" ③iss==配置 issuer
-///     ④aud 含本 client_id ⑤exp 未过(含 60s 容差)⑥nonce==登录时下发(防重放)。
-/// 通过则返回 <see cref="OidcSubject"/>;任何不符抛 <see cref="OidcValidationException"/>。
+/// 驗:①header.alg=PS256 且 kid 命中 JWKS ②RSA-PSS-SHA256 簽名 over "header.payload" ③iss==設定 issuer
+///     ④aud 含本 client_id ⑤exp 未過(含 60s 容差)⑥nonce==登入時下發(防重放)。
+/// 通過則回傳 <see cref="OidcSubject"/>;任何不符拋 <see cref="OidcValidationException"/>。
 ///
-/// ★★ **它只给得出 `sub`,给不出姓名与用户名** —— 那两项在贝塔通只走 userinfo,
-///   见 <see cref="Userinfo"/> 的类注释。此前这里直接从 id_token 里取 `name` /
-///   `preferred_username` 并返回一个「完整」的 <see cref="OidcClaims"/>,对着贝塔通跑会**恒取到空串**。
+/// ★★ **它只給得出 `sub`,給不出姓名與使用者名** —— 那兩項在貝塔通只走 userinfo,
+///   見 <see cref="Userinfo"/> 的類註解。此前這裡直接從 id_token 裡取 `name` /
+///   `preferred_username` 並回傳一個「完整」的 <see cref="OidcClaims"/>,對著貝塔通跑會**恆取到空串**。
 public sealed class OidcTokenValidator
 {
-    /// 唯一接受的签名算法。贝塔通的密钥集只有它(其 P58),RP 侧还须在客户端元数据里
-    /// 显式声明 `id_token_signed_response_alg: 'PS256'` —— 不声明时上游按 OIDC Core 取默认值 RS256,
-    /// 会在**授权请求**那一步就 400 `invalid_client_metadata`,连交互都创建不出来。
+    /// 唯一接受的簽名演算法。貝塔通的金鑰集只有它(其 P58),RP 側還須在用戶端中繼資料裡
+    /// 顯式聲明 `id_token_signed_response_alg: 'PS256'` —— 不聲明時上游按 OIDC Core 取預設值 RS256,
+    /// 會在**授權請求**那一步就 400 `invalid_client_metadata`,連交互都建立不出來。
     public const string SigningAlg = "PS256";
 
     private readonly Dictionary<string, RSA> _keysByKid;
@@ -33,8 +33,8 @@ public sealed class OidcTokenValidator
     private readonly string _audience;
     private const int ClockSkewSeconds = 60;
 
-    /// jwksJson:贝塔通 `/jwks` 的原文({keys:[{kty:RSA,n,e,kid,alg:PS256,use:sig}]})。
-    /// ★ PS256 的 JWK `kty` 仍是 `RSA`(PSS 是填充方案不是密钥类型),所以下面按 kty 过滤照旧成立。
+    /// jwksJson:貝塔通 `/jwks` 的原文({keys:[{kty:RSA,n,e,kid,alg:PS256,use:sig}]})。
+    /// ★ PS256 的 JWK `kty` 仍是 `RSA`(PSS 是填充方案不是金鑰類型),所以下面按 kty 過濾照舊成立。
     public OidcTokenValidator(string jwksJson, string issuer, string audience)
     {
         _issuer = issuer;
@@ -47,31 +47,31 @@ public sealed class OidcTokenValidator
     public OidcSubject Validate(string idToken, string? expectedNonce, double nowUnix)
     {
         JsonElement payload = ValidatePayload(idToken, expectedNonce, nowUnix);
-        return new OidcSubject(Str(payload, "sub")!);   // ValidatePayload 已确认 sub 非空
+        return new OidcSubject(Str(payload, "sub")!);   // ValidatePayload 已確認 sub 非空
     }
 
-    /// 只验签与协议 claims,返回原始 payload。
-    /// ★ 抽出来是给**撤权通知**用的(见 <see cref="BetapassRevokeEndpoint"/>):那枚令牌走同一套
-    ///   公钥与同样的 iss/aud/exp/alg 校验,但载荷是 `jti`/`purpose` 而不是身份 claims,
-    ///   且**没有 nonce**(不是登录流程)。**共用这一段而不是另写一份验签**,是为了不让
-    ///   「两处各有一套验签」这种最容易分家的形态出现。
+    /// 只驗籤與協定 claims,回傳原始 payload。
+    /// ★ 抽出來是給**撤權通知**用的(見 <see cref="BetapassRevokeEndpoint"/>):那枚權杖走同一套
+    ///   公鑰與同樣的 iss/aud/exp/alg 檢核,但載荷是 `jti`/`purpose` 而不是身分 claims,
+    ///   且**沒有 nonce**(不是登入流程)。**共用這一段而不是另寫一份驗籤**,是為了不讓
+    ///   「兩處各有一套驗籤」這種最容易分家的形態出現。
     public JsonElement ValidatePayload(string idToken, string? expectedNonce, double nowUnix)
     {
         string[] parts = idToken.Split('.');
         if (parts.Length != 3) throw new OidcValidationException("id_token 结构非法(非 3 段 JWT)");
 
         JsonElement header = ParseSegment(parts[0], "header");
-        // ★ 允许清单只有 PS256。**不要改成「RS256 或 PS256 都收」** —— 同一把 RSA 公钥两种填充都验得通,
-        //   放宽等于凭空多一条路,而贝塔通根本签不出 RS256(其 P58),多出来的那条只服务于攻击者。
+        // ★ 允許清單隻有 PS256。**不要改成「RS256 或 PS256 都收」** —— 同一把 RSA 公鑰兩種填充都驗得通,
+        //   放寬等於憑空多一條路,而貝塔通根本籤不出 RS256(其 P58),多出來的那條只服務於攻擊者。
         if (Str(header, "alg") != SigningAlg)
             throw new OidcValidationException($"id_token alg 非 {SigningAlg}(收到 {Str(header, "alg") ?? "null"});贝塔通只签 {SigningAlg}");
         string? kid = Str(header, "kid");
         if (kid is null || !_keysByKid.TryGetValue(kid, out RSA? rsa))
             throw new OidcValidationException($"id_token kid 未命中 JWKS(kid={kid ?? "null"});密钥可能已轮换,需同步新 JWKS");
 
-        // 验签:RSA-PSS-SHA256 over ASCII("header.payload")。
-        // ★ .NET 的 RSASignaturePadding.Pss 盐长恒 = 摘要长(SHA-256 → 32B),与 JOSE 对 PS256 的规定一致,
-        //   因此这里不需要也无法另行指定盐长。
+        // 驗籤:RSA-PSS-SHA256 over ASCII("header.payload")。
+        // ★ .NET 的 RSASignaturePadding.Pss 鹽長恆 = 摘要長(SHA-256 → 32B),與 JOSE 對 PS256 的規定一致,
+        //   因此這裡不需要也無法另行指定鹽長。
         byte[] signed = Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]);
         byte[] sig = Base64UrlDecode(parts[2]);
         if (!rsa.VerifyData(signed, sig, HashAlgorithmName.SHA256, RSASignaturePadding.Pss))
@@ -82,7 +82,7 @@ public sealed class OidcTokenValidator
         // iss
         if (Str(payload, "iss") != _issuer)
             throw new OidcValidationException($"id_token iss 不符(期望 {_issuer})");
-        // aud(可为字符串或数组)
+        // aud(可為字串或陣列)
         if (!AudienceContains(payload, _audience))
             throw new OidcValidationException($"id_token aud 不含本 client_id({_audience})");
         // exp
@@ -90,11 +90,11 @@ public sealed class OidcTokenValidator
             throw new OidcValidationException("id_token 缺 exp");
         if (nowUnix > exp + ClockSkewSeconds)
             throw new OidcValidationException("id_token 已过期");
-        // nbf(若签发方给了"未生效时间"则校验·同 exp 的时钟偏移容差·纵深防御)
+        // nbf(若簽發方給了"未生效時間"則檢核·同 exp 的時鐘偏移容差·縱深防禦)
         if (payload.TryGetProperty("nbf", out JsonElement nbfEl) && nbfEl.TryGetDouble(out double nbf)
             && nowUnix + ClockSkewSeconds < nbf)
             throw new OidcValidationException("id_token 尚未生效(nbf)");
-        // nonce(防重放:必须等于登录时下发的)
+        // nonce(防重放:必須等於登入時下發的)
         if (expectedNonce is not null && Str(payload, "nonce") != expectedNonce)
             throw new OidcValidationException("id_token nonce 不符(疑重放 / 非本次登录)");
 
@@ -151,14 +151,14 @@ public sealed class OidcTokenValidator
 
 }
 
-/// id_token 验签通过后**能拿到的全部东西**:一个 `sub`。
+/// id_token 驗籤通過後**能拿到的全部東西**:一個 `sub`。
 ///
-/// ★★ **故意不含姓名与用户名。** 贝塔通把 `conformIdTokenClaims` 留在上游默认值 `true`,
-///   授权码流下 id_token 只带 `sub` 与协议 claims —— 身份 claims 一律只在 userinfo 出现
-///   (其 `docs/rp-contract.md`)。此前 <see cref="OidcTokenValidator"/> 直接从 id_token 取那两项、
-///   返回一个看起来完整的 <see cref="OidcClaims"/>,于是「忘了调 userinfo」**没有任何症状**:
-///   姓名与用户名恒为空串,座位号对每个人都静默回退成 `sub`。
-///   现在类型上就拿不到,要拿只能经 <see cref="Userinfo.FetchAsync"/>。
+/// ★★ **故意不含姓名與使用者名。** 貝塔通把 `conformIdTokenClaims` 留在上游預設值 `true`,
+///   授權碼流下 id_token 只帶 `sub` 與協定 claims —— 身分 claims 一律只在 userinfo 出現
+///   (其 `docs/rp-contract.md`)。此前 <see cref="OidcTokenValidator"/> 直接從 id_token 取那兩項、
+///   回傳一個看起來完整的 <see cref="OidcClaims"/>,於是「忘了調 userinfo」**沒有任何症狀**:
+///   姓名與使用者名恆為空串,座位號對每個人都靜默退回成 `sub`。
+///   現在類型上就拿不到,要拿只能經 <see cref="Userinfo.FetchAsync"/>。
 public sealed record OidcSubject(string Sub);
 
 public sealed class OidcValidationException(string message) : Exception(message);
