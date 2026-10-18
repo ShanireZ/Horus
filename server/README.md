@@ -63,7 +63,7 @@ dotnet run -c Debug                                # 或執行已發佈 exe
 | 鍵 | 說明 |
 |---|---|
 | `openDashboard` | 啟動後自動在預設瀏覽器打開看板（預設 true·僅 Windows 交互式真 exe；測試宿主/服務化不彈） |
-| `retentionDays` / `archiveEnabled` / `archiveScanIntervalHours` | M3 歸檔：考試結束多少天后轉 archive（預設 30）/ 後台歸檔開關 / 掃描間隔（預設 6h） |
+| `retentionDays` / `archiveEnabled` / `archiveScanIntervalHours` | M3 歸檔：考試結束多少天後轉 archive（預設 30）/ 後台歸檔開關 / 掃描間隔（預設 6h） |
 
 環境變數可覆蓋設定（便於測試/部署）：`HORUS_CONFIG` `HORUS_DATADIR` `HORUS_DBPATH` `HORUS_PSK_B64` `HORUS_KSK_B64` `HORUS_ADMIN_TOKEN` `HORUS_URLS` `HORUS_VISION_PROVIDER` `HORUS_VISION_BASEURL` `HORUS_VISION_MODEL` `HORUS_VISION_KEY` `HORUS_OIDC_SECRET` `HORUS_OIDC_DASHBOARD_SECRET` `HORUS_EMBED_KEY`。
 

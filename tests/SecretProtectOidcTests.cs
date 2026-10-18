@@ -20,7 +20,7 @@ public class SecretProtectOidcTests
         {
             File.WriteAllText(path, """
             {
-              // 注释应保留
+              // 註釋應保留
               "oidcClientSecret": "super-secret-123",
               "oidcClientSecretEnc": "",
               "other": "x"

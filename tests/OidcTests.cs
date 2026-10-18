@@ -43,7 +43,7 @@ public class OidcTokenValidatorTests
     public void 验签器给不出姓名与用户名_那两项只在userinfo()
     {
         // ★★ **直接斷言不變數本身**:驗簽的產物**只有** sub 一項。
-        //   貝塔通把 `conformIdTokenClaims` 留在上游預設 `true`,授權碼流下 id_token 里根本沒有
+        //   貝塔通把 `conformIdTokenClaims` 留在上游預設 `true`,授權碼流下 id_token 裡根本沒有
         //   `name` / `preferred_username`(其 docs/rp-contract.md)。把它們從 id_token 取會恆得空串,
         //   而空的 Username 讓 ExamDispatch.SeatFrom 對每個人退回成 sub —— 不回報錯誤、不拋異常。
         //   舊 wentian 之所以能那麼幹,是它專門設了 `conformIdTokenClaims: false`,**那條豁免不隨遷移過來**。
@@ -124,7 +124,7 @@ public class OidcTokenValidatorTests
     [Fact]
     public async Task 取userinfo带Bearer访问令牌()
     {
-        // 少了這個頭,貝塔通回 401 —— 而 401 在舊寫法里根本不會發生(壓根沒這一次請求),
+        // 少了這個頭,貝塔通回 401 —— 而 401 在舊寫法裡根本不會發生(壓根沒這一次請求),
         // 所以這條鎖的是「請求確實發出去了、且帶對了憑證」。
         var handler = new RecordingHandler("""{"sub":"sub-abc","name":"叶锋","preferred_username":"ye_feng"}""");
         using var http = new HttpClient(handler);

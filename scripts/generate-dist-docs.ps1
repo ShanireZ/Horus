@@ -7,8 +7,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$sourcePath = Join-Path $projectRoot 'docs\部署与真机验收.md'
-$targetPath = Join-Path $projectRoot 'docs\dist\部署与真机验收.md'
+$sourcePath = Join-Path $projectRoot 'docs\部署與真機驗收.md'
+$targetPath = Join-Path $projectRoot 'docs\dist\部署與真機驗收.md'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
 $source = [System.IO.File]::ReadAllText($sourcePath, [System.Text.Encoding]::UTF8)

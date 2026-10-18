@@ -301,7 +301,7 @@ public sealed record ServerConfig
     // ---- M3 歸檔 / 清理(architecture §13/§15)----
     /// 是否啟用後台歸檔作業(預設 true)。:memory: 或無到齡考試時自然 no-op;測試可關閉後台、手動觸發 RunOnce。
     public bool ArchiveEnabled { get; init; } = true;
-    /// 考試**結束**多少天后轉 archive 並清理 live。預設 30(§13/§16)。
+    /// 考試**結束**多少天後轉 archive 並清理 live。預設 30(§13/§16)。
     public int RetentionDays { get; init; } = 30;
     /// 歸檔"關鍵資料"判據:事件有效風險 ≥ 此值,或被 suspicious_queue 引用。預設 50(§16)。
     public int ArchiveCriticalRisk { get; init; } = 50;

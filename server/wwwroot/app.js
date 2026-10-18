@@ -297,7 +297,7 @@
     if (wlBtn) wlBtn.disabled = !active;
   }
 
-  // 生成安全的 examId：E-YYYYMMDD-HHMM-<4位随机>。僅字母數字與連字元，滿足伺服器 IsSafeId。
+  // 生成安全的 examId：E-YYYYMMDD-HHMM-<4位隨機>。僅字母數字與連字元，滿足伺服器 IsSafeId。
   function genExamId() {
     var d = new Date();
     var p = function (n) { return String(n).padStart(2, "0"); };

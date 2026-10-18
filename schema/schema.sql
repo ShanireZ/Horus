@@ -1,6 +1,6 @@
 -- ============================================================
 -- Horus 監考系統 · SQLite **live** DB DDL (M1)
--- 熱庫:當前 + 近 30 天。30 天后關鍵資料轉 archive(見 schema-archive.sql),其餘清理。
+-- 熱庫:當前 + 近 30 天。30 天後關鍵資料轉 archive(見 schema-archive.sql),其餘清理。
 -- 欄位命名與 api-contract-m1.md / Horus.Agent 對齊(庫內用 snake_case)。
 -- ============================================================
 PRAGMA journal_mode = WAL;

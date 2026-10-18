@@ -4,8 +4,8 @@ okf_version: "0.2"
 
 # Horus 文件
 
-* [跨專案 · 2026-08-10：BetaPass 工作階段模型重設計對 Horus 的影響](./2026-08-10-跨项目-BetaPass会话模型重设计.md)
-* [Horus 部署與真機驗收指南](./部署与真机验收.md)
+* [跨專案 · 2026-08-10：BetaPass 工作階段模型重設計對 Horus 的影響](./2026-08-10-跨專案-BetaPass會話模型重設計.md)
+* [Horus 部署與真機驗收指南](./部署與真機驗收.md)
 * [agents/](./agents/index.md)
 * [M1 介面契約 — Agent ↔ Server](./api-contract-m1.md)
 * [監考系統架構設計文件（v0.2 · 完整版）](./architecture-v0.2.md)
