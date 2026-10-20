@@ -11,7 +11,7 @@ okf_version: "0.2"
 * [監考系統架構設計文件（v0.2 · 完整版）](./architecture-v0.2.md)
 * [Horus 程式碼審查報告（2026-07-21）](./code-review-2026-07-21.md)
 * [dist/README](./dist/README.md)
-* [dist/部署與真機驗收](./dist/部署与真机验收.md)
+* [dist/部署與真機驗收](./dist/部署與真機驗收.md)
 * [KSK 擊鍵旁路對接文件](./ksk-keystroke-integration.md)
 * [M4 身分層 —— OIDC 接入 · 取代共享 PSK（設計與任務計畫）](./m4-identity-oidc.md)
 * [M5 採集端硬化 —— 保活 / 防掛起 / 防遮蔽 / 防降權限（設計與任務）](./m5-agent-hardening.md)
